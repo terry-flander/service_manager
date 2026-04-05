@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+{% block title %}{{ job['reference'] }}{% endblock %}
+{% block topbar_title %}{{ job['reference'] }} — {{ job['customer_name'] }}{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('jobs.edit_job', job_id=job['id']) }}" class="btn-ghost"><i class="bi bi-pencil"></i> Edit</a>
+  <a href="{{ url_for('invoice.shop_ticket', job_id=job['id']) }}" class="btn-ghost" target="_blank"><i class="bi bi-printer"></i> Print Ticket</a>
+  <a href="{{ url_for('invoice.view_invoice', job_id=job['id']) }}" class="btn-ghost"><i class="bi bi-receipt"></i> Invoice</a>
+  <a href="{{ url_for('invoice.pdf_invoice', job_id=job['id']) }}" class="btn-accent" target="_blank"><i class="bi bi-file-pdf"></i> PDF</a>
+{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+
+  <!-- Left column -->
+  <div class="col-lg-5">
+
+    <!-- Customer card (website form fields) -->
+    <div class="sd-card mb-3">
+      <div class="sd-card-header">
+        <span>Customer</span>
+        <span style="font-size:0.7rem; color:var(--sd-muted);"><i class="bi bi-globe2"></i> theflyingbike.com.au</span>
+      </div>
+      <div style="padding:1.25rem;">
+        <table style="width:100%; font-size:0.875rem; border-collapse:collapse;">
+          <tr style="border-bottom:1px solid var(--sd-border);">
+            <td style="color:var(--sd-muted); padding:0.45rem 0; width:30%; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em;">Name</td>
+            <td style="padding:0.45rem 0 0.45rem 1rem;">
+              {% if job['cust_id'] %}
+              <a href="{{ url_for('customers.edit_customer', customer_id=job['cust_id']) }}"
+                 style="color:var(--sd-accent); text-decoration:none;">
+                {{ job['customer_name'] }}&nbsp;<i class="bi bi-box-arrow-up-right" style="font-size:0.7rem;"></i>
+              </a>
+              {% else %}
+              {{ job['customer_name'] }}
+              {% endif %}
+            </td>
+          </tr>
+          {% for label, value in [
+            ('Phone',  job['customer_phone'] or '—'),
+            ('Suburb', job['suburb'] or '—'),
+            ('Email',  job['customer_email'] or '—'),
+          ] %}
+          <tr style="border-bottom:1px solid var(--sd-border);">
+            <td style="color:var(--sd-muted); padding:0.45rem 0; width:30%; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em;">{{ label }}</td>
+            <td style="padding:0.45rem 0 0.45rem 1rem;">{{ value }}</td>
+          </tr>
+          {% endfor %}
+        </table>
+        {% if job['description'] %}
+        <div style="margin-top:1rem;">
+          <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--sd-muted); margin-bottom:0.4rem;">Message</div>
+          <div style="font-size:0.875rem; color:var(--sd-text); background:rgba(0,0,0,0.15); border-radius:6px; padding:0.75rem; border-left:3px solid var(--sd-accent);">{{ job['description'] }}</div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Scheduling card -->
+    <div class="sd-card mb-3">
+      <div class="sd-card-header">
+        Scheduling
+        <span class="badge-status {% if job['job_type'] == 'workshop' %}status-in_progress{% else %}status-scheduled{% endif %}"
+              style="font-size:0.7rem;">
+          {{ JOB_TYPES.get(job['job_type'], {}).get('label', job['job_type']) }}
+        </span>
+      </div>
+      <div style="padding:1.25rem;">
+        <table style="width:100%; font-size:0.875rem; border-collapse:collapse;">
+          {% if job['scheduled_date'] and job['scheduled_time'] %}
+            {% set sched_display = job['scheduled_date']|fmt_date ~ ' at ' ~ TIME_LABELS.get(job['scheduled_time'], job['scheduled_time']) %}
+            {% if job['end_time'] %}
+              {% set sched_display = sched_display ~ ' – ' ~ TIME_LABELS.get(job['end_time'], job['end_time']) %}
+            {% endif %}
+          {% elif job['scheduled_date'] %}
+            {% set sched_display = job['scheduled_date']|fmt_date %}
+          {% else %}
+            {% set sched_display = '—' %}
+          {% endif %}
+          {% set sched_rows = [
+            ('Reference', job['reference']),
+            ('Region',    job['region_name']),
+            ('Scheduled', sched_display),
+            ('Tax',       'Inclusive (GST back-calc)' if job['tax_inclusive'] else 'Exclusive (GST added on top)'),
+          ] %}
+          {% for label, value in sched_rows %}
+          <tr style="border-bottom:1px solid var(--sd-border);">
+            <td style="color:var(--sd-muted); padding:0.45rem 0; width:30%; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em;">{{ label }}</td>
+            <td style="padding:0.45rem 0 0.45rem 1rem; {% if label == 'Reference' %}font-family:'IBM Plex Mono',monospace;{% endif %}">{{ value }}</td>
+          </tr>
+          {% endfor %}
+          <tr>
+            <td style="color:var(--sd-muted); padding:0.45rem 0; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; vertical-align:top;">Address</td>
+            <td style="padding:0.45rem 0 0.45rem 1rem;">
+              {% if job['address'] %}
+              <div style="display:flex; align-items:flex-start; gap:0.6rem; flex-wrap:wrap;">
+                <span style="flex:1; min-width:0;">{{ job['address'] }}</span>
+                <a href="https://maps.google.com/?q={{ job['address'] | urlencode }}"
+                   target="_blank" rel="noopener"
+                   class="btn-ghost"
+                   style="padding:0.2rem 0.55rem; font-size:0.75rem; white-space:nowrap; flex-shrink:0;">
+                  <i class="bi bi-map"></i> Maps
+                </a>
+              </div>
+              {% else %}
+              <span style="color:var(--sd-muted);">—</span>
+              {% endif %}
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- Status card -->
+    <div class="sd-card">
+      <div class="sd-card-header">Status &amp; Payment</div>
+      <form method="post" action="{{ url_for('jobs.update_status', job_id=job['id']) }}">
+        <div style="padding:1rem 1.25rem; display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+          <span class="badge-status status-{{ job['status'] }}" style="flex-shrink:0;">
+            {{ job['status']|replace('_',' ') }}
+          </span>
+          <select name="status" class="sd-input" style="flex:1; min-width:120px;">
+            {% for s in ['pending','scheduled','in_progress','complete','invoiced','paid','void'] %}
+            <option value="{{ s }}" {% if job['status'] == s %}selected{% endif %}>
+              {{ s|replace('_',' ')|title }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div style="padding:0 1.25rem 0.75rem; display:flex; gap:0.75rem; flex-wrap:wrap; align-items:flex-end;">
+          <div style="flex:1; min-width:130px;">
+            <label class="sd-label">Paid Date</label>
+            <input type="date" name="paid_date" class="sd-input"
+                   value="{{ job['paid_date'] or '' }}">
+          </div>
+          <div style="flex:1; min-width:120px;">
+            <label class="sd-label">Amount Paid ($)</label>
+            <input type="number" name="amount_paid" class="sd-input"
+                   step="0.01" min="0"
+                   value="{{ '%.2f'|format(job['amount_paid']) if job['amount_paid'] else '' }}"
+                   placeholder="0.00">
+          </div>
+          <button type="submit" class="btn-ghost" style="white-space:nowrap; padding:0.45rem 1rem;">
+            <i class="bi bi-check-lg"></i> Update
+          </button>
+        </div>
+      </form>
+      {% if job['notes'] %}
+      <div style="padding:0 1.25rem 1rem; font-size:0.85rem; color:var(--sd-muted);
+                  border-top:1px solid var(--sd-border);">
+        <i class="bi bi-sticky"></i> {{ job['notes'] }}
+      </div>
+      {% endif %}
+    </div>
+
+
+  </div>
+
+  <!-- Right column: Parts -->
+  <div class="col-lg-7">
+    <div class="sd-card mb-3">
+      <div class="sd-card-header">
+        Parts Used
+        <span class="mono" style="font-size:0.85rem; color:var(--sd-text);">
+          {% if job_parts %}Total: ${{ '%.2f'|format(total) }}{% endif %}
+        </span>
+      </div>
+      <div class="table-responsive-sd"><table class="sd-table">
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th>Part #</th>
+            <th style="text-align:right;">Qty</th>
+            <th style="text-align:right;">Unit Cost</th>
+            <th style="text-align:right;">Total</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for jp in job_parts %}
+          <tr>
+            <td>{{ jp['description'] }}</td>
+            <td class="mono" style="font-size:0.78rem; color:var(--sd-muted);">{{ jp['part_number'] or '—' }}</td>
+            <td class="mono" style="text-align:right;">{{ jp['quantity'] }}</td>
+            <td class="mono" style="text-align:right;">${{ '%.2f'|format(jp['unit_cost']) }}</td>
+            <td class="mono" style="text-align:right; font-weight:600;">${{ '%.2f'|format(jp['quantity'] * jp['unit_cost']) }}</td>
+            <td>
+              <form method="post" action="{{ url_for('jobs.remove_part', job_id=job['id'], jp_id=jp['id']) }}" onsubmit="return confirm('Remove this part?')">
+                <button type="submit" class="btn-danger"><i class="bi bi-trash3"></i></button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="6" style="text-align:center; color:var(--sd-muted); padding:1.5rem;">No parts logged yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table></div>
+    </div>
+
+    <!-- Add part — combined pane -->
+    <div class="sd-card">
+      <div class="sd-card-header">Add Part</div>
+      <div style="padding:1rem 1.25rem;">
+        <form method="post" action="{{ url_for('jobs.add_part', job_id=job['id']) }}"
+              id="add-part-form">
+
+          <!-- Master list selector -->
+          <div class="row g-2 align-items-end" style="margin-bottom:0.75rem;">
+            <div class="col">
+              <label class="sd-label">Select from master list</label>
+              <select id="part-select" class="sd-input">
+                <option value="">— choose to pre-fill fields below —</option>
+                {% for p in parts %}
+                <option value="{{ p['id'] }}"
+                        data-name="{{ p['name'] }}"
+                        data-pnum="{{ p['part_number'] }}"
+                        data-cost="{{ '%.2f'|format(p['unit_cost']) }}">
+                  {{ p['name'] }}{% if p['part_number'] %} ({{ p['part_number'] }}){% endif %} — ${{ '%.2f'|format(p['unit_cost']) }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <hr class="divider" style="margin:0.5rem 0 0.75rem;">
+
+          <!-- Editable fields (pre-filled from selection or typed manually) -->
+          <div class="row g-2 align-items-end">
+            <input type="hidden" name="part_id" id="part-id-hidden" value="">
+            <div class="col-md-4">
+              <label class="sd-label">Description *</label>
+              <input type="text" name="description" id="part-description"
+                     class="sd-input" required placeholder="Part or service name">
+            </div>
+            <div class="col-md-3">
+              <label class="sd-label">Part Number</label>
+              <input type="text" name="part_number" id="part-number"
+                     class="sd-input" placeholder="Optional — saves to master list">
+            </div>
+            <div class="col-md-2">
+              <label class="sd-label">Qty</label>
+              <input type="number" name="quantity" id="part-qty"
+                     class="sd-input" value="1" min="0.1" step="0.1">
+            </div>
+            <div class="col-md-3">
+              <label class="sd-label">Unit Cost ($)</label>
+              <input type="number" name="unit_cost" id="part-cost"
+                     class="sd-input" value="0.00" step="0.01" min="0">
+            </div>
+          </div>
+          <div style="margin-top:0.75rem; display:flex; justify-content:flex-end;">
+            <button type="submit" class="btn-accent">
+              <i class="bi bi-plus-lg"></i> Add Part
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const sel  = document.getElementById('part-select');
+  const idH  = document.getElementById('part-id-hidden');
+  const desc = document.getElementById('part-description');
+  const pnum = document.getElementById('part-number');
+  const cost = document.getElementById('part-cost');
+  const qty  = document.getElementById('part-qty');
+  if (!sel) return;
+
+  sel.addEventListener('change', function () {
+    const opt = sel.options[sel.selectedIndex];
+    if (opt.value) {
+      idH.value  = opt.value;
+      desc.value = opt.dataset.name || '';
+      pnum.value = opt.dataset.pnum || '';
+      cost.value = opt.dataset.cost || '0.00';
+      qty.value  = '1';
+    } else {
+      idH.value = '';
+    }
+  });
+
+  [desc, cost].forEach(function (el) {
+    el.addEventListener('input', function () {
+      idH.value = '';
+      sel.selectedIndex = 0;
+    });
+  });
+})();
+</script>
+{% endblock %}

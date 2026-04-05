@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Jobs{% endblock %}
+{% block topbar_title %}Jobs{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('jobs.new_job') }}" class="btn-accent"><i class="bi bi-plus-lg"></i> New Job</a>
+{% endblock %}
+
+{% block content %}
+<!-- Filters -->
+<div class="sd-card mb-3">
+  <div class="sd-card-header">Filters</div>
+  <div style="padding: 1rem 1.25rem; display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+    <div>
+      <label class="sd-label">Status</label>
+      <select class="sd-input" style="width:160px;" id="filter-status">
+        <option value="">All statuses</option>
+        {% for s in ['pending','scheduled','in_progress','complete','invoiced','paid','void'] %}
+        <option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s|replace('_',' ')|title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="sd-label">Region</label>
+      <select class="sd-input" style="width:180px;" id="filter-region">
+        <option value="">All regions</option>
+        {% for r in regions %}
+        <option value="{{ r.id }}" {% if region_id|string == r.id|string %}selected{% endif %}>{{ r.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="sd-label">Type</label>
+      <select class="sd-input" style="width:150px;" id="filter-type">
+        <option value="">All types</option>
+        {% for key, info in JOB_TYPES.items() %}
+        <option value="{{ key }}" {% if job_type == key %}selected{% endif %}>{{ info.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button class="btn-accent" onclick="applyFilters()"><i class="bi bi-funnel"></i> Apply</button>
+    <a href="{{ url_for('jobs.index') }}" class="btn-ghost">Clear</a>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="sd-card">
+  <div class="sd-card-header">
+    {{ jobs|length }} job{{ 's' if jobs|length != 1 }}
+  </div>
+  <div class="table-responsive-sd"><table class="sd-table">
+    <thead>
+      <tr>
+        <th>Reference</th>
+        <th>Customer</th>
+        <th>Region</th>
+        <th>Scheduled</th>
+        <th>Status</th>
+        <th>Total</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for job in jobs %}
+      <tr>
+        <td>
+          <a href="{{ url_for('jobs.job_detail', job_id=job['id']) }}" class="mono">{{ job['reference'] }}</a>
+          <span class="badge-status {% if job['job_type'] == 'workshop' %}status-in_progress{% else %}status-scheduled{% endif %}"
+                style="margin-left:0.4rem; font-size:0.65rem; padding:0.1rem 0.4rem; vertical-align:middle;">
+            {{ JOB_TYPES[job['job_type']]['label'] if job['job_type'] in JOB_TYPES else job['job_type'] }}
+          </span>
+        </td>
+        <td>{{ job.customer_name }}</td>
+        <td><span style="font-size:0.8rem; color: var(--sd-muted);">{{ job['region_name'] }}</span></td>
+        <td class="mono" style="font-size:0.8rem;">
+          {% if job['scheduled_date'] %}
+            {{ job['scheduled_date']|fmt_date }}
+            {% if job['scheduled_time'] %}<span style="color:var(--sd-muted);"> {{ TIME_LABELS.get(job['scheduled_time'], job['scheduled_time']) }}{% if job['end_time'] %} – {{ TIME_LABELS.get(job['end_time'], job['end_time']) }}{% endif %}</span>{% endif %}
+          {% else %}—{% endif %}
+        </td>
+        <td><span class="badge-status status-{{ job['status'] }}">{{ job['status']|replace('_',' ') }}</span></td>
+        <td class="mono" style="font-size:0.85rem;">
+          {% if job['total'] %}${{ '%.2f'|format(job['total']) }}{% else %}<span style="color:var(--sd-muted)">—</span>{% endif %}
+        </td>
+        <td><a href="{{ url_for('jobs.job_detail', job_id=job['id']) }}" class="btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.8rem;">View</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" style="text-align:center; color: var(--sd-muted); padding: 2rem;">No jobs found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function applyFilters() {
+  const status  = document.getElementById('filter-status').value;
+  const region  = document.getElementById('filter-region').value;
+  const jobType = document.getElementById('filter-type').value;
+  const params  = new URLSearchParams();
+  if (status)  params.set('status', status);
+  if (region)  params.set('region_id', region);
+  if (jobType) params.set('job_type', jobType);
+  window.location = '?' + params.toString();
+}
+</script>
+{% endblock %}

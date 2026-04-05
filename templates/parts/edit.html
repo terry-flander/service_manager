@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Edit Part{% endblock %}
+{% block topbar_title %}Edit Part{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('parts.index') }}" class="btn-ghost"><i class="bi bi-arrow-left"></i> Back</a>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-5">
+    <div class="sd-card">
+      <div class="sd-card-header">Edit Part Details</div>
+      <div style="padding: 1.5rem;">
+        <form method="post">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="sd-label">Part Name *</label>
+              <input type="text" name="name" class="sd-input" required value="{{ part.name }}">
+            </div>
+            <div class="col-md-6">
+              <label class="sd-label">Part Number</label>
+              <input type="text" name="part_number" class="sd-input" value="{{ part.part_number or '' }}">
+            </div>
+            <div class="col-md-3">
+              <label class="sd-label">Unit Cost ($) *</label>
+              <input type="number" name="unit_cost" class="sd-input" required step="0.01" min="0" value="{{ '%.2f'|format(part.unit_cost) }}">
+            </div>
+            <div class="col-md-3">
+              <label class="sd-label">Unit</label>
+              <select name="unit" class="sd-input">
+                {% for u in ['each', 'litre', 'set', 'hour', 'metre', 'kg'] %}
+                <option value="{{ u }}" {% if part.unit == u %}selected{% endif %}>{{ u }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-12">
+              <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                <input type="checkbox" name="active" {% if part.active %}checked{% endif %} style="width:16px; height:16px; accent-color:var(--sd-accent);">
+                <span class="sd-label" style="margin:0;">Active</span>
+              </label>
+            </div>
+          </div>
+          <hr class="divider">
+          <div style="display:flex; justify-content:flex-end; gap:0.75rem;">
+            <a href="{{ url_for('parts.index') }}" class="btn-ghost">Cancel</a>
+            <button type="submit" class="btn-accent"><i class="bi bi-check-lg"></i> Save Changes</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+

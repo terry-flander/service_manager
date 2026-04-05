@@ -1,0 +1,483 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ job['reference'] }}{% endblock %}
+{% block topbar_title %}Edit {{ job['reference'] }}{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('jobs.job_detail', job_id=job['id']) }}" class="btn-ghost">
+    <i class="bi bi-arrow-left"></i> Back
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <div class="sd-card">
+      <form method="post">
+        <input type="hidden" name="customer_id" id="customer_id_field"
+               value="{{ job['customer_id'] or '' }}">
+        <input type="hidden" name="customer_address" id="customer_address_field" value="">
+
+      <!-- Job type selector — INSIDE form so it submits correctly -->
+      <div style="padding:1rem 1.5rem; border-bottom:1px solid var(--sd-border);
+                  display:flex; align-items:center; gap:1.5rem;">
+        <span class="sd-label" style="margin:0; white-space:nowrap;">Job Type</span>
+        {% for key, info in JOB_TYPES.items() %}
+        <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;
+                      font-size:0.875rem; color:var(--sd-text);">
+          <input type="radio" name="job_type" value="{{ key }}"
+                 {% if job['job_type'] == key %}checked{% endif %}
+                 onchange="updateJobType(this.value)"
+                 style="accent-color:var(--sd-accent); width:15px; height:15px;">
+          {{ info.label }}
+          <span style="font-size:0.75rem; color:var(--sd-muted);">({{ info.prefix }}-NNNN)</span>
+        </label>
+        {% endfor %}
+      </div>
+
+      <!-- Customer section header -->
+      <div class="sd-card-header">
+        <span><i class="bi bi-person-circle" style="color:var(--sd-accent);"></i> Customer</span>
+        {% if job['customer_id'] %}
+        <a href="{{ url_for('customers.edit_customer', customer_id=job['customer_id']) }}"
+           class="btn-ghost" style="padding:0.2rem 0.6rem; font-size:0.75rem;">
+          <i class="bi bi-box-arrow-up-right"></i> View customer record
+        </a>
+        {% endif %}
+      </div>
+
+      <div style="padding:1.25rem 1.5rem 0.5rem;">
+        <!-- Live customer search -->
+        <div style="margin-bottom:0.75rem; position:relative;">
+          <label class="sd-label">Search to reassign customer</label>
+          <div style="display:flex; gap:0.5rem;">
+            <input type="text" id="cust-search" class="sd-input"
+                   placeholder="Type a name to search and reassign…"
+                   autocomplete="off" style="max-width:360px;">
+            <button type="button" class="btn-ghost" onclick="clearSearch()"
+                    id="clear-btn" style="display:none; white-space:nowrap;">
+              <i class="bi bi-x-lg"></i> Clear
+            </button>
+          </div>
+          <div id="cust-results" style="
+              display:none; position:absolute; top:100%; left:0; width:360px; z-index:200;
+              background:var(--sd-slate); border:1px solid var(--sd-border);
+              border-radius:0 0 6px 6px; max-height:260px; overflow-y:auto;
+              box-shadow:0 8px 24px rgba(0,0,0,0.5);"></div>
+        </div>
+
+        <!-- Currently linked customer indicator -->
+        {% if job['customer_id'] %}
+        <div id="linked-banner" style="
+             background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.25);
+             border-radius:6px; padding:0.6rem 1rem; margin-bottom:0.75rem;
+             font-size:0.85rem; color:#60a5fa; display:flex; align-items:center; gap:0.5rem;">
+          <i class="bi bi-link-45deg"></i>
+          <span>Linked to <strong>{{ job['customer_name'] }}</strong>
+            ({{ job['customer_email'] }})</span>
+          <span style="margin-left:auto; font-size:0.72rem; color:var(--sd-muted);">
+            Edit fields below to update customer record too
+          </span>
+        </div>
+        {% endif %}
+      </div>
+
+
+        <!-- Customer fields — editable, update customer record on save -->
+        <div style="padding:0 1.5rem;">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="sd-label">Name *</label>
+              <input type="text" name="customer_name" id="f_name" class="sd-input"
+                     required value="{{ job['customer_name'] }}">
+            </div>
+            <div class="col-md-6">
+              <label class="sd-label">Phone</label>
+              <input type="text" name="customer_phone" id="f_phone" class="sd-input"
+                     value="{{ job['customer_phone'] or '' }}">
+            </div>
+            <div class="col-md-6">
+              <label class="sd-label">Suburb</label>
+              <select name="suburb" id="f_suburb" class="sd-input"
+                      onchange="suburbChanged(this.value)">
+                <option value="">— Select suburb —</option>
+                {% for s in suburbs_list %}
+                <option value="{{ s['name'] }}"
+                  {% if job['suburb'] == s['name'] %}selected{% endif %}
+                  data-region="{{ s['region_id'] }}">
+                  {{ s['name'] }} ({{ s['region_name'] }})
+                </option>
+                {% endfor %}
+                {% if job['suburb'] and job['suburb'] not in
+                      suburbs_list|map(attribute='name')|list %}
+                <option value="{{ job['suburb'] }}" selected>
+                  {{ job['suburb'] }} (unmapped)
+                </option>
+                {% endif %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="sd-label">Email</label>
+              <input type="email" name="customer_email" id="f_email" class="sd-input"
+                     value="{{ job['customer_email'] or '' }}">
+            </div>
+            <div class="col-12">
+              <label class="sd-label">Message / Description</label>
+              <textarea name="description" class="sd-input" rows="3">{{ job['description'] or '' }}</textarea>
+            </div>
+          </div>
+        </div>
+
+        <hr class="divider" style="margin:1.25rem 1.5rem;">
+
+        <!-- Scheduling -->
+        <div style="padding:0 1.5rem;">
+          <div style="font-size:0.7rem; font-weight:600; text-transform:uppercase;
+                      letter-spacing:0.1em; color:var(--sd-muted); margin-bottom:1rem;">
+            <i class="bi bi-calendar3"></i> Scheduling
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6" id="region-col"
+                 {% if job['job_type'] == 'workshop' %}style="display:none;"{% endif %}>
+              <label class="sd-label">Region *</label>
+              <select name="region_id" id="region-select" class="sd-input"
+                      {% if job['job_type'] != 'workshop' %}required{% endif %}>
+                {% for r in regions %}
+                <option value="{{ r['id'] }}"
+                  {% if r['id'] == job['region_id'] %}selected{% endif %}>
+                  {{ r['name'] }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            {% set sched_locked = job['status'] in ('complete', 'invoiced') %}
+            <div class="col-md-3">
+              <label class="sd-label">
+                Service Date
+                {% if sched_locked %}
+                <span style="color:var(--sd-muted); font-weight:400;
+                             text-transform:none; letter-spacing:0;"> — locked</span>
+                {% endif %}
+              </label>
+              {% if sched_locked %}
+              <input type="date" name="scheduled_date" class="sd-input"
+                     value="{{ job['scheduled_date'] or '' }}" disabled>
+              <input type="hidden" name="scheduled_date"
+                     value="{{ job['scheduled_date'] or '' }}">
+              {% else %}
+              <select name="scheduled_date" id="date-select" class="sd-input">
+                {# Populated by JS on load; current date added as fallback #}
+                {% if job['scheduled_date'] %}
+                <option value="{{ job['scheduled_date'] }}" selected>
+                  {{ job['scheduled_date'] }}
+                </option>
+                {% else %}
+                <option value="">— Select date —</option>
+                {% endif %}
+              </select>
+              {% endif %}
+            </div>
+            <div class="col-md-2" id="time-slot-col"
+                 {% if job['job_type'] == 'workshop' %}style="display:none;"{% endif %}>
+              <label class="sd-label">Start Time</label>
+              <select name="scheduled_time" id="start-time" class="sd-input"
+                      {% if sched_locked %}disabled{% endif %}>
+                <option value="">— Time —</option>
+                {% for slot in TIME_SLOTS %}
+                <option value="{{ slot }}"
+                  {% if job['scheduled_time'] == slot %}selected{% endif %}>
+                  {{ TIME_LABELS[slot] }}
+                </option>
+                {% endfor %}
+              </select>
+              {% if sched_locked %}
+              <input type="hidden" name="scheduled_time"
+                     value="{{ job['scheduled_time'] or '' }}">
+              {% endif %}
+            </div>
+            <div class="col-md-2" id="end-time-col"
+                 {% if job['job_type'] == 'workshop' %}style="display:none;"{% endif %}>
+              <label class="sd-label">End Time</label>
+              <select name="end_time" id="end-time" class="sd-input"
+                      {% if sched_locked %}disabled{% endif %}>
+                <option value="">— Time —</option>
+                {% for slot in TIME_SLOTS %}
+                <option value="{{ slot }}"
+                  {% if job['end_time'] == slot %}selected{% endif %}>
+                  {{ TIME_LABELS[slot] }}
+                </option>
+                {% endfor %}
+              </select>
+              {% if sched_locked %}
+              <input type="hidden" name="end_time"
+                     value="{{ job['end_time'] or '' }}">
+              {% endif %}
+            </div>
+
+            {% if sched_locked %}
+            <div class="col-12">
+              <div class="sd-alert sd-alert-danger" style="margin-bottom:0;">
+                <i class="bi bi-lock"></i>
+                Date and time are locked — status is
+                <strong>{{ job['status'] }}</strong>.
+                Change status to edit the schedule.
+              </div>
+            </div>
+            {% endif %}
+
+            <div class="col-12">
+              <label class="sd-label">Full Site Address</label>
+              <input type="text" name="address" id="address-input" class="sd-input"
+                     data-address-autocomplete
+                     value="{{ job['address'] or '' }}" autocomplete="off">
+            </div>
+            <div class="col-md-4">
+              <label class="sd-label">Status</label>
+              <select name="status" class="sd-input">
+                {% for s in ['pending','scheduled','in_progress','complete','invoiced','paid','void'] %}
+                <option value="{{ s }}"
+                  {% if job['status'] == s %}selected{% endif %}>
+                  {{ s|replace('_',' ')|title }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="sd-label">Paid Date</label>
+              <input type="date" name="paid_date" class="sd-input"
+                     value="{{ job['paid_date'] or '' }}">
+            </div>
+            <div class="col-md-4">
+              <label class="sd-label">Amount Paid ($)</label>
+              <input type="number" name="amount_paid" class="sd-input"
+                     step="0.01" min="0"
+                     value="{{ '%.2f'|format(job['amount_paid']) if job['amount_paid'] else '' }}"
+                     placeholder="0.00">
+            </div>
+            <div class="col-md-6">
+              <label class="sd-label">Tax Treatment</label>
+              <select name="tax_inclusive" class="sd-input">
+                <option value="1"
+                  {% if job['tax_inclusive'] %}selected{% endif %}>
+                  Tax Inclusive (prices include GST)
+                </option>
+                <option value="0"
+                  {% if not job['tax_inclusive'] %}selected{% endif %}>
+                  Tax Exclusive (GST added on top)
+                </option>
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="sd-label">Internal Notes</label>
+              <textarea name="notes" class="sd-input"
+                        rows="2">{{ job['notes'] or '' }}</textarea>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding:1.5rem; display:flex; justify-content:space-between; align-items:center;">
+          <button type="button" class="btn-danger" onclick="confirmDelete()">
+            <i class="bi bi-trash3"></i> Delete Job
+          </button>
+          <div style="display:flex; gap:0.75rem;">
+            <a href="{{ url_for('jobs.job_detail', job_id=job['id']) }}"
+               class="btn-ghost">Cancel</a>
+            <button type="submit" class="btn-accent">
+              <i class="bi bi-check-lg"></i> Save Changes
+            </button>
+          </div>
+        </div>
+      </form>
+
+      {# Delete form lives OUTSIDE the save form to avoid illegal nesting #}
+      <form id="delete-form" method="post"
+            action="{{ url_for('jobs.delete_job', job_id=job['id']) }}"
+            style="display:none;"></form>
+
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let searchTimer = null;
+
+document.getElementById('cust-search').addEventListener('input', function() {
+  clearTimeout(searchTimer);
+  const q = this.value.trim();
+  if (q.length < 2) { hideResults(); return; }
+  searchTimer = setTimeout(() => fetchCustomers(q), 250);
+});
+
+function fetchCustomers(q) {
+  fetch('/customers/search?q=' + encodeURIComponent(q))
+    .then(r => r.json())
+    .then(renderResults);
+}
+
+function renderResults(data) {
+  const box = document.getElementById('cust-results');
+  if (!data.length) {
+    box.innerHTML = `<div style="padding:0.75rem 1rem; font-size:0.85rem;
+        color:var(--sd-muted);">No match found.</div>`;
+  } else {
+    box.innerHTML = data.map(c => `
+      <div onclick="selectCustomer(${c.id},'${escJs(c.name)}','${escJs(c.email)}',
+                                   '${escJs(c.phone||'')}','${escJs(c.suburb||'')}')"
+           style="padding:0.65rem 1rem; cursor:pointer; font-size:0.875rem;
+                  border-bottom:1px solid var(--sd-border); transition:background 0.1s;"
+           onmouseover="this.style.background='rgba(255,255,255,0.06)'"
+           onmouseout="this.style.background=''">
+        <strong style="color:var(--sd-text);">${escHtml(c.name)}</strong>
+        <span style="color:var(--sd-muted); margin-left:0.5rem; font-size:0.8rem;">
+          ${escHtml(c.email)}
+        </span>
+        ${c.suburb
+          ? `<span style="float:right;color:var(--sd-muted);font-size:0.78rem;">
+               ${escHtml(c.suburb)}</span>`
+          : ''}
+      </div>`).join('');
+  }
+  box.style.display = 'block';
+}
+
+function selectCustomer(id, name, email, phone, suburb, address) {
+  document.getElementById('customer_id_field').value      = id;
+  document.getElementById('f_name').value                 = name;
+  document.getElementById('f_email').value                = email;
+  document.getElementById('f_phone').value                = phone;
+  document.getElementById('f_suburb').value               = suburb;
+  document.getElementById('customer_address_field').value = address || '';
+  document.getElementById('cust-search').value            = name;
+  // Update the linked banner
+  const banner = document.getElementById('linked-banner');
+  if (banner) {
+    banner.querySelector('span').innerHTML =
+      `Reassigning to <strong>${escHtml(name)}</strong> (${escHtml(email)})`;
+  }
+  document.getElementById('clear-btn').style.display = 'inline-flex';
+  hideResults();
+}
+
+function clearSearch() {
+  document.getElementById('cust-search').value = '';
+  document.getElementById('clear-btn').style.display = 'none';
+  hideResults();
+}
+
+function hideResults() {
+  document.getElementById('cust-results').style.display = 'none';
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                  .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function escJs(s) {
+  return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+}
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('#cust-results') && e.target.id !== 'cust-search')
+    hideResults();
+});
+
+function confirmDelete() {
+  if (confirm('Permanently delete {{ job["reference"] }}? This cannot be undone.')) {
+    document.getElementById('delete-form').submit();
+  }
+}
+
+const suburbRegionMap = {
+  {% for s in suburbs_list %}
+  "{{ s['name'] }}": {{ s['region_id'] }},
+  {% endfor %}
+};
+
+function suburbChanged(suburb) {
+  const regionId = suburbRegionMap[suburb];
+  if (regionId) {
+    const sel = document.getElementById('region-select');
+    if (sel) { sel.value = regionId; regionChanged(regionId); }
+  }
+}
+
+function regionChanged(regionId) {
+  const dateSel = document.getElementById('date-select');
+  if (!dateSel || !regionId) return;
+  const current = dateSel.value;
+  dateSel.innerHTML = '<option value="">Loading…</option>';
+  fetch('/regions/' + regionId + '/open-dates')
+    .then(r => r.json())
+    .then(dates => {
+      if (!dates.length) {
+        dateSel.innerHTML = '<option value="">No open dates for this region</option>';
+        {% if job['scheduled_date'] %}
+        // Keep current date even if closed, so edit doesn't lose it
+        dateSel.innerHTML +=
+          `<option value="{{ job['scheduled_date'] }}" selected>
+             {{ job['scheduled_date'] }} (current)</option>`;
+        {% endif %}
+        return;
+      }
+      let opts = '<option value="">— Select date —</option>';
+      let found = false;
+      dates.forEach(d => {
+        const sel = (d === current || d === '{{ job["scheduled_date"] }}');
+        if (sel) found = true;
+        opts += `<option value="${d}" ${sel ? 'selected' : ''}>${d}</option>`;
+      });
+      {% if job['scheduled_date'] %}
+      // If current date not in open list, add it as a labelled option
+      if (!found) {
+        opts += `<option value="{{ job['scheduled_date'] }}" selected>
+                   {{ job['scheduled_date'] }} (current)</option>`;
+      }
+      {% endif %}
+      dateSel.innerHTML = opts;
+    });
+}
+
+// Load open dates for current region on page load
+document.addEventListener('DOMContentLoaded', function() {
+  const regionId = document.getElementById('region-select')?.value;
+  if (regionId) regionChanged(regionId);
+});
+
+function updateJobType(type) {
+  const timeCol   = document.getElementById('time-slot-col');
+  const regionCol = document.getElementById('region-col');
+  const regionSel = document.getElementById('region-select');
+  if (type === 'workshop') {
+    timeCol.style.display   = 'none';
+    document.getElementById('end-time-col').style.display = 'none';
+    regionCol.style.display = 'none';
+    const tSel = timeCol.querySelector('select');
+    if (tSel && !tSel.disabled) tSel.value = '';
+    regionSel.removeAttribute('required');
+  } else {
+    timeCol.style.display   = '';
+    document.getElementById('end-time-col').style.display = '';
+    regionCol.style.display = '';
+    regionSel.setAttribute('required', '');
+  }
+}
+
+// ── Auto-set end time to start + 1 hour when start changes ──────────────────
+(function () {
+  const TIME_SLOTS = {{ TIME_SLOTS | tojson }};
+  const startSel = document.getElementById('start-time');
+  const endSel   = document.getElementById('end-time');
+  if (!startSel || !endSel) return;
+
+  startSel.addEventListener('change', function () {
+    // Only auto-update if end is blank or was previously auto-set
+    const idx = TIME_SLOTS.indexOf(startSel.value);
+    if (idx === -1) return;
+    const endIdx = Math.min(idx + 2, TIME_SLOTS.length - 1);
+    endSel.value = TIME_SLOTS[endIdx];
+  });
+})();
+</script>
+{% endblock %}

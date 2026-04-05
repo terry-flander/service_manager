@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Regions{% endblock %}
+{% block topbar_title %}Regions{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('regions.import_csv') }}" class="btn-ghost">
+    <i class="bi bi-upload"></i> Import CSV
+  </a>
+  <a href="{{ url_for('regions.new_region') }}" class="btn-accent">
+    <i class="bi bi-plus-lg"></i> New Region
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="sd-card">
+  <div class="table-responsive-sd"><table class="sd-table">
+    <thead>
+      <tr>
+        <th>Region</th>
+        <th style="text-align:center;">Suburbs</th>
+        <th style="text-align:center;">Dates</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in regions %}
+      <tr>
+        <td style="font-weight:500;">
+          <a href="{{ url_for('regions.detail', region_id=r['id']) }}"
+             style="color:var(--sd-text); text-decoration:none;">
+            {{ r['name'] }}
+          </a>
+        </td>
+        <td style="text-align:center;">
+          <span class="badge-status status-scheduled">{{ r['suburb_count'] }}</span>
+        </td>
+        <td style="text-align:center;">
+          <span class="badge-status status-complete">{{ r['date_count'] }}</span>
+        </td>
+        <td style="display:flex; gap:0.5rem; justify-content:flex-end;">
+          <a href="{{ url_for('regions.detail', region_id=r['id']) }}"
+             class="btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.8rem;">
+            <i class="bi bi-diagram-3"></i> Manage
+          </a>
+          <a href="{{ url_for('regions.edit_region', region_id=r['id']) }}"
+             class="btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.8rem;">
+            <i class="bi bi-pencil"></i>
+          </a>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="4" style="text-align:center; color:var(--sd-muted); padding:2rem;">
+          No regions yet.
+          <a href="{{ url_for('regions.new_region') }}"
+             style="color:var(--sd-accent);">Create one</a>.
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Customers{% endblock %}
+{% block topbar_title %}Customers{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('customers.new_customer') }}" class="btn-accent">
+    <i class="bi bi-person-plus"></i> New Customer
+  </a>
+{% endblock %}
+
+{% block content %}
+<!-- Search -->
+<div class="sd-card mb-3">
+  <div style="padding:0.875rem 1.25rem; display:flex; gap:0.75rem; align-items:center;">
+    <i class="bi bi-search" style="color:var(--sd-muted);"></i>
+    <input type="text" id="search-input" class="sd-input" style="max-width:320px;"
+           placeholder="Search by name or phone…" value="{{ q }}" autofocus>
+    <button class="btn-accent" onclick="doSearch()">Search</button>
+    {% if q %}
+    <a href="{{ url_for('customers.index') }}" class="btn-ghost">Clear</a>
+    {% endif %}
+    <span style="margin-left:auto; font-size:0.8rem; color:var(--sd-muted);">
+      {{ customers|length }} customer{{ 's' if customers|length != 1 }}
+      {% if q %}matching <strong style="color:var(--sd-text);">"{{ q }}"</strong> <span style="font-size:0.72rem;">(name or phone)</span>{% endif %}
+    </span>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="sd-card">
+  <div class="table-responsive-sd"><table class="sd-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Phone</th>
+        <th>Suburb</th>
+        <th style="text-align:center;">Jobs</th>
+        <th>Last Job</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in customers %}
+      <tr>
+        <td style="font-weight:500;">
+          <a href="{{ url_for('customers.edit_customer', customer_id=c['id']) }}"
+             style="color:var(--sd-text); text-decoration:none;">{{ c['name'] }}</a>
+        </td>
+        <td style="font-size:0.83rem; color:var(--sd-muted);">{{ c['email'] }}</td>
+        <td style="font-size:0.83rem;">{{ c['phone'] or '—' }}</td>
+        <td style="font-size:0.83rem;">{{ c['suburb'] or '—' }}</td>
+        <td style="text-align:center;">
+          <span class="badge-status status-{{ 'scheduled' if c['job_count'] else 'invoiced' }}">
+            {{ c['job_count'] }}
+          </span>
+        </td>
+        <td class="mono" style="font-size:0.8rem; color:var(--sd-muted);">
+          {{ c['last_job'] or '—' }}
+        </td>
+        <td>
+          <a href="{{ url_for('customers.edit_customer', customer_id=c['id']) }}"
+             class="btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.8rem;">
+            <i class="bi bi-pencil"></i>
+          </a>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="7" style="text-align:center; color:var(--sd-muted); padding:2rem;">
+          {% if q %}No customers matching "{{ q }}".{% else %}No customers yet.{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function doSearch() {
+  const q = document.getElementById('search-input').value.trim();
+  window.location = '{{ url_for("customers.index") }}' + (q ? '?q=' + encodeURIComponent(q) : '');
+}
+document.getElementById('search-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') doSearch();
+});
+</script>
+{% endblock %}

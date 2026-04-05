@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block title %}Calendar{% endblock %}
+{% block topbar_title %}Job Calendar{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('jobs.new_job') }}" class="btn-accent">
+    <i class="bi bi-plus-lg"></i> New Job
+  </a>
+{% endblock %}
+
+{% block head %}
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet">
+<style>
+  #calendar-wrap {
+    background: var(--sd-surface);
+    border: 1px solid var(--sd-border);
+    border-radius: 8px;
+    padding: 1.5rem;
+  }
+  .fc { font-family: 'IBM Plex Sans', sans-serif; }
+  .fc-toolbar-title { font-size: 1rem !important; font-weight: 600; color: var(--sd-text); }
+  .fc-button { background: var(--sd-surface2) !important; border-color: var(--sd-border) !important; color: var(--sd-muted) !important; font-size: 0.8rem !important; }
+  .fc-button:hover { background: var(--sd-border) !important; color: var(--sd-text) !important; }
+  .fc-button-active { background: var(--sd-accent) !important; border-color: var(--sd-accent) !important; color: #fff !important; }
+  .fc-col-header-cell-cushion { color: var(--sd-muted) !important; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; }
+  .fc-daygrid-day-number { color: var(--sd-muted) !important; font-size: 0.8rem; font-family: 'IBM Plex Mono', monospace; }
+  .fc-day-today { background: rgba(249,115,22,0.06) !important; }
+  .fc-event { border-radius: 4px !important; border: none !important; font-size: 0.75rem; padding: 2px 5px; cursor: grab; }
+  .fc-event:active { cursor: grabbing; }
+  .fc-event-title { font-weight: 500; }
+  .fc-theme-standard td, .fc-theme-standard th { border-color: var(--sd-border) !important; }
+  .fc-scrollgrid { border-color: var(--sd-border) !important; }
+  .fc-timegrid-slot-label { color: var(--sd-muted) !important; font-size: 0.72rem; font-family: 'IBM Plex Mono', monospace; }
+  .fc-timegrid-axis { color: var(--sd-muted) !important; }
+  .fc-timegrid-now-indicator-line { border-color: var(--sd-accent) !important; }
+  .legend { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; font-size: 0.78rem; }
+  .legend-item { display: flex; align-items: center; gap: 0.4rem; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+
+  /* Drag feedback */
+  .fc-event-dragging { opacity: 0.75; box-shadow: 0 4px 16px rgba(0,0,0,0.35); }
+  #drag-toast {
+    position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+    background: var(--sd-slate); border: 1px solid var(--sd-border);
+    color: var(--sd-text); padding: 0.6rem 1.25rem;
+    border-radius: 8px; font-size: 0.85rem;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    display: none; z-index: 9999; white-space: nowrap;
+  }
+  #drag-toast.show { display: block; }
+  #drag-toast.success { border-color: rgba(16,185,129,0.5); }
+  #drag-toast.error   { border-color: rgba(248,113,113,0.5); color: #f87171; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#f59e0b;"></div> Pending</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#3b82f6;"></div> Scheduled</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#8b5cf6;"></div> In Progress</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#10b981;"></div> Complete</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#6b7280;"></div> Invoiced</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#FFEF00; border:1px solid #ccc;"></div> Region Date</div>
+  <div class="legend-item" style="margin-left:auto; color:var(--sd-muted); font-size:0.72rem;">
+    <i class="bi bi-arrows-move"></i> Drag events to reschedule
+  </div>
+</div>
+
+<div id="drag-toast"></div>
+
+<div id="calendar-wrap">
+  <div id="calendar"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const calendarEl = document.getElementById('calendar');
+  const toast      = document.getElementById('drag-toast');
+  let toastTimer;
+
+  function showToast(msg, type) {
+    toast.textContent = msg;
+    toast.className   = 'show ' + (type || '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { toast.className = ''; }, 3000);
+  }
+
+  const calendar = new FullCalendar.Calendar(calendarEl, {
+    initialView:  'dayGridMonth',
+    headerToolbar: {
+      left:   'prev,next today',
+      center: 'title',
+      right:  'dayGridMonth,timeGridWeek,timeGridDay'
+    },
+    slotMinTime:  '07:00:00',
+    slotMaxTime:  '19:00:00',
+    allDaySlot:   true,
+    height:       'auto',
+    nowIndicator: true,
+    editable:     true,      // enables drag-and-drop for all events
+    droppable:    true,
+
+    events: '/calendar/events',
+
+    // ── Event click — navigate to job (only for job events) ──────────────────
+    eventClick: function(info) {
+      info.jsEvent.preventDefault();
+      const p = info.event.extendedProps;
+      if (p.type === 'region_date') return;  // rd| prefix  // region dates don't navigate
+      if (info.event.url) window.location.href = info.event.url;
+    },
+
+    // ── Tooltip on hover ─────────────────────────────────────────────────────
+    eventDidMount: function(info) {
+      const p = info.event.extendedProps;
+      if (p.type === 'region_date') {
+        info.el.title = `Region: ${p.region}\nStatus: ${p.status}`;
+      } else {
+        const time = p.time ? ` @ ${p.time}` : '';
+        info.el.title = `${p.region}${time}\n${p.address}\nStatus: ${p.status}`;
+      }
+    },
+
+    // ── Drag end ─────────────────────────────────────────────────────────────
+    eventDrop: function(info) {
+      const event = info.event;
+      const p     = event.extendedProps;
+      const id    = event.id;
+
+      if (p.type === 'region_date') {
+        // ── Region date drag ─────────────────────────────────────────────────
+        const newDate = event.startStr.slice(0, 10);
+
+        fetch('/calendar/move-region-date', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ id: id, date: newDate })
+        })
+        .then(r => r.json())
+        .then(data => {
+          if (data.ok) {
+            showToast(`✓ ${event.title} moved to ${newDate}`, 'success');
+          } else {
+            info.revert();
+            showToast('Could not save — please try again.', 'error');
+          }
+        })
+        .catch(() => { info.revert(); showToast('Network error.', 'error'); });
+
+      } else {
+        // ── Job drag ─────────────────────────────────────────────────────────
+        const start   = event.start;
+        const newDate = start.toISOString().slice(0, 10);
+
+        let newTime   = null;
+        let newEndTime = null;
+        if (!event.allDay) {
+          const pad = n => String(n).padStart(2, '0');
+          newTime = `${pad(start.getHours())}:${pad(start.getMinutes())}`;
+          if (event.end) {
+            newEndTime = `${pad(event.end.getHours())}:${pad(event.end.getMinutes())}`;
+          }
+        }
+
+        fetch('/calendar/move-job', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ id: id, date: newDate, time: newTime, end_time: newEndTime })
+        })
+        .then(r => r.json())
+        .then(data => {
+          if (data.ok) {
+            const timeStr = data.scheduled_time
+              ? ` at ${data.scheduled_time}` : ' (all day)';
+            showToast(`✓ ${data.reference} → ${data.scheduled_date}${timeStr}`, 'success');
+          } else {
+            info.revert();
+            showToast('Could not save — please try again.', 'error');
+          }
+        })
+        .catch(() => { info.revert(); showToast('Network error.', 'error'); });
+      }
+    }
+  });
+
+  calendar.render();
+});
+</script>
+{% endblock %}

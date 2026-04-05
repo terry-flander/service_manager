@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Parts List{% endblock %}
+{% block topbar_title %}Parts Master List{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('parts.new_part') }}" class="btn-accent"><i class="bi bi-plus-lg"></i> Add Part</a>
+{% endblock %}
+
+{% block content %}
+<div class="sd-card">
+  <div class="sd-card-header">{{ parts|length }} parts</div>
+  <div class="table-responsive-sd"><table class="sd-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Part Number</th>
+        <th style="text-align:right;">Unit Cost</th>
+        <th>Unit</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for part in parts %}
+      <tr>
+        <td style="font-weight:500;">{{ part.name }}</td>
+        <td class="mono" style="font-size:0.8rem; color:var(--sd-muted);">{{ part.part_number or '—' }}</td>
+        <td class="mono" style="text-align:right;">${{ '%.2f'|format(part.unit_cost) }}</td>
+        <td style="font-size:0.8rem; color:var(--sd-muted);">{{ part.unit }}</td>
+        <td>
+          {% if part.active %}
+          <span class="badge-status status-complete">Active</span>
+          {% else %}
+          <span class="badge-status status-invoiced">Inactive</span>
+          {% endif %}
+        </td>
+        <td style="display:flex; gap:0.5rem;">
+          <a href="{{ url_for('parts.edit_part', part_id=part.id) }}" class="btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.8rem;"><i class="bi bi-pencil"></i></a>
+          {% if part.active %}
+          <form method="post" action="{{ url_for('parts.delete_part', part_id=part.id) }}" onsubmit="return confirm('Deactivate this part?')">
+            <button type="submit" class="btn-danger"><i class="bi bi-trash3"></i></button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" style="text-align:center; color:var(--sd-muted); padding:2rem;">No parts in master list yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}

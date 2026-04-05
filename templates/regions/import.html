@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Import Regions{% endblock %}
+{% block topbar_title %}Import Regions & Suburbs{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('regions.index') }}" class="btn-ghost">
+    <i class="bi bi-arrow-left"></i> Regions
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+
+    {% if not preview %}
+    <!-- Upload form -->
+    <div class="sd-card">
+      <div class="sd-card-header">Upload CSV</div>
+      <div style="padding:1.5rem;">
+        <p style="font-size:0.875rem; color:var(--sd-muted); margin-bottom:1.25rem;">
+          Upload a CSV file with <strong style="color:var(--sd-text);">Region</strong>
+          and <strong style="color:var(--sd-text);">Suburb</strong> columns.
+          A preview will be shown before anything is saved.
+        </p>
+        <form method="post" enctype="multipart/form-data">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="sd-label">CSV File</label>
+              <input type="file" name="csvfile" accept=".csv" class="sd-input"
+                     required style="padding:0.4rem 0.75rem;">
+            </div>
+            <div class="col-12">
+              <label class="sd-label">If suburb already exists</label>
+              <select name="action" class="sd-input" style="max-width:320px;">
+                <option value="skip">Skip — keep existing region assignment</option>
+                <option value="replace">Replace — reassign to region in CSV</option>
+              </select>
+            </div>
+          </div>
+          <hr class="divider">
+          <div style="display:flex; justify-content:flex-end;">
+            <button type="submit" class="btn-accent">
+              <i class="bi bi-eye"></i> Preview Import
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Format hint -->
+    <div style="margin-top:1rem; padding:0.875rem 1rem; background:rgba(59,130,246,0.08);
+                border:1px solid rgba(59,130,246,0.2); border-radius:6px;
+                font-size:0.82rem; color:var(--sd-muted);">
+      <i class="bi bi-info-circle" style="color:#60a5fa;"></i>
+      Expected format:
+      <code style="color:var(--sd-text); margin-left:0.5rem;">
+        Region,Suburb<br>
+        Inner North,Northcote<br>
+        Inner North,Brunswick<br>
+        Inner South East,McKinnon
+      </code>
+    </div>
+
+    {% else %}
+    <!-- Preview -->
+    <div class="sd-card mb-3">
+      <div class="sd-card-header">
+        Import Preview
+        <span style="font-size:0.78rem; color:var(--sd-muted); font-weight:400;">
+          {{ preview|length }} region(s) ·
+          {{ rows|length }} suburb(s) total
+        </span>
+      </div>
+      <div style="padding:1.25rem 1.5rem;">
+
+        {% for r in preview %}
+        <div style="margin-bottom:1.25rem;">
+          <div style="display:flex; align-items:center; gap:0.6rem; margin-bottom:0.5rem;">
+            <strong style="font-size:0.925rem;">{{ r.name }}</strong>
+            {% if r.is_new %}
+            <span class="badge-status status-pending"
+                  style="font-size:0.65rem;">New region</span>
+            {% else %}
+            <span class="badge-status status-invoiced"
+                  style="font-size:0.65rem;">Existing</span>
+            {% endif %}
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:0.35rem; padding-left:0.5rem;">
+            {% for s in r.suburbs %}
+            <span style="display:inline-flex; align-items:center; gap:0.3rem;
+                         border-radius:20px; padding:0.18rem 0.65rem; font-size:0.8rem;
+                         {% if s.suburb_exists %}
+                         background:rgba(107,114,128,0.15); color:#9ca3af;
+                         border:1px solid rgba(107,114,128,0.25);
+                         {% else %}
+                         background:rgba(16,185,129,0.12); color:#34d399;
+                         border:1px solid rgba(16,185,129,0.25);
+                         {% endif %}">
+              {% if s.suburb_exists %}
+              <i class="bi bi-dash-circle" style="font-size:0.7rem;"></i>
+              {% else %}
+              <i class="bi bi-plus-circle" style="font-size:0.7rem;"></i>
+              {% endif %}
+              {{ s.suburb }}
+            </span>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+
+        <!-- Legend -->
+        <div style="display:flex; gap:1.25rem; margin-top:0.5rem; padding-top:0.875rem;
+                    border-top:1px solid var(--sd-border); font-size:0.78rem;">
+          <span style="color:#34d399;">
+            <i class="bi bi-plus-circle"></i> Will be added
+          </span>
+          <span style="color:#9ca3af;">
+            <i class="bi bi-dash-circle"></i> Already exists (will skip or replace
+            based on your selection)
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Confirm form — carries the parsed rows as hidden fields -->
+    <form method="post" enctype="multipart/form-data" id="confirm-form">
+      <input type="hidden" name="confirm" value="1">
+      <!-- Re-submit the action choice from previous step -->
+      <input type="hidden" name="action"
+             value="{{ request.form.get('action', 'skip') }}">
+      <!-- Re-encode rows as hidden fields -->
+      {% for row in rows %}
+      <input type="hidden" name="region_row" value="{{ row.region }}|{{ row.suburb }}">
+      {% endfor %}
+    </form>
+
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <a href="{{ url_for('regions.import_csv') }}" class="btn-ghost">
+        <i class="bi bi-arrow-left"></i> Upload Different File
+      </a>
+      <button type="submit" form="confirm-form" class="btn-accent">
+        <i class="bi bi-check-lg"></i> Confirm Import
+      </button>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

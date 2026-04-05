@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}{{ region['name'] }}{% endblock %}
+{% block topbar_title %}{{ region['name'] }}{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('regions.edit_region', region_id=region['id']) }}" class="btn-ghost">
+    <i class="bi bi-pencil"></i> Edit
+  </a>
+  <a href="{{ url_for('regions.index') }}" class="btn-ghost">
+    <i class="bi bi-arrow-left"></i> Regions
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+
+  <!-- Suburbs column -->
+  <div class="col-lg-4">
+    <div class="sd-card">
+      <div class="sd-card-header">
+        Suburbs
+        <span style="font-size:0.78rem; color:var(--sd-muted); font-weight:400;">
+          {{ suburbs|length }} assigned
+        </span>
+      </div>
+      <div style="padding:1.25rem;">
+
+        <!-- Suburb chips -->
+        <div style="display:flex; flex-wrap:wrap; gap:0.4rem; margin-bottom:1.25rem;
+                    min-height:2rem;">
+          {% for s in suburbs %}
+          <div style="display:inline-flex; align-items:center; gap:0.25rem;
+                      background:rgba(59,130,246,0.12);
+                      border:1px solid rgba(59,130,246,0.25);
+                      border-radius:20px; padding:0.2rem 0.4rem 0.2rem 0.75rem;
+                      font-size:0.82rem; color:#93c5fd;">
+            {{ s['name'] }}
+            <form method="post"
+                  action="{{ url_for('regions.delete_suburb', suburb_id=s['id']) }}"
+                  style="display:inline; margin:0;"
+                  onsubmit="return confirm('Remove {{ s['name'] }} from this region?')">
+              <button type="submit"
+                      style="background:none; border:none; color:#93c5fd;
+                             cursor:pointer; padding:0 2px; line-height:1;
+                             font-size:0.9rem; opacity:0.7;">
+                <i class="bi bi-x"></i>
+              </button>
+            </form>
+          </div>
+          {% else %}
+          <span style="font-size:0.85rem; color:var(--sd-muted);">
+            No suburbs assigned yet.
+          </span>
+          {% endfor %}
+        </div>
+
+        <!-- Add suburb -->
+        <form method="post"
+              action="{{ url_for('regions.add_suburb', region_id=region['id']) }}">
+          <label class="sd-label">Add Suburb</label>
+          <div style="display:flex; gap:0.5rem; margin-top:0.25rem;">
+            <input type="text" name="suburb_name" class="sd-input"
+                   placeholder="Suburb name…" autocomplete="off" required>
+            <button type="submit" class="btn-accent"
+                    style="white-space:nowrap; padding:0.45rem 0.875rem;">
+              <i class="bi bi-plus-lg"></i>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dates column -->
+  <div class="col-lg-8">
+    <div class="sd-card">
+      <div class="sd-card-header">
+        Scheduled Dates
+        <span style="font-size:0.78rem; color:var(--sd-muted); font-weight:400;">
+          {{ dates|length }} total —
+          <span style="color:#34d399;">
+            {{ dates|selectattr('status','eq','open')|list|length }} open
+          </span>
+        </span>
+      </div>
+
+      <!-- Date table -->
+      <div class="table-responsive-sd"><table class="sd-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in dates %}
+          <tr>
+            <td style="font-size:0.875rem;">{{ d['date']|fmt_date }}</td>
+            <td>
+              <form method="post"
+                    action="{{ url_for('regions.update_date_status', date_id=d['id']) }}">
+                <select name="status" class="sd-input"
+                        style="width:110px; padding:0.25rem 0.5rem; font-size:0.82rem;"
+                        onchange="this.form.submit()">
+                  {% for s in DATE_STATUSES %}
+                  <option value="{{ s }}"
+                    {% if d['status'] == s %}selected{% endif %}>
+                    {{ s|title }}
+                  </option>
+                  {% endfor %}
+                </select>
+              </form>
+            </td>
+            <td>
+              <form method="post"
+                    action="{{ url_for('regions.delete_date', date_id=d['id']) }}"
+                    onsubmit="return confirm('Remove this date?')">
+                <button type="submit" class="btn-danger"
+                        style="padding:0.25rem 0.6rem; font-size:0.8rem;">
+                  <i class="bi bi-trash3"></i>
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="4" style="text-align:center; color:var(--sd-muted);
+                                    padding:1.5rem;">
+              No dates scheduled yet.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table></div>
+
+      <!-- Add date -->
+      <div style="padding:1rem 1.25rem; border-top:1px solid var(--sd-border);">
+        <form method="post"
+              action="{{ url_for('regions.add_date', region_id=region['id']) }}">
+          <div style="display:flex; gap:0.75rem; align-items:flex-end; flex-wrap:wrap;">
+            <div>
+              <label class="sd-label">Date</label>
+              <input type="date" name="date" class="sd-input"
+                     style="width:170px;" required>
+            </div>
+            <div>
+              <label class="sd-label">Status</label>
+              <select name="status" class="sd-input" style="width:120px;">
+                {% for s in DATE_STATUSES %}
+                <option value="{{ s }}">{{ s|title }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <button type="submit" class="btn-accent">
+              <i class="bi bi-plus-lg"></i> Add Date
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

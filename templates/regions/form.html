@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% set is_edit = region and region['id'] is defined %}
+{% block title %}{{ 'Edit' if is_edit else 'New' }} Region{% endblock %}
+{% block topbar_title %}{{ 'Edit Region' if is_edit else 'New Region' }}{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('regions.index') }}" class="btn-ghost">
+    <i class="bi bi-arrow-left"></i> Regions
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-4">
+    <div class="sd-card">
+      <div class="sd-card-header">Region Details</div>
+      <div style="padding:1.5rem;">
+        <form method="post">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="sd-label">Region Name *</label>
+              <input type="text" name="name" class="sd-input" required
+                     value="{{ region['name'] if region and region['name'] is defined else '' }}"
+                     placeholder="e.g. North Metro">
+            </div>
+            <div class="col-12">
+              <label class="sd-label">Default Visit Day</label>
+              <select name="visit_day" class="sd-input">
+                {% set days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'] %}
+                {% for day in days %}
+                <option value="{{ day }}"
+                  {% if region and region['visit_day'] == day %}selected{% endif %}>
+                  {{ day }}
+                </option>
+                {% endfor %}
+              </select>
+              <div style="font-size:0.72rem; color:var(--sd-muted); margin-top:0.3rem;">
+                Used as a reference — actual dates are managed on the region detail page
+              </div>
+            </div>
+          </div>
+          <hr class="divider">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            {% if is_edit %}
+            <button type="button" class="btn-danger" onclick="confirmDeleteRegion()">
+              <i class="bi bi-trash3"></i> Delete
+            </button>
+            {% else %}
+            <span></span>
+            {% endif %}
+            <div style="display:flex; gap:0.75rem;">
+              <a href="{{ url_for('regions.index') }}" class="btn-ghost">Cancel</a>
+              <button type="submit" class="btn-accent">
+                <i class="bi bi-check-lg"></i>
+                {{ 'Save Changes' if is_edit else 'Create Region' }}
+              </button>
+            </div>
+          </div>
+        </form>
+
+        {# Delete form outside save form — nested forms are invalid HTML #}
+        {% if is_edit %}
+        <form id="delete-region-form" method="post"
+              action="{{ url_for('regions.delete_region', region_id=region['id']) }}"
+              style="display:none;"></form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if is_edit %}
+<script>
+function confirmDeleteRegion() {
+  if (confirm('Delete "{{ region["name"] }}"? This cannot be undone. Regions with linked jobs cannot be deleted.')) {
+    document.getElementById('delete-region-form').submit();
+  }
+}
+</script>
+{% endif %}
+{% endblock %}

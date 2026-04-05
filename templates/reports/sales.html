@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}Sales Report{% endblock %}
+{% block topbar_title %}Sales Report{% endblock %}
+
+{% block content %}
+
+<!-- Filter form -->
+<div class="sd-card mb-3">
+  <div class="sd-card-header">Report Parameters</div>
+  <form method="post" id="report-form">
+    <div style="padding:1rem 1.25rem; display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap;">
+
+      <div>
+        <label class="sd-label">From</label>
+        <input type="date" name="date_from" class="sd-input" style="width:160px;"
+               value="{{ date_from }}">
+      </div>
+      <div>
+        <label class="sd-label">To</label>
+        <input type="date" name="date_to" class="sd-input" style="width:160px;"
+               value="{{ date_to }}">
+      </div>
+      <div>
+        <label class="sd-label">Job Type</label>
+        <div style="display:flex; gap:1rem; padding-top:0.25rem;">
+          {% for key, label in JOB_TYPE_OPTIONS %}
+          <label style="display:flex; align-items:center; gap:0.4rem;
+                         font-size:0.875rem; color:var(--sd-text); cursor:pointer;">
+            <input type="checkbox" name="job_types" value="{{ key }}"
+                   {% if key in job_types %}checked{% endif %}
+                   style="accent-color:var(--sd-accent); width:14px; height:14px;">
+            {{ label }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div>
+        <label class="sd-label">Status</label>
+        <div style="display:flex; gap:0.75rem; flex-wrap:wrap; padding-top:0.25rem;">
+          {% for key, label in STATUS_OPTIONS %}
+          <label style="display:flex; align-items:center; gap:0.4rem;
+                         font-size:0.875rem; color:var(--sd-text); cursor:pointer;">
+            <input type="checkbox" name="statuses" value="{{ key }}"
+                   {% if key in statuses %}checked{% endif %}
+                   style="accent-color:var(--sd-accent); width:14px; height:14px;">
+            {{ label }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <button type="submit" class="btn-accent">
+        <i class="bi bi-bar-chart"></i> Run Report
+      </button>
+
+      {% if ran and rows %}
+      <div style="margin-left:auto; display:flex; gap:0.5rem;">
+        <a href="{{ url_for('reports.sales_csv',
+                   date_from=date_from, date_to=date_to,
+                   **{'job_types': job_types, 'statuses': statuses}) }}"
+           class="btn-ghost">
+          <i class="bi bi-download"></i> CSV
+        </a>
+        <a href="{{ url_for('reports.sales_pdf',
+                   date_from=date_from, date_to=date_to,
+                   **{'job_types': job_types, 'statuses': statuses}) }}"
+           class="btn-accent" target="_blank">
+          <i class="bi bi-file-pdf"></i> PDF
+        </a>
+      </div>
+      {% endif %}
+    </div>
+  </form>
+</div>
+
+{% if ran %}
+  {% if not rows %}
+  <div class="sd-card">
+    <div style="padding:2rem; text-align:center; color:var(--sd-muted);">
+      No jobs found for the selected date range and type.
+    </div>
+  </div>
+
+  {% else %}
+
+  <!-- Report table -->
+  {% for month_label, month_rows, sub in months %}
+  <div class="sd-card mb-3">
+
+    <!-- Month header -->
+    <div style="padding:0.625rem 1.25rem; background:var(--sd-slate);
+                border-bottom:1px solid var(--sd-border);
+                display:flex; justify-content:space-between; align-items:center;">
+      <span style="font-size:0.85rem; font-weight:600; color:var(--sd-text);">
+        {{ month_label }}
+      </span>
+      <span style="font-size:0.78rem; color:var(--sd-muted);">
+        {{ month_rows|length }} job{{ 's' if month_rows|length != 1 }}
+      </span>
+    </div>
+
+    <div class="table-responsive-sd"><table class="sd-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Reference</th>
+          <th>Type</th>
+          <th>Customer</th>
+          <th style="text-align:right;">Gross (inc GST)</th>
+          <th style="text-align:right;">GST</th>
+          <th style="text-align:right;">Net (ex GST)</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in month_rows %}
+        <tr>
+          <td class="mono" style="font-size:0.82rem; white-space:nowrap;">
+            {{ row['scheduled_date']|fmt_date('short') if row['scheduled_date'] else '—' }}
+          </td>
+          <td>
+            <a href="{{ url_for('jobs.job_detail', job_id=row['id']) }}"
+               class="mono" style="font-size:0.82rem;">
+              {{ row['reference'] }}
+            </a>
+          </td>
+          <td style="font-size:0.82rem;">
+            <span class="badge-status {{ 'status-scheduled' if row['job_type']=='booking' else 'status-in_progress' }}">
+              {{ row['job_type']|title }}
+            </span>
+          </td>
+          <td style="font-size:0.875rem;">{{ row['customer_name'] }}</td>
+          <td class="mono" style="text-align:right;">${{ '%.2f'|format(row['gross']) }}</td>
+          <td class="mono" style="text-align:right; color:var(--sd-muted);">
+            ${{ '%.2f'|format(row['gst']) }}
+          </td>
+          <td class="mono" style="text-align:right;">${{ '%.2f'|format(row['net']) }}</td>
+          <td>
+            <span class="badge-status status-{{ row['status'] }}">
+              {{ row['status']|replace('_',' ') }}
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr style="background:var(--sd-surface2); border-top:2px solid var(--sd-border);">
+          <td colspan="4" style="padding:0.6rem 1rem; font-size:0.8rem;
+                                  font-weight:600; color:var(--sd-muted);">
+            Subtotal — {{ month_label }}
+          </td>
+          <td class="mono" style="text-align:right; font-weight:700; padding:0.6rem 1rem;">
+            ${{ '%.2f'|format(sub['gross']) }}
+          </td>
+          <td class="mono" style="text-align:right; font-weight:600; padding:0.6rem 1rem;
+                                   color:var(--sd-muted);">
+            ${{ '%.2f'|format(sub['gst']) }}
+          </td>
+          <td class="mono" style="text-align:right; font-weight:700; padding:0.6rem 1rem;">
+            ${{ '%.2f'|format(sub['net']) }}
+          </td>
+          <td style="padding:0.6rem 1rem;"></td>
+        </tr>
+      </tfoot>
+    </table></div>
+  </div>
+  {% endfor %}
+
+  <!-- Grand total -->
+  <div class="sd-card">
+    <div style="padding:1rem 1.25rem; display:flex; justify-content:space-between;
+                align-items:center;">
+      <div style="font-size:0.95rem; font-weight:700; color:var(--sd-text);">
+        Grand Total
+        <span style="font-size:0.78rem; font-weight:400; color:var(--sd-muted);
+                      margin-left:0.5rem;">
+          {{ totals['count'] }} job{{ 's' if totals['count'] != 1 }}
+          &nbsp;·&nbsp; {{ date_from }} to {{ date_to }}
+        </span>
+      </div>
+      <div style="display:flex; gap:2.5rem; font-family:'IBM Plex Mono',monospace;">
+        <div style="text-align:right;">
+          <div class="sd-label" style="margin-bottom:0.2rem;">Gross (inc GST)</div>
+          <div style="font-size:1.1rem; font-weight:700; color:var(--sd-accent);">
+            ${{ '%.2f'|format(totals['gross']) }}
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <div class="sd-label" style="margin-bottom:0.2rem;">GST</div>
+          <div style="font-size:1.1rem; font-weight:600; color:var(--sd-muted);">
+            ${{ '%.2f'|format(totals['gst']) }}
+          </div>
+        </div>
+        <div style="text-align:right;">
+          <div class="sd-label" style="margin-bottom:0.2rem;">Net (ex GST)</div>
+          <div style="font-size:1.1rem; font-weight:700;">
+            ${{ '%.2f'|format(totals['net']) }}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% endif %}
+{% endif %}
+
+{% endblock %}

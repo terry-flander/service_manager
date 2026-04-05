@@ -1,0 +1,345 @@
+{% extends "base.html" %}
+{% block title %}New Job{% endblock %}
+{% block topbar_title %}New Job Request{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('jobs.index') }}" class="btn-ghost"><i class="bi bi-arrow-left"></i> Back</a>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <div class="sd-card">
+      <form method="post">
+
+      <!-- Job type selector — INSIDE form so it submits correctly -->
+      <div style="padding:1rem 1.5rem; border-bottom:1px solid var(--sd-border);
+                  display:flex; align-items:center; gap:1.5rem;">
+        <span class="sd-label" style="margin:0; white-space:nowrap;">Job Type</span>
+        {% for key, info in JOB_TYPES.items() %}
+        <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;
+                      font-size:0.875rem; color:var(--sd-text);">
+          <input type="radio" name="job_type" value="{{ key }}"
+                 {% if loop.first %}checked{% endif %}
+                 onchange="updateJobType(this.value)"
+                 style="accent-color:var(--sd-accent); width:15px; height:15px;">
+          {{ info.label }}
+          <span style="font-size:0.75rem; color:var(--sd-muted);">({{ info.prefix }}-NNNN)</span>
+        </label>
+        {% endfor %}
+      </div>
+
+      <div class="sd-card-header">
+        <span><i class="bi bi-person-circle" style="color:var(--sd-accent);"></i> Customer</span>
+      </div>
+      <div style="padding:1.25rem 1.5rem 0.5rem;">
+
+        <!-- Live customer search -->
+        <div style="margin-bottom:0.75rem; position:relative;">
+          <label class="sd-label">Search existing customers</label>
+          <div style="display:flex; gap:0.5rem;">
+            <input type="text" id="cust-search" class="sd-input"
+                   placeholder="Type a name to search…" autocomplete="off"
+                   style="max-width:360px;">
+            <button type="button" class="btn-ghost" onclick="clearCustomer()"
+                    id="clear-btn" style="display:none; white-space:nowrap;">
+              <i class="bi bi-x-lg"></i> Clear
+            </button>
+          </div>
+          <div id="cust-results" style="
+              display:none; position:absolute; top:100%; left:0; width:360px; z-index:200;
+              background:var(--sd-slate); border:1px solid var(--sd-border);
+              border-radius:0 0 6px 6px; max-height:260px; overflow-y:auto;
+              box-shadow:0 8px 24px rgba(0,0,0,0.5);"></div>
+        </div>
+
+        <!-- Selected customer banner -->
+        <div id="selected-banner" style="
+             display:none; background:rgba(16,185,129,0.1);
+             border:1px solid rgba(16,185,129,0.25); border-radius:6px;
+             padding:0.6rem 1rem; margin-bottom:0.75rem;
+             font-size:0.85rem; color:#34d399; align-items:center; gap:0.5rem;">
+          <i class="bi bi-person-check-fill"></i>
+          <span id="selected-label"></span>
+          <span style="margin-left:auto; font-size:0.72rem; color:var(--sd-muted);">
+            Existing customer — update fields below if needed
+          </span>
+        </div>
+
+      </div>
+
+        <input type="hidden" name="customer_id" id="customer_id_field" value="">
+        <input type="hidden" name="customer_address" id="customer_address_field" value="">
+
+        <div style="padding:0 1.5rem;">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="sd-label">Name *</label>
+              <input type="text" name="customer_name" id="f_name" class="sd-input"
+                     required placeholder="Full name">
+            </div>
+            <div class="col-md-6">
+              <label class="sd-label">Phone</label>
+              <input type="text" name="customer_phone" id="f_phone" class="sd-input"
+                     placeholder="e.g. 0412 345 678">
+            </div>
+            <div class="col-md-6">
+              <label class="sd-label">Suburb</label>
+              <select name="suburb" id="f_suburb" class="sd-input"
+                      onchange="suburbChanged(this.value)">
+                <option value="">— Select suburb —</option>
+                {% for s in suburbs_list %}
+                <option value="{{ s['name'] }}" data-region="{{ s['region_id'] }}">
+                  {{ s['name'] }} ({{ s['region_name'] }})
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="sd-label">Email</label>
+              <input type="email" name="customer_email" id="f_email" class="sd-input"
+                     placeholder="customer@example.com">
+            </div>
+            <div class="col-12">
+              <label class="sd-label">Message</label>
+              <textarea name="description" class="sd-input" rows="3"
+                        placeholder="Customer's message from the website form…"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <hr class="divider" style="margin:1.25rem 1.5rem;">
+
+        <div style="padding:0 1.5rem;">
+          <div style="font-size:0.7rem; font-weight:600; text-transform:uppercase;
+                      letter-spacing:0.1em; color:var(--sd-muted); margin-bottom:1rem;">
+            <i class="bi bi-calendar3"></i> Scheduling
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6" id="region-col">
+              <label class="sd-label">Service Region *</label>
+              <select name="region_id" id="region-select" class="sd-input"
+                      onchange="regionChanged(this.value)">
+                <option value="">— Select region —</option>
+                {% for r in regions %}
+                <option value="{{ r['id'] }}">{{ r['name'] }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3" id="date-col">
+              <label class="sd-label">Service Date</label>
+              <select name="scheduled_date" id="date-select" class="sd-input">
+                <option value="">— Select region first —</option>
+              </select>
+            </div>
+            <div class="col-md-2" id="time-slot-col">
+              <label class="sd-label">Start Time</label>
+              <select name="scheduled_time" id="start-time" class="sd-input">
+                <option value="">— Time —</option>
+                {% for slot in TIME_SLOTS %}
+                <option value="{{ slot }}">{{ TIME_LABELS[slot] }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-2" id="end-time-col">
+              <label class="sd-label">End Time</label>
+              <select name="end_time" id="end-time" class="sd-input">
+                <option value="">— Time —</option>
+                {% for slot in TIME_SLOTS %}
+                <option value="{{ slot }}">{{ TIME_LABELS[slot] }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="sd-label">Full Site Address <span style="font-weight:400; text-transform:none; letter-spacing:0;">(optional)</span></label>
+              <input type="text" name="address" id="address-input" class="sd-input"
+                     data-address-autocomplete placeholder="Start typing an address…"
+                     autocomplete="off">
+            </div>
+            <div class="col-md-6">
+              <label class="sd-label">Tax Treatment</label>
+              <select name="tax_inclusive" class="sd-input">
+                <option value="1" selected>Tax Inclusive (prices include GST)</option>
+                <option value="0">Tax Exclusive (GST added on top)</option>
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="sd-label">Internal Notes</label>
+              <textarea name="notes" class="sd-input" rows="2"
+                        placeholder="Notes for the mechanic (not shown to customer)…"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div style="padding:1.5rem; display:flex; justify-content:flex-end; gap:0.75rem;">
+          <a href="{{ url_for('jobs.index') }}" class="btn-ghost">Cancel</a>
+          <button type="submit" class="btn-accent">
+            <i class="bi bi-check-lg"></i> Create Job
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let searchTimer = null;
+
+document.getElementById('cust-search').addEventListener('input', function() {
+  clearTimeout(searchTimer);
+  const q = this.value.trim();
+  if (q.length < 2) { hideResults(); return; }
+  searchTimer = setTimeout(() => fetchCustomers(q), 250);
+});
+
+function fetchCustomers(q) {
+  fetch('/customers/search?q=' + encodeURIComponent(q))
+    .then(r => r.json())
+    .then(renderResults);
+}
+
+function renderResults(data) {
+  const box = document.getElementById('cust-results');
+  if (!data.length) {
+    box.innerHTML = `<div style="padding:0.75rem 1rem; font-size:0.85rem; color:var(--sd-muted);">
+      No match — fill in fields below to create a new customer on save.</div>`;
+  } else {
+    box.innerHTML = data.map(c => `
+      <div class="cust-option"
+           data-id="${c.id}" data-name="${escHtml(c.name)}"
+           data-email="${escHtml(c.email)}" data-phone="${escHtml(c.phone||'')}"
+           data-suburb="${escHtml(c.suburb||'')}"
+           data-address="${escHtml(c.address||'')}"
+           onclick="selectCustomer(this)"
+           style="padding:0.65rem 1rem; cursor:pointer; font-size:0.875rem;
+                  border-bottom:1px solid var(--sd-border); transition:background 0.1s;"
+           onmouseover="this.style.background='rgba(255,255,255,0.06)'"
+           onmouseout="this.style.background=''">
+        <strong style="color:var(--sd-text);">${escHtml(c.name)}</strong>
+        <span style="color:var(--sd-muted); margin-left:0.5rem; font-size:0.8rem;">
+          ${escHtml(c.email)}
+        </span>
+        ${c.suburb ? `<span style="float:right;color:var(--sd-muted);font-size:0.78rem;">${escHtml(c.suburb)}</span>` : ''}
+      </div>`).join('');
+  }
+  box.style.display = 'block';
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                  .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function selectCustomer(el) {
+  document.getElementById('customer_id_field').value   = el.dataset.id;
+  document.getElementById('f_name').value              = el.dataset.name;
+  document.getElementById('f_email').value             = el.dataset.email;
+  document.getElementById('f_phone').value             = el.dataset.phone;
+  document.getElementById('f_suburb').value            = el.dataset.suburb;
+  document.getElementById('customer_address_field').value = el.dataset.address || '';
+  // Pre-populate address field only if it is currently empty
+  const addrInput = document.getElementById('address-input');
+  if (addrInput && !addrInput.value && el.dataset.address) {
+    addrInput.value = el.dataset.address;
+  }
+  document.getElementById('cust-search').value = el.dataset.name;
+  document.getElementById('selected-label').textContent =
+    el.dataset.name + ' (' + el.dataset.email + ')';
+  const banner = document.getElementById('selected-banner');
+  banner.style.display = 'flex';
+  document.getElementById('clear-btn').style.display = 'inline-flex';
+  hideResults();
+}
+
+function clearCustomer() {
+  document.getElementById('customer_id_field').value = '';
+  document.getElementById('cust-search').value = '';
+  ['f_name','f_email','f_phone','f_suburb'].forEach(
+    id => document.getElementById(id).value = '');
+  document.getElementById('selected-banner').style.display = 'none';
+  document.getElementById('clear-btn').style.display = 'none';
+}
+
+function hideResults() {
+  document.getElementById('cust-results').style.display = 'none';
+}
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('#cust-results') && e.target.id !== 'cust-search')
+    hideResults();
+});
+
+// Suburb → region auto-select
+const suburbRegionMap = {
+  {% for s in suburbs_list %}
+  "{{ s['name'] }}": {{ s['region_id'] }},
+  {% endfor %}
+};
+
+function suburbChanged(suburb) {
+  const regionId = suburbRegionMap[suburb];
+  if (regionId) {
+    const sel = document.getElementById('region-select');
+    sel.value = regionId;
+    regionChanged(regionId);
+  }
+}
+
+function regionChanged(regionId) {
+  const dateSel = document.getElementById('date-select');
+  if (!regionId) {
+    dateSel.innerHTML = '<option value="">— Select region first —</option>';
+    return;
+  }
+  dateSel.innerHTML = '<option value="">Loading…</option>';
+  fetch('/regions/' + regionId + '/open-dates')
+    .then(r => r.json())
+    .then(dates => {
+      if (!dates.length) {
+        dateSel.innerHTML = '<option value="">No open dates for this region</option>';
+        return;
+      }
+      dateSel.innerHTML = '<option value="">— Select date —</option>' +
+        dates.map(d => `<option value="${d}">${d}</option>`).join('');
+    });
+}
+
+function updateJobType(type) {
+  const timeCol   = document.getElementById('time-slot-col');
+  const regionCol = document.getElementById('region-col');
+  const regionSel = document.getElementById('region-select');
+  if (type === 'workshop') {
+    timeCol.style.display   = 'none';
+    document.getElementById('end-time-col').style.display = 'none';
+    regionCol.style.display = 'none';
+    timeCol.querySelector('select').value = '';
+    regionSel.removeAttribute('required');
+    // Default region_id to first option so form submits
+    if (!regionSel.value) regionSel.selectedIndex = 1;
+  } else {
+    timeCol.style.display   = '';
+    document.getElementById('end-time-col').style.display = '';
+    regionCol.style.display = '';
+    regionSel.setAttribute('required', '');
+  }
+}
+
+// ── Auto-set end time to start + 1 hour ─────────────────────────────────────
+(function () {
+  const TIME_SLOTS = {{ TIME_SLOTS | tojson }};
+
+  const startSel = document.getElementById('start-time');
+  const endSel   = document.getElementById('end-time');
+  if (!startSel || !endSel) return;
+
+  startSel.addEventListener('change', function () {
+    const idx = TIME_SLOTS.indexOf(startSel.value);
+    if (idx === -1) { endSel.value = ''; return; }
+    // +1 hour = +2 slots (30-min intervals)
+    const endIdx = Math.min(idx + 2, TIME_SLOTS.length - 1);
+    endSel.value = TIME_SLOTS[endIdx];
+  });
+})();
+</script>
+{% endblock %}

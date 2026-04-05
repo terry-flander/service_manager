@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% set is_edit = user and user['id'] is defined %}
+{% block title %}{{ 'Edit' if is_edit else 'New' }} User{% endblock %}
+{% block topbar_title %}{{ 'Edit User' if is_edit else 'New User' }}{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('auth.users') }}" class="btn-ghost">
+    <i class="bi bi-arrow-left"></i> Users
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-5">
+    <div class="sd-card">
+      <div class="sd-card-header">User Details</div>
+      <div style="padding:1.5rem;">
+        <form method="post">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="sd-label">Full Name *</label>
+              <input type="text" name="name" class="sd-input" required
+                     value="{{ user['name'] if user else '' }}">
+            </div>
+            <div class="col-12">
+              <label class="sd-label">Email * <span style="font-weight:400; text-transform:none; letter-spacing:0;">(login)</span></label>
+              <input type="email" name="email" class="sd-input" required
+                     value="{{ user['email'] if user else '' }}">
+            </div>
+            <div class="col-md-6">
+              <label class="sd-label">Phone</label>
+              <input type="text" name="phone" class="sd-input"
+                     value="{{ user['phone'] if user else '' }}"
+                     placeholder="e.g. 0412 345 678">
+            </div>
+            <div class="col-md-6">
+              <label class="sd-label">Role</label>
+              <select name="role" class="sd-input">
+                {% for r in ['admin', 'mechanic'] %}
+                <option value="{{ r }}"
+                  {% if user and user['role'] == r %}selected{% endif %}>
+                  {{ r|title }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            {% if is_edit %}
+            <div class="col-12">
+              <label style="display:flex; align-items:center; gap:.5rem; cursor:pointer;">
+                <input type="checkbox" name="active"
+                       {% if user['active'] %}checked{% endif %}
+                       style="width:15px; height:15px; accent-color:var(--sd-accent);">
+                <span class="sd-label" style="margin:0;">Active</span>
+              </label>
+            </div>
+            <div class="col-12">
+              <label class="sd-label">
+                Reset Password
+                <span style="font-weight:400; text-transform:none; letter-spacing:0;">
+                  (leave blank to keep current)
+                </span>
+              </label>
+              <input type="password" name="reset_password" class="sd-input"
+                     placeholder="New password (min 8 chars)" minlength="8">
+            </div>
+            {% if user['totp_enabled'] %}
+            <div class="col-12">
+              <label style="display:flex; align-items:center; gap:.5rem; cursor:pointer;">
+                <input type="checkbox" name="reset_2fa"
+                       style="width:15px; height:15px; accent-color:var(--sd-accent);">
+                <span class="sd-label" style="margin:0; color:#f87171;">
+                  Reset 2FA — user must re-enrol on next login
+                </span>
+              </label>
+            </div>
+            {% endif %}
+
+            {% else %}
+            <div class="col-12">
+              <label class="sd-label">
+                Temporary Password *
+                <span style="font-weight:400; text-transform:none; letter-spacing:0;">
+                  — user must change on first login
+                </span>
+              </label>
+              <input type="password" name="password" class="sd-input" required
+                     placeholder="Min 8 characters" minlength="8">
+            </div>
+            {% endif %}
+          </div>
+          <hr class="divider">
+          <div style="display:flex; justify-content:flex-end; gap:.75rem;">
+            <a href="{{ url_for('auth.users') }}" class="btn-ghost">Cancel</a>
+            <button type="submit" class="btn-accent">
+              <i class="bi bi-check-lg"></i>
+              {{ 'Save Changes' if is_edit else 'Create User' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

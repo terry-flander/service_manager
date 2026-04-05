@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% set is_edit = (action == 'edit') %}
+{% block title %}{{ 'Edit' if is_edit else 'New' }} Customer{% endblock %}
+{% block topbar_title %}{{ 'Edit Customer' if is_edit else 'New Customer' }}{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('customers.index') }}" class="btn-ghost">
+    <i class="bi bi-arrow-left"></i> Customers
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="row {% if is_edit %}g-3{% else %}justify-content-center{% endif %}">
+
+  <!-- Form column -->
+  <div class="{% if is_edit %}col-lg-4{% else %}col-lg-5{% endif %}">
+    <div class="sd-card">
+      <div class="sd-card-header">Customer Details</div>
+      <div style="padding:1.5rem;">
+        <form method="post">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="sd-label">Name *</label>
+              <input type="text" name="name" class="sd-input" required
+                     value="{{ customer['name'] if customer else '' }}"
+                     placeholder="Full name">
+            </div>
+            <div class="col-12">
+              <label class="sd-label">Email * <span style="font-weight:400; text-transform:none; letter-spacing:0;">(unique key)</span></label>
+              <input type="email" name="email" class="sd-input" required
+                     value="{{ customer['email'] if customer else '' }}"
+                     placeholder="customer@example.com">
+            </div>
+            <div class="col-12">
+              <label class="sd-label">Phone</label>
+              <input type="text" name="phone" class="sd-input"
+                     value="{{ customer['phone'] if customer else '' }}"
+                     placeholder="e.g. 0412 345 678">
+            </div>
+            <div class="col-12">
+              <label class="sd-label">Suburb</label>
+              <select name="suburb" class="sd-input">
+                <option value="">— Select suburb —</option>
+                {% for s in suburbs %}
+                <option value="{{ s['name'] }}"
+                  {% if customer and customer['suburb'] == s['name'] %}selected{% endif %}>
+                  {{ s['name'] }} ({{ s['region_name'] }})
+                </option>
+                {% endfor %}
+                {% if customer and customer['suburb'] and
+                      customer['suburb'] not in suburbs|map(attribute='name')|list %}
+                <option value="{{ customer['suburb'] }}" selected>
+                  {{ customer['suburb'] }} (unmapped)
+                </option>
+                {% endif %}
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="sd-label">Default Service Address</label>
+              <input type="text" name="address" id="address-input" class="sd-input"
+                     data-address-autocomplete autocomplete="off"
+                     value="{{ customer['address'] if customer else '' }}"
+                     placeholder="Start typing an address…">
+              <div style="font-size:0.72rem; color:var(--sd-muted); margin-top:0.3rem;">
+                Pre-fills the job address when this customer is selected on a new job
+              </div>
+            </div>
+          </div>
+          <hr class="divider">
+          <div style="display:flex; justify-content:flex-end; gap:0.75rem;">
+            <a href="{{ url_for('customers.index') }}" class="btn-ghost">Cancel</a>
+            <button type="submit" class="btn-accent">
+              <i class="bi bi-check-lg"></i>
+              {{ 'Save Changes' if is_edit else 'Create Customer' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Job history column (edit only) -->
+  {% if is_edit and jobs is defined %}
+  <div class="col-lg-8">
+    <div class="sd-card">
+      <div class="sd-card-header">
+        Job History
+        <a href="{{ url_for('jobs.new_job') }}?customer_id={{ customer['id'] }}"
+           class="btn-accent" style="padding:0.25rem 0.75rem; font-size:0.78rem;">
+          <i class="bi bi-plus-lg"></i> New Job
+        </a>
+      </div>
+      <div class="table-responsive-sd"><table class="sd-table">
+        <thead>
+          <tr>
+            <th>Reference</th>
+            <th>Description</th>
+            <th>Scheduled</th>
+            <th>Status</th>
+            <th style="text-align:right;">Total</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for job in jobs %}
+          <tr>
+            <td>
+              <a href="{{ url_for('jobs.job_detail', job_id=job['id']) }}"
+                 class="mono">{{ job['reference'] }}</a>
+            </td>
+            <td style="font-size:0.83rem; color:var(--sd-muted); max-width:220px;
+                        overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+              {{ job['description'] or '—' }}
+            </td>
+            <td class="mono" style="font-size:0.8rem;">
+              {{ job['scheduled_date']|fmt_date if job['scheduled_date'] else '—' }}
+            </td>
+            <td>
+              <span class="badge-status status-{{ job['status'] }}">
+                {{ job['status']|replace('_',' ') }}
+              </span>
+            </td>
+            <td class="mono" style="text-align:right;">
+              {% if job['total'] %}${{ '%.2f'|format(job['total']) }}
+              {% else %}<span style="color:var(--sd-muted);">—</span>{% endif %}
+            </td>
+            <td>
+              <a href="{{ url_for('jobs.job_detail', job_id=job['id']) }}"
+                 class="btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.8rem;">
+                View
+              </a>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="6" style="text-align:center; color:var(--sd-muted); padding:1.5rem;">
+              No jobs for this customer yet.
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

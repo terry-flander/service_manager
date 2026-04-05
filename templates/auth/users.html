@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Users{% endblock %}
+{% block topbar_title %}Users{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('auth.new_user') }}" class="btn-accent">
+    <i class="bi bi-person-plus"></i> New User
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="sd-card">
+  <div class="table-responsive-sd"><table class="sd-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Email</th>
+        <th>Phone</th>
+        <th>Role</th>
+        <th>2FA</th>
+        <th>Status</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td style="font-weight:500;">{{ u['name'] }}</td>
+        <td style="font-size:.83rem; color:var(--sd-muted);">{{ u['email'] }}</td>
+        <td style="font-size:.83rem;">{{ u['phone'] or '—' }}</td>
+        <td>
+          <span class="badge-status {{ 'status-scheduled' if u['role']=='admin' else 'status-invoiced' }}">
+            {{ u['role']|title }}
+          </span>
+        </td>
+        <td>
+          {% if u['totp_enabled'] %}
+          <span class="badge-status status-complete"><i class="bi bi-shield-check"></i> On</span>
+          {% else %}
+          <span class="badge-status status-pending">Off</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if u['active'] %}
+          <span class="badge-status status-complete">Active</span>
+          {% else %}
+          <span class="badge-status status-invoiced">Inactive</span>
+          {% endif %}
+        </td>
+        <td>
+          <a href="{{ url_for('auth.edit_user', user_id=u['id']) }}"
+             class="btn-ghost" style="padding:.25rem .6rem; font-size:.8rem;">
+            <i class="bi bi-pencil"></i>
+          </a>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="7" style="text-align:center; color:var(--sd-muted); padding:2rem;">
+          No users found.
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endblock %}

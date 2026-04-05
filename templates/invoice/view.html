@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Invoice — {{ job['reference'] }}{% endblock %}
+{% block topbar_title %}Invoice — {{ job['reference'] }}{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('jobs.job_detail', job_id=job['id']) }}" class="btn-ghost"><i class="bi bi-arrow-left"></i> Back to Job</a>
+  <a href="{{ url_for('invoice.pdf_invoice', job_id=job['id']) }}" class="btn-accent" target="_blank"><i class="bi bi-file-pdf"></i> PDF Invoice</a>
+  <a href="{{ url_for('invoice.xero_csv', job_id=job['id']) }}" class="btn-ghost"><i class="bi bi-download"></i> Xero CSV</a>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+    <div class="sd-card">
+      <div style="padding: 2.5rem;">
+
+        <!-- Header -->
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:2rem;">
+          <div>
+            <div style="font-family:'IBM Plex Mono',monospace; font-size:1.5rem; font-weight:600; color:var(--sd-accent); margin-bottom:0.25rem;">INVOICE</div>
+            <div style="font-size:0.85rem; color:var(--sd-muted);">ServiceDesk Field Services</div>
+          </div>
+          <div style="text-align:right;">
+            <div class="mono" style="font-size:1.1rem; font-weight:600;">INV-{{ job['reference'] }}</div>
+            <div style="font-size:0.8rem; color:var(--sd-muted); margin-top:0.25rem;">Date: {{ today.strftime('%d %b %Y') }}</div>
+            <div style="font-size:0.8rem; color:var(--sd-muted);">Due: {{ due_date.strftime('%d %b %Y') }}</div>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <!-- Bill to / Job info -->
+        <div class="row mb-4">
+          <div class="col-md-6">
+            <div style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--sd-muted); margin-bottom:0.5rem;">Bill To</div>
+            <div style="font-weight:600; margin-bottom:0.2rem;">{{ job['customer_name'] }}</div>
+            {% if job['customer_email'] %}<div style="font-size:0.85rem; color:var(--sd-muted);">{{ job['customer_email'] }}</div>{% endif %}
+            {% if job['customer_phone'] %}<div style="font-size:0.85rem; color:var(--sd-muted);">{{ job['customer_phone'] }}</div>{% endif %}
+            {% if job['suburb'] %}<div style="font-size:0.85rem; color:var(--sd-muted);">{{ job['suburb'] }}, VIC</div>{% endif %}
+            <div style="font-size:0.85rem; color:var(--sd-muted); margin-top:0.25rem;">{{ job['address'] }}</div>
+          </div>
+          <div class="col-md-6">
+            <div style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--sd-muted); margin-bottom:0.5rem;">Job Details</div>
+            <div style="font-size:0.85rem;">
+              <div><span style="color:var(--sd-muted);">Ref:</span> <span class="mono">{{ job['reference'] }}</span></div>
+              <div><span style="color:var(--sd-muted);">Region:</span> {{ job['region_name'] }}</div>
+              {% if job['scheduled_date'] %}<div><span style="color:var(--sd-muted);">Date of Service:</span> {{ job['scheduled_date']|fmt_date }}</div>{% endif %}
+              {% if job['description'] %}<div style="margin-top:0.5rem; color:var(--sd-muted); font-size:0.8rem;">{{ job['description'] }}</div>{% endif %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Line items -->
+        <table style="width:100%; border-collapse:collapse; margin-bottom:1.5rem;">
+          <thead>
+            <tr style="border-bottom: 2px solid var(--sd-border);">
+              <th style="text-align:left; padding:0.5rem 0; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--sd-muted);">Description</th>
+              <th style="text-align:left; padding:0.5rem; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--sd-muted);">Part #</th>
+              <th style="text-align:right; padding:0.5rem; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--sd-muted);">Qty</th>
+              <th style="text-align:right; padding:0.5rem; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--sd-muted);">Unit</th>
+              <th style="text-align:right; padding:0.5rem 0; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--sd-muted);">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for jp in job_parts %}
+            <tr style="border-bottom: 1px solid rgba(51,65,85,0.4);">
+              <td style="padding:0.75rem 0; font-size:0.875rem;">{{ jp['description'] }}</td>
+              <td style="padding:0.75rem 0.5rem; font-size:0.78rem; font-family:'IBM Plex Mono',monospace; color:var(--sd-muted);">{{ jp['part_number'] or '—' }}</td>
+              <td style="text-align:right; padding:0.75rem 0.5rem; font-family:'IBM Plex Mono',monospace; font-size:0.85rem;">{{ jp['quantity'] }}</td>
+              <td style="text-align:right; padding:0.75rem 0.5rem; font-family:'IBM Plex Mono',monospace; font-size:0.85rem;">${{ '%.2f'|format(jp['unit_cost']) }}</td>
+              <td style="text-align:right; padding:0.75rem 0; font-family:'IBM Plex Mono',monospace; font-size:0.875rem; font-weight:600;">${{ '%.2f'|format(jp['quantity'] * jp['unit_cost']) }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" style="text-align:center; padding:1.5rem; color:var(--sd-muted); font-size:0.85rem;">No parts logged on this job.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        <!-- Totals -->
+        <div style="display:flex; justify-content:flex-end;">
+          <div style="width:300px;">
+            {% if tax_inclusive %}
+            {# Prices include GST — show total first, then back-calculated components #}
+            <div style="display:flex; justify-content:space-between; padding:0.4rem 0; font-size:0.875rem; border-bottom:1px solid var(--sd-border);">
+              <span style="color:var(--sd-muted);">Total (inc GST)</span>
+              <span class="mono">${{ '%.2f'|format(total) }}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; padding:0.4rem 0; font-size:0.875rem; border-bottom:1px solid var(--sd-border);">
+              <span style="color:var(--sd-muted);">GST included (1/11)</span>
+              <span class="mono">${{ '%.2f'|format(gst) }}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; padding:0.6rem 0; font-size:1rem; font-weight:700;">
+              <span>Total</span>
+              <span class="mono" style="color:var(--sd-accent);">${{ '%.2f'|format(total) }}</span>
+            </div>
+            {% else %}
+            {# Prices exclude GST — add GST on top #}
+            <div style="display:flex; justify-content:space-between; padding:0.4rem 0; font-size:0.875rem; border-bottom:1px solid var(--sd-border);">
+              <span style="color:var(--sd-muted);">Subtotal (ex GST)</span>
+              <span class="mono">${{ '%.2f'|format(subtotal) }}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; padding:0.4rem 0; font-size:0.875rem; border-bottom:1px solid var(--sd-border);">
+              <span style="color:var(--sd-muted);">GST (10%)</span>
+              <span class="mono">${{ '%.2f'|format(gst) }}</span>
+            </div>
+            <div style="display:flex; justify-content:space-between; padding:0.6rem 0; font-size:1rem; font-weight:700;">
+              <span>Total (inc GST)</span>
+              <span class="mono" style="color:var(--sd-accent);">${{ '%.2f'|format(total) }}</span>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
+
+        <hr class="divider">
+
+        <div style="background:rgba(249,115,22,0.08); border:1px solid rgba(249,115,22,0.2); border-radius:6px; padding:0.875rem 1rem; font-size:0.8rem; color:var(--sd-muted);">
+          <i class="bi bi-info-circle" style="color:var(--sd-accent);"></i>
+          Download the <strong style="color:var(--sd-text);">Xero CSV</strong> to import this invoice into Xero Accounts Receivable.
+          Ensure account code <strong style="color:var(--sd-text);">200</strong> matches your Xero chart of accounts before importing.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
