@@ -18,7 +18,8 @@ def create_app():
     from routes.invoice  import invoice_bp
     from routes.customers import customers_bp
     from routes.regions  import regions_bp
-    from routes.reports  import reports_bp
+    from routes.reports     import reports_bp
+    from routes.import_jobs import import_jobs_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(jobs_bp)
@@ -28,6 +29,7 @@ def create_app():
     app.register_blueprint(customers_bp)
     app.register_blueprint(regions_bp)
     app.register_blueprint(reports_bp)
+    app.register_blueprint(import_jobs_bp)
 
     # ── Global auth gate ──────────────────────────────────────────────────────
     PUBLIC_ENDPOINTS = {'auth.login', 'auth.totp_verify', 'static'}

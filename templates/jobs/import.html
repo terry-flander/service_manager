@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}Import Jobs{% endblock %}
+{% block topbar_title %}Import Jobs from CSV{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('jobs.index') }}" class="btn-ghost">
+    <i class="bi bi-arrow-left"></i> <span>Jobs</span>
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-10">
+
+  {% if not preview %}
+  {# ── Upload form ── #}
+  <div class="sd-card mb-3">
+    <div class="sd-card-header">Upload CSV File</div>
+    <div style="padding:1.5rem;">
+      <form method="post" enctype="multipart/form-data">
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="sd-label">CSV File</label>
+            <input type="file" name="csvfile" accept=".csv"
+                   class="sd-input" required style="padding:0.4rem 0.75rem;">
+          </div>
+        </div>
+        <hr class="divider">
+        <div style="display:flex; justify-content:flex-end;">
+          <button type="submit" class="btn-accent">
+            <i class="bi bi-eye"></i> Preview Import
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {# ── Format guide ── #}
+  <div style="padding:1rem 1.25rem; background:rgba(59,130,246,0.07);
+              border:1px solid rgba(59,130,246,0.2); border-radius:8px;
+              font-size:0.82rem; color:var(--sd-muted);">
+    <div style="font-weight:600; color:var(--sd-text); margin-bottom:0.5rem;">
+      <i class="bi bi-info-circle" style="color:#60a5fa;"></i> Expected CSV format
+    </div>
+    <code style="color:var(--sd-text); display:block; white-space:pre; line-height:1.8;">Name,Email,Phone,Suburb,Message,Date,Time,Address
+Josh Gladwin,josh@example.com,0412345678,Carnegie,eBike service,18/03/2026,09:00,34 Leila Rd Carnegie VIC 3163
+Jane Smith,,0498111222,Northcote,Flat tyre fix,19/03/2026,14:30,</code>
+    <div style="margin-top:0.75rem; color:var(--sd-muted); font-size:0.78rem;">
+      <strong style="color:var(--sd-text);">Email</strong> is used as the customer key (UPSERT).
+      If blank, a placeholder is generated from the phone number.<br>
+      <strong style="color:var(--sd-text);">Date</strong> accepts d/m/yyyy or yyyy-mm-dd.
+      <strong style="color:var(--sd-text);">Time</strong> accepts HH:MM (24h) or H:MM AM/PM —
+      snapped to 30-min slots. End time defaults to start + 1 hour.
+    </div>
+  </div>
+
+  {% else %}
+  {# ── Preview ── #}
+  {% set error_rows = preview | selectattr('error') | list %}
+  {% set valid_rows = preview | rejectattr('error') | list %}
+
+  <div class="sd-card mb-3">
+    <div class="sd-card-header">
+      Import Preview
+      <span style="font-size:0.78rem; font-weight:400; color:var(--sd-muted);">
+        {{ valid_rows|length }} valid &nbsp;·&nbsp;
+        {% if error_rows %}
+        <span style="color:#f87171;">{{ error_rows|length }} with errors</span>
+        {% else %}
+        0 errors
+        {% endif %}
+      </span>
+    </div>
+
+    <div class="table-responsive-sd">
+    <table class="sd-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Name</th>
+          <th>Email / Phone</th>
+          <th>Suburb</th>
+          <th>Date</th>
+          <th>Time</th>
+          <th>End</th>
+          <th>Address</th>
+          <th>Customer</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in preview %}
+        <tr style="{% if row.error %}opacity:0.55;{% endif %}">
+          <td class="mono" style="font-size:0.75rem; color:var(--sd-muted);">{{ row.row }}</td>
+          <td style="font-weight:500;">{{ row.name }}</td>
+          <td style="font-size:0.8rem; color:var(--sd-muted);">
+            {% if row.email and 'import.local' not in row.email %}
+              {{ row.email }}<br>
+            {% endif %}
+            {% if row.phone %}{{ row.phone }}{% endif %}
+          </td>
+          <td style="font-size:0.82rem;">{{ row.suburb or '—' }}</td>
+          <td class="mono" style="font-size:0.8rem; white-space:nowrap;">
+            {{ row.date or row.raw_date }}
+          </td>
+          <td class="mono" style="font-size:0.8rem;">{{ row.time or row.raw_time }}</td>
+          <td class="mono" style="font-size:0.8rem; color:var(--sd-muted);">{{ row.end_time or '—' }}</td>
+          <td style="font-size:0.78rem; color:var(--sd-muted);">{{ row.address or '—' }}</td>
+          <td style="font-size:0.8rem;">
+            {% if row.customer_exists %}
+            <span class="badge-status status-invoiced">
+              <i class="bi bi-arrow-repeat"></i> Update
+            </span>
+            {% else %}
+            <span class="badge-status status-pending">
+              <i class="bi bi-plus"></i> New
+            </span>
+            {% endif %}
+          </td>
+          <td>
+            {% if row.error %}
+            <span style="font-size:0.75rem; color:#f87171;">
+              <i class="bi bi-exclamation-circle"></i> {{ row.error }}
+            </span>
+            {% else %}
+            <span class="badge-status status-complete">
+              <i class="bi bi-check"></i> OK
+            </span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+
+  {# Confirm form — rows passed as JSON hidden field #}
+  <form method="post">
+    <input type="hidden" name="confirm" value="1">
+    <input type="hidden" name="rows_json" value="{{ rows_json | e }}">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem;">
+      <a href="{{ url_for('import_jobs.import_jobs') }}" class="btn-ghost">
+        <i class="bi bi-arrow-left"></i> Upload Different File
+      </a>
+      {% if valid_rows %}
+      <button type="submit" class="btn-accent">
+        <i class="bi bi-check-lg"></i>
+        Confirm — Import {{ valid_rows|length }} Job{{ 's' if valid_rows|length != 1 }}
+      </button>
+      {% else %}
+      <span style="font-size:0.85rem; color:#f87171;">
+        No valid rows to import.
+      </span>
+      {% endif %}
+    </div>
+  </form>
+
+  {% endif %}
+
+  </div>
+</div>
+{% endblock %}
