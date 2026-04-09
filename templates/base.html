@@ -385,6 +385,9 @@
     <a href="{{ url_for('regions.new_region') }}" class="sidebar-link" onclick="closeSidebar()">
       <i class="bi bi-plus-circle"></i> New Region
     </a>
+    <a href="{{ url_for('regions.suburbs_index') }}" class="sidebar-link {% if request.endpoint and 'suburb' in request.endpoint %}active{% endif %}" onclick="closeSidebar()">
+      <i class="bi bi-pin-map"></i> Suburbs
+    </a>
     <a href="{{ url_for('regions.import_csv') }}" class="sidebar-link {% if request.endpoint == 'regions.import_csv' %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-upload"></i> Import CSV
     </a>

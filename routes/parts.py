@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from models import get_db
 
 parts_bp = Blueprint('parts', __name__)
@@ -54,3 +54,33 @@ def delete_part(part_id):
     flash(f'Part "{name}" deactivated.', 'success')
     return redirect(url_for('parts.index'))
 
+
+@parts_bp.route('/parts/search')
+def search():
+    """
+    Live search endpoint for the Add Part selector on job detail.
+    ?q=<term>  — matches name or part_number (case-insensitive, partial).
+    Returns JSON list of matching active parts.
+    """
+    q = request.args.get('q', '').strip()
+    if len(q) < 1:
+        return jsonify([])
+    like = f'%{q}%'
+    with get_db() as conn:
+        parts = conn.execute("""
+            SELECT id, name, part_number, unit_cost
+            FROM parts
+            WHERE active = 1
+              AND (name LIKE ? OR part_number LIKE ?)
+            ORDER BY
+              CASE WHEN LOWER(name) LIKE LOWER(?) THEN 0 ELSE 1 END,
+              name
+            LIMIT 20
+        """, (like, like, f'{q}%')).fetchall()
+    return jsonify([{
+        'id':          p['id'],
+        'name':        p['name'],
+        'part_number': p['part_number'] or '',
+        'unit_cost':   p['unit_cost'],
+        'label':       f"{p['name']}{' (' + p['part_number'] + ')' if p['part_number'] else ''} — ${p['unit_cost']:.2f}",
+    } for p in parts])

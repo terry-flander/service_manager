@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Suburbs{% endblock %}
+{% block topbar_title %}Suburbs{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('regions.index') }}" class="btn-ghost">
+    <i class="bi bi-arrow-left"></i> <span>Regions</span>
+  </a>
+{% endblock %}
+
+{% block content %}
+
+<!-- Search -->
+<div class="sd-card mb-3">
+  <div style="padding:0.75rem 1.25rem; display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap;">
+    <i class="bi bi-search" style="color:var(--sd-muted);"></i>
+    <input type="text" id="suburb-search" class="sd-input" style="max-width:280px;"
+           placeholder="Filter suburbs…" oninput="filterSuburbs(this.value)" autofocus>
+    <select id="region-filter" class="sd-input" style="max-width:200px;"
+            onchange="filterSuburbs(document.getElementById('suburb-search').value)">
+      <option value="">All regions</option>
+      {% for r in regions %}
+      <option value="{{ r['name']|lower }}">{{ r['name'] }}</option>
+      {% endfor %}
+    </select>
+    <span id="suburb-count" style="margin-left:auto; font-size:0.8rem; color:var(--sd-muted);">
+      {{ suburbs|length }} suburb{{ 's' if suburbs|length != 1 }}
+    </span>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="sd-card">
+  <div class="table-responsive-sd">
+    <table class="sd-table" id="suburbs-table">
+      <thead>
+        <tr>
+          <th>Suburb</th>
+          <th>Region</th>
+          <th style="text-align:center;">Jobs</th>
+          <th>Region Dates</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in suburbs %}
+        <tr data-suburb="{{ s['name']|lower }}"
+            data-region="{{ s['region_name']|lower }}">
+          <td style="font-weight:500;">{{ s['name'] }}</td>
+          <td>
+            <span class="badge-status status-scheduled"
+                  style="font-size:0.72rem;">{{ s['region_name'] }}</span>
+          </td>
+          <td style="text-align:center; font-size:0.82rem; color:var(--sd-muted);">
+            {{ s['job_count'] or '—' }}
+          </td>
+          <td>
+            <a href="{{ url_for('regions.detail', region_id=s['region_id']) }}"
+               class="btn-ghost"
+               style="padding:0.2rem 0.6rem; font-size:0.78rem;">
+              <i class="bi bi-calendar3"></i> Dates
+            </a>
+          </td>
+          <td>
+            <a href="{{ url_for('regions.edit_suburb', suburb_id=s['id']) }}"
+               class="btn-ghost"
+               style="padding:0.2rem 0.6rem; font-size:0.78rem;">
+              <i class="bi bi-pencil"></i> Edit
+            </a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" style="text-align:center; color:var(--sd-muted); padding:2rem;">
+            No suburbs found.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterSuburbs(q) {
+  q = (q || '').toLowerCase();
+  const regionFilter = document.getElementById('region-filter').value;
+  const rows  = document.querySelectorAll('#suburbs-table tbody tr[data-suburb]');
+  let visible = 0;
+  rows.forEach(function(row) {
+    const matchName   = !q           || row.dataset.suburb.includes(q);
+    const matchRegion = !regionFilter || row.dataset.region === regionFilter;
+    const show = matchName && matchRegion;
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  document.getElementById('suburb-count').textContent =
+    visible + ' suburb' + (visible !== 1 ? 's' : '');
+}
+</script>
+{% endblock %}

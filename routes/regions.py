@@ -142,8 +142,7 @@ def delete_suburb(suburb_id):
             conn.execute("DELETE FROM suburbs WHERE id=?", (suburb_id,))
             conn.commit()
             flash(f'Suburb "{s["name"]}" removed.', 'success')
-            return redirect(url_for('regions.detail', region_id=s['region_id']))
-    return redirect(url_for('regions.index'))
+    return redirect(url_for('regions.suburbs_index'))
 
 
 # ── Region date CRUD ──────────────────────────────────────────────────────────
@@ -195,6 +194,105 @@ def delete_date(date_id):
             return redirect(url_for('regions.detail', region_id=row['region_id']))
     return redirect(url_for('regions.index'))
 
+
+
+# ── Suburbs management ────────────────────────────────────────────────────────
+
+@regions_bp.route('/suburbs')
+def suburbs_index():
+    with get_db() as conn:
+        suburbs = conn.execute("""
+            SELECT s.id, s.name, s.region_id,
+                   r.name as region_name,
+                   COUNT(j.id) as job_count
+            FROM suburbs s
+            JOIN regions r ON r.id = s.region_id
+            LEFT JOIN jobs j ON LOWER(j.suburb) = LOWER(s.name)
+            GROUP BY s.id
+            ORDER BY s.name
+        """).fetchall()
+        regions = conn.execute(
+            "SELECT id, name FROM regions ORDER BY name").fetchall()
+    return render_template('regions/suburbs.html',
+                           suburbs=suburbs, regions=regions)
+
+
+@regions_bp.route('/suburbs/<int:suburb_id>/edit', methods=['GET', 'POST'])
+def edit_suburb(suburb_id):
+    with get_db() as conn:
+        suburb  = conn.execute("""
+            SELECT s.*, r.name as region_name,
+                   COUNT(j.id) as job_count
+            FROM suburbs s
+            JOIN regions r ON r.id = s.region_id
+            LEFT JOIN jobs j ON LOWER(j.suburb) = LOWER(s.name)
+            WHERE s.id=?
+            GROUP BY s.id
+        """, (suburb_id,)).fetchone()
+        regions = conn.execute(
+            "SELECT id, name FROM regions ORDER BY name").fetchall()
+
+    if not suburb:
+        return "Suburb not found", 404
+
+    if request.method == 'POST':
+        new_name      = request.form.get('name', '').strip().title()
+        new_region_id = int(request.form.get('region_id', suburb['region_id']))
+
+        if not new_name:
+            flash('Suburb name is required.', 'danger')
+            return render_template('regions/suburb_edit.html',
+                                   suburb=suburb, regions=regions)
+
+        with get_db() as conn:
+            # Check name clash (another suburb with same name)
+            clash = conn.execute(
+                "SELECT id FROM suburbs WHERE LOWER(name)=LOWER(?) AND id!=?",
+                (new_name, suburb_id)).fetchone()
+            if clash:
+                flash(f'Suburb "{new_name}" already exists.', 'danger')
+                return render_template('regions/suburb_edit.html',
+                                       suburb=suburb, regions=regions)
+
+            old_name       = suburb['name']
+            old_region_id  = suburb['region_id']
+            region_changed = new_region_id != old_region_id
+            name_changed   = new_name.lower() != old_name.lower()
+
+            conn.execute(
+                "UPDATE suburbs SET name=?, region_id=? WHERE id=?",
+                (new_name, new_region_id, suburb_id))
+
+            # If region changed, update all jobs that reference this suburb
+            if region_changed:
+                conn.execute("""
+                    UPDATE jobs SET region_id=?
+                    WHERE LOWER(suburb) = LOWER(?)
+                """, (new_region_id, old_name))
+                updated_jobs = conn.execute(
+                    "SELECT changes()").fetchone()[0]
+            else:
+                updated_jobs = 0
+
+            # If name changed, update suburb column on jobs too
+            if name_changed:
+                conn.execute("""
+                    UPDATE jobs SET suburb=?
+                    WHERE LOWER(suburb) = LOWER(?)
+                """, (new_name, old_name))
+
+            conn.commit()
+
+        msg = f'Suburb "{new_name}" updated.'
+        if region_changed and updated_jobs:
+            new_region_name = next(
+                (r['name'] for r in regions if r['id'] == new_region_id), '')
+            msg += f' {updated_jobs} job(s) moved to {new_region_name}.'
+        flash(msg, 'success')
+        return redirect(url_for('regions.suburbs_index'))
+
+    return render_template('regions/suburb_edit.html',
+                           suburb=suburb, regions=regions)
 
 # ── CSV Import ───────────────────────────────────────────────────────────────
 

@@ -13,65 +13,9 @@
 {% block content %}
 <div class="row g-3">
 
-  <!-- Suburbs column -->
-  <div class="col-lg-4">
-    <div class="sd-card">
-      <div class="sd-card-header">
-        Suburbs
-        <span style="font-size:0.78rem; color:var(--sd-muted); font-weight:400;">
-          {{ suburbs|length }} assigned
-        </span>
-      </div>
-      <div style="padding:1.25rem;">
-
-        <!-- Suburb chips -->
-        <div style="display:flex; flex-wrap:wrap; gap:0.4rem; margin-bottom:1.25rem;
-                    min-height:2rem;">
-          {% for s in suburbs %}
-          <div style="display:inline-flex; align-items:center; gap:0.25rem;
-                      background:rgba(59,130,246,0.12);
-                      border:1px solid rgba(59,130,246,0.25);
-                      border-radius:20px; padding:0.2rem 0.4rem 0.2rem 0.75rem;
-                      font-size:0.82rem; color:#93c5fd;">
-            {{ s['name'] }}
-            <form method="post"
-                  action="{{ url_for('regions.delete_suburb', suburb_id=s['id']) }}"
-                  style="display:inline; margin:0;"
-                  onsubmit="return confirm('Remove {{ s['name'] }} from this region?')">
-              <button type="submit"
-                      style="background:none; border:none; color:#93c5fd;
-                             cursor:pointer; padding:0 2px; line-height:1;
-                             font-size:0.9rem; opacity:0.7;">
-                <i class="bi bi-x"></i>
-              </button>
-            </form>
-          </div>
-          {% else %}
-          <span style="font-size:0.85rem; color:var(--sd-muted);">
-            No suburbs assigned yet.
-          </span>
-          {% endfor %}
-        </div>
-
-        <!-- Add suburb -->
-        <form method="post"
-              action="{{ url_for('regions.add_suburb', region_id=region['id']) }}">
-          <label class="sd-label">Add Suburb</label>
-          <div style="display:flex; gap:0.5rem; margin-top:0.25rem;">
-            <input type="text" name="suburb_name" class="sd-input"
-                   placeholder="Suburb name…" autocomplete="off" required>
-            <button type="submit" class="btn-accent"
-                    style="white-space:nowrap; padding:0.45rem 0.875rem;">
-              <i class="bi bi-plus-lg"></i>
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
 
   <!-- Dates column -->
-  <div class="col-lg-8">
+  <div class="col-12">
     <div class="sd-card">
       <div class="sd-card-header">
         Scheduled Dates

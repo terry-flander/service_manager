@@ -196,34 +196,31 @@
       </table></div>
     </div>
 
-    <!-- Add part — combined pane -->
+    <!-- Add part — live search + manual entry -->
     <div class="sd-card">
       <div class="sd-card-header">Add Part</div>
       <div style="padding:1rem 1.25rem;">
         <form method="post" action="{{ url_for('jobs.add_part', job_id=job['id']) }}"
               id="add-part-form">
 
-          <!-- Master list selector -->
-          <div class="row g-2 align-items-end" style="margin-bottom:0.75rem;">
-            <div class="col">
-              <label class="sd-label">Select from master list</label>
-              <select id="part-select" class="sd-input">
-                <option value="">— choose to pre-fill fields below —</option>
-                {% for p in parts %}
-                <option value="{{ p['id'] }}"
-                        data-name="{{ p['name'] }}"
-                        data-pnum="{{ p['part_number'] }}"
-                        data-cost="{{ '%.2f'|format(p['unit_cost']) }}">
-                  {{ p['name'] }}{% if p['part_number'] %} ({{ p['part_number'] }}){% endif %} — ${{ '%.2f'|format(p['unit_cost']) }}
-                </option>
-                {% endfor %}
-              </select>
+          <!-- Live search -->
+          <div style="margin-bottom:0.75rem; position:relative;">
+            <label class="sd-label">Search parts list</label>
+            <input type="text" id="part-search" class="sd-input"
+                   placeholder="Type name or part number…"
+                   autocomplete="off" spellcheck="false">
+            <div id="part-dropdown"
+                 style="display:none; position:absolute; top:100%; left:0; right:0;
+                        background:var(--sd-slate); border:1px solid var(--sd-border);
+                        border-radius:6px; box-shadow:0 6px 20px rgba(0,0,0,0.35);
+                        z-index:200; max-height:240px; overflow-y:auto;
+                        margin-top:2px;">
             </div>
           </div>
 
           <hr class="divider" style="margin:0.5rem 0 0.75rem;">
 
-          <!-- Editable fields (pre-filled from selection or typed manually) -->
+          <!-- Editable fields — pre-filled from search or typed manually -->
           <div class="row g-2 align-items-end">
             <input type="hidden" name="part_id" id="part-id-hidden" value="">
             <div class="col-md-4">
@@ -263,31 +260,148 @@
 {% block scripts %}
 <script>
 (function () {
-  const sel  = document.getElementById('part-select');
-  const idH  = document.getElementById('part-id-hidden');
-  const desc = document.getElementById('part-description');
-  const pnum = document.getElementById('part-number');
-  const cost = document.getElementById('part-cost');
-  const qty  = document.getElementById('part-qty');
-  if (!sel) return;
+  const searchInput = document.getElementById('part-search');
+  const dropdown    = document.getElementById('part-dropdown');
+  const idH         = document.getElementById('part-id-hidden');
+  const desc        = document.getElementById('part-description');
+  const pnum        = document.getElementById('part-number');
+  const cost        = document.getElementById('part-cost');
+  const qty         = document.getElementById('part-qty');
+  if (!searchInput) return;
 
-  sel.addEventListener('change', function () {
-    const opt = sel.options[sel.selectedIndex];
-    if (opt.value) {
-      idH.value  = opt.value;
-      desc.value = opt.dataset.name || '';
-      pnum.value = opt.dataset.pnum || '';
-      cost.value = opt.dataset.cost || '0.00';
-      qty.value  = '1';
-    } else {
-      idH.value = '';
+  let debounceTimer;
+
+  // ── Fetch and render results ───────────────────────────────────────────────
+  function fetchResults(q) {
+    if (!q || q.length < 1) { closeDropdown(); return; }
+    fetch('/parts/search?q=' + encodeURIComponent(q))
+      .then(r => r.json())
+      .then(results => {
+        dropdown.innerHTML = '';
+        if (!results.length) {
+          dropdown.innerHTML =
+            '<div style="padding:0.6rem 1rem; font-size:0.82rem; color:var(--sd-muted);">No parts found</div>';
+          dropdown.style.display = 'block';
+          return;
+        }
+        results.forEach(function (p) {
+          const item = document.createElement('div');
+          item.className = 'dd-item';
+          item.style.cssText =
+            'padding:0.55rem 1rem; cursor:pointer; font-size:0.875rem;' +
+            'border-bottom:1px solid var(--sd-border); display:flex;' +
+            'justify-content:space-between; align-items:center; gap:0.5rem;';
+          item.innerHTML =
+            '<span>' +
+              '<span style="font-weight:500;">' + escHtml(p.name) + '</span>' +
+              (p.part_number
+                ? ' <span style="font-size:0.75rem; color:var(--sd-muted);">(' + escHtml(p.part_number) + ')</span>'
+                : '') +
+            '</span>' +
+            "<span style=\"font-family:'IBM Plex Mono',monospace; font-size:0.82rem; color:var(--sd-accent); flex-shrink:0;\">" + '$' +
+              parseFloat(p.unit_cost).toFixed(2) +
+            '</span>';
+          item.addEventListener('mousedown', function (e) {
+            e.preventDefault(); // prevent input blur before click registers
+            selectPart(p);
+          });
+          item.addEventListener('mouseover', function () {
+            this.style.background = 'var(--sd-surface2)';
+          });
+          item.addEventListener('mouseout', function () {
+            this.style.background = '';
+          });
+          dropdown.appendChild(item);
+        });
+        dropdown.style.display = 'block';
+      })
+      .catch(() => closeDropdown());
+  }
+
+  // ── Fill form fields from selected part ───────────────────────────────────
+  function selectPart(p) {
+    idH.value       = p.id;
+    desc.value      = p.name;
+    pnum.value      = p.part_number || '';
+    cost.value      = parseFloat(p.unit_cost).toFixed(2);
+    qty.value       = '1';
+    searchInput.value = p.label || p.name;
+    closeDropdown();
+    qty.focus();
+  }
+
+  function closeDropdown() {
+    dropdown.style.display = 'none';
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ── Event listeners ───────────────────────────────────────────────────────
+  searchInput.addEventListener('input', function () {
+    idH.value = '';
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => fetchResults(searchInput.value.trim()), 180);
+  });
+
+  searchInput.addEventListener('keydown', function (e) {
+    // If dropdown is closed and ArrowDown is pressed, open it first
+    if (e.key === 'ArrowDown' && dropdown.style.display === 'none') {
+      e.preventDefault();
+      const q = searchInput.value.trim();
+      if (q) fetchResults(q);
+      return;
+    }
+
+    // Use a class-based selector so items are reliably found
+    const items = Array.from(dropdown.querySelectorAll('.dd-item'));
+    const activeIdx = items.findIndex(function(el) { return el.classList.contains('dd-active'); });
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextIdx = activeIdx < 0 ? 0 : Math.min(activeIdx + 1, items.length - 1);
+      items.forEach(function(el) { el.classList.remove('dd-active'); el.style.background = ''; });
+      if (items[nextIdx]) {
+        items[nextIdx].classList.add('dd-active');
+        items[nextIdx].style.background = 'var(--sd-surface2)';
+        items[nextIdx].scrollIntoView({ block: 'nearest' });
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prevIdx = activeIdx <= 0 ? 0 : activeIdx - 1;
+      items.forEach(function(el) { el.classList.remove('dd-active'); el.style.background = ''; });
+      if (items[prevIdx]) {
+        items[prevIdx].classList.add('dd-active');
+        items[prevIdx].style.background = 'var(--sd-surface2)';
+        items[prevIdx].scrollIntoView({ block: 'nearest' });
+      }
+    } else if (e.key === 'Enter') {
+      const active = dropdown.querySelector('.dd-active');
+      if (active) {
+        e.preventDefault();
+        active.dispatchEvent(new MouseEvent('mousedown'));
+      }
+    } else if (e.key === 'Escape') {
+      closeDropdown();
     }
   });
 
+  searchInput.addEventListener('focus', function () {
+    if (searchInput.value.trim()) fetchResults(searchInput.value.trim());
+  });
+
+  document.addEventListener('click', function (e) {
+    if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+      closeDropdown();
+    }
+  });
+
+  // Clear search + part_id if description is manually edited
   [desc, cost].forEach(function (el) {
     el.addEventListener('input', function () {
       idH.value = '';
-      sel.selectedIndex = 0;
+      searchInput.value = '';
     });
   });
 })();
