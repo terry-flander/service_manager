@@ -5,6 +5,11 @@ from models import init_db
 
 
 def create_app():
+    import logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s %(name)s %(levelname)s %(message)s'
+    )
     app = Flask(__name__)
     app.config['SECRET_KEY']          = os.environ.get('SECRET_KEY', 'dev-secret-CHANGE-in-production')
     app.config['GOOGLE_MAPS_API_KEY'] = os.environ.get('GOOGLE_MAPS_API_KEY', '')
@@ -80,6 +85,15 @@ def create_app():
         _seed_admin()
         from seed import seed_data
         seed_data()
+
+    # ── Start email poller (only if GMAIL credentials are configured) ──────────
+    if os.environ.get('GMAIL_USER') and os.environ.get('GMAIL_REFRESH_TOKEN'):
+        from email_poller import start_poller
+        start_poller(app)
+    else:
+        import logging
+        logging.getLogger('email_poller').warning(
+            'GMAIL_USER/GMAIL_APP_PASSWORD not set — email polling disabled')
 
     return app
 

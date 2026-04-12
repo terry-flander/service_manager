@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Email Imports{% endblock %}
+{% block topbar_title %}Email Import Log{% endblock %}
+{% block topbar_actions %}
+  <form method="post" action="{{ url_for('jobs.toggle_polling') }}" style="display:inline;">
+    <button type="submit"
+            class="{{ 'btn-accent' if polling_on else 'btn-ghost' }}"
+            title="{{ 'Disable automatic email polling' if polling_on else 'Enable automatic email polling' }}">
+      <i class="bi bi-{{ 'toggle-on' if polling_on else 'toggle-off' }}"></i>
+      Auto {{ 'On' if polling_on else 'Off' }}
+    </button>
+  </form>
+  <form method="post" action="{{ url_for('jobs.poll_now') }}" style="display:inline;">
+    <button type="submit" class="btn-ghost">
+      <i class="bi bi-arrow-repeat"></i> <span>Poll Now</span>
+    </button>
+  </form>
+{% endblock %}
+
+{% block content %}
+
+<!-- Status banner -->
+<div style="margin-bottom:1rem; padding:0.75rem 1.25rem;
+            background:{{ 'rgba(16,185,129,0.08)' if polling_on else 'rgba(248,113,113,0.08)' }};
+            border:1px solid {{ 'rgba(16,185,129,0.25)' if polling_on else 'rgba(248,113,113,0.25)' }};
+            border-radius:8px; display:flex; align-items:center; gap:0.75rem;
+            font-size:0.875rem;">
+  <i class="bi bi-{{ 'envelope-check' if polling_on else 'envelope-slash' }}"
+     style="font-size:1.1rem; color:{{ '#34d399' if polling_on else '#f87171' }};"></i>
+  <span>
+    Automatic email polling is
+    <strong style="color:{{ '#34d399' if polling_on else '#f87171' }};">
+      {{ 'enabled' if polling_on else 'disabled' }}
+    </strong>
+    {% if polling_on %}
+    — new booking emails are imported every {{ poll_minutes }} minute{{ 's' if poll_minutes != 1 }}.
+    {% else %}
+    — use <strong>Poll Now</strong> to import manually.
+    {% endif %}
+  </span>
+</div>
+
+<!-- Import log -->
+<div class="sd-card">
+  <div class="sd-card-header">
+    Import Log
+    <span style="font-size:0.78rem; color:var(--sd-muted); font-weight:400;">
+      {{ imports|length }} entries
+    </span>
+  </div>
+  <div class="table-responsive-sd">
+    <table class="sd-table">
+      <thead>
+        <tr>
+          <th>Received</th>
+          <th>From</th>
+          <th>Subject</th>
+          <th>Type</th>
+          <th>Job</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for imp in imports %}
+        <tr>
+          <td class="mono" style="font-size:0.78rem; white-space:nowrap;">
+            {{ imp['imported_at'][:16] }}
+          </td>
+          <td style="font-size:0.82rem;">{{ imp['sender'] or '—' }}</td>
+          <td style="font-size:0.82rem; color:var(--sd-muted); max-width:240px;
+                     overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+            {{ imp['subject'][:60] if imp['subject'] else '—' }}
+          </td>
+          <td>
+            {% if imp['status'] == 'ok' %}
+            <span class="badge-status status-complete">New Job</span>
+            {% elif imp['status'] == 'thread' %}
+            <span class="badge-status status-scheduled">Follow-up</span>
+            {% else %}
+            <span class="badge-status status-void">{{ imp['status'] }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if imp['job_id'] %}
+            <a href="{{ url_for('jobs.job_detail', job_id=imp['job_id']) }}"
+               class="mono" style="font-size:0.82rem; color:var(--sd-accent);">
+              {{ imp['reference'] or imp['job_id'] }}
+            </a>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if imp['body'] %}
+            <a href="{{ url_for('jobs.email_message', import_id=imp['id']) }}"
+               class="btn-ghost"
+               style="padding:0.2rem 0.6rem; font-size:0.75rem; white-space:nowrap;">
+              <i class="bi bi-envelope-open"></i> View
+            </a>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" style="text-align:center; color:var(--sd-muted); padding:2rem;">
+            No email imports yet.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

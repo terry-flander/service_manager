@@ -3,10 +3,10 @@ services:
   flask:
     build: .
     restart: unless-stopped
+    env_file:
+      - .env                         # loads ALL variables from .env into the container
     environment:
-      - SECRET_KEY=${SECRET_KEY}
-      - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
-      - DATA_DIR=/data
+      - DATA_DIR=/data               # override/add container-specific vars here
     volumes:
       - app_data:/data
     expose:

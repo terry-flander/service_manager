@@ -103,7 +103,24 @@ def init_db():
                 created_at     TEXT DEFAULT (datetime('now')),
                 notes          TEXT,
                 paid_date      TEXT,
-                amount_paid    REAL
+                amount_paid    REAL,
+                service_types  TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+            INSERT OR IGNORE INTO settings (key, value) VALUES ('email_polling', 'on');
+
+            CREATE TABLE IF NOT EXISTS email_imports (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                message_id  TEXT NOT NULL UNIQUE,
+                subject     TEXT,
+                sender      TEXT,
+                imported_at TEXT DEFAULT (datetime('now')),
+                job_id      INTEGER REFERENCES jobs(id),
+                status      TEXT DEFAULT 'ok'
             );
 
             CREATE TABLE IF NOT EXISTS job_parts (
