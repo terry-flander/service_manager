@@ -163,6 +163,20 @@
               </select>
             </div>
             <div class="col-12">
+              <label class="sd-label">Service Types</label>
+              <div style="display:flex; flex-wrap:wrap; gap:0.5rem 1.25rem; padding-top:0.25rem;">
+                {% for st in SERVICE_TYPES %}
+                <label style="display:flex; align-items:center; gap:0.4rem;
+                               font-size:0.875rem; color:var(--sd-text); cursor:pointer;">
+                  <input type="checkbox" name="service_types" value="{{ st }}"
+                         {% if st == 'General Service'  %}checked{% endif %}
+                         style="accent-color:var(--sd-accent); width:14px; height:14px;">
+                  {{ st }}
+                </label>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="col-12">
               <label class="sd-label">Internal Notes</label>
               <textarea name="notes" class="sd-input" rows="2"
                         placeholder="Notes for the mechanic (not shown to customer)…"></textarea>

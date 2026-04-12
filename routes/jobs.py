@@ -35,6 +35,14 @@ TIME_LABELS = {
     '19:30': '7:30 PM'
 }
 
+SERVICE_TYPES = [
+    'General Service',
+    'eBike Service',
+    'Tribe/Cargo Bike Service',
+    '3 or More Bikes',
+    'Other',
+]
+
 JOB_TYPES = {
     'booking':  {'label': 'Booking',  'prefix': 'FB'},
     'workshop': {'label': 'Workshop', 'prefix': 'PB'},
@@ -160,11 +168,12 @@ def new_job():
                     conn.execute("""
                         INSERT INTO jobs (reference, job_type, customer_id, customer_name,
                             customer_email, customer_phone, suburb, address, description,
-                            region_id, tax_inclusive, scheduled_date, scheduled_time,
+                            service_types, region_id, tax_inclusive, scheduled_date, scheduled_time,
                             end_time, status, notes)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
                     """, (ref, job_type, customer_id, cust_name, cust_email, cust_phone,
                           suburb, job_address, request.form.get('description', ''),
+                          ', '.join(request.form.getlist('service_types')),
                           region_id,
                           1 if request.form.get('tax_inclusive', '1') == '1' else 0,
                           sched_date, sched_time, end_time,
@@ -195,7 +204,8 @@ def new_job():
         """).fetchall()
     return render_template('jobs/new.html', regions=regions,
                            TIME_SLOTS=TIME_SLOTS, TIME_LABELS=TIME_LABELS,
-                           JOB_TYPES=JOB_TYPES, suburbs_list=suburbs_list,
+                           JOB_TYPES=JOB_TYPES, SERVICE_TYPES=SERVICE_TYPES,
+                           suburbs_list=suburbs_list,
                            today=date.today().isoformat())
 
 
@@ -249,12 +259,13 @@ def edit_job(job_id):
             conn.execute("""
                 UPDATE jobs SET job_type=?, customer_id=?, customer_name=?,
                     customer_email=?, customer_phone=?, suburb=?, address=?,
-                    description=?, region_id=?, tax_inclusive=?,
+                    description=?, service_types=?, region_id=?, tax_inclusive=?,
                     scheduled_date=?, scheduled_time=?, end_time=?, status=?,
                     notes=?, paid_date=?, amount_paid=?
                 WHERE id=?
             """, (job_type, customer_id, cust_name, cust_email, cust_phone,
                   suburb, address, request.form.get('description', ''),
+                  ', '.join(request.form.getlist('service_types')),
                   int(request.form['region_id']),
                   1 if request.form.get('tax_inclusive', '1') == '1' else 0,
                   request.form.get('scheduled_date') or None,
@@ -351,6 +362,8 @@ def delete_job(job_id):
             "SELECT reference FROM jobs WHERE id=?", (job_id,)).fetchone()
         if not job:
             return "Job not found", 404
+        conn.execute("DELETE FROM email_imports WHERE job_id=?", (job_id,))
+        conn.execute("DELETE FROM job_parts WHERE job_id=?", (job_id,))
         conn.execute("DELETE FROM jobs WHERE id=?", (job_id,))
         conn.commit()
     flash(f'Job {job["reference"]} deleted.', 'success')
@@ -370,3 +383,67 @@ def update_status(job_id):
         conn.commit()
     flash(f'Status updated to {new_status}.', 'success')
     return redirect(url_for('jobs.job_detail', job_id=job_id))
+
+
+@jobs_bp.route('/jobs/email-imports/message/<int:import_id>')
+def email_message(import_id):
+    with get_db() as conn:
+        imp = conn.execute("""
+            SELECT ei.*, j.reference
+            FROM email_imports ei
+            LEFT JOIN jobs j ON j.id = ei.job_id
+            WHERE ei.id = ?
+        """, (import_id,)).fetchone()
+    if not imp:
+        return "Message not found", 404
+    return render_template('jobs/email_message.html', imp=imp)
+
+
+@jobs_bp.route('/jobs/email-imports')
+def email_imports():
+    with get_db() as conn:
+        imports = conn.execute("""
+            SELECT ei.*, j.reference
+            FROM email_imports ei
+            LEFT JOIN jobs j ON j.id = ei.job_id
+            ORDER BY ei.imported_at DESC
+            LIMIT 200
+        """).fetchall()
+        row = conn.execute(
+            "SELECT value FROM settings WHERE key='email_polling'"
+        ).fetchone()
+        polling_on = (row['value'] == 'on') if row else True
+    import os
+    poll_minutes = int(os.environ.get('GMAIL_POLL_MINUTES', '5'))
+    return render_template('jobs/email_imports.html',
+                           imports=imports, polling_on=polling_on,
+                           poll_minutes=poll_minutes)
+
+
+@jobs_bp.route('/jobs/email-polling-toggle', methods=['POST'])
+def toggle_polling():
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT value FROM settings WHERE key='email_polling'"
+        ).fetchone()
+        new_val = 'off' if (row and row['value'] == 'on') else 'on'
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES ('email_polling', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (new_val,))
+        conn.commit()
+    flash(f"Email polling turned {'on' if new_val == 'on' else 'off'}.", 'success')
+    return redirect(url_for('jobs.email_imports'))
+
+
+@jobs_bp.route('/jobs/poll-email', methods=['POST'])
+def poll_now():
+    """Manually trigger an email poll (admin only)."""
+    from flask import current_app
+    try:
+        from email_poller import poll_once
+        n = poll_once(current_app._get_current_object(), force=True)
+        flash(f'Email poll complete: {n} new job(s) imported.', 'success')
+    except Exception as e:
+        flash(f'Poll error: {e}', 'danger')
+    return redirect(url_for('jobs.email_imports'))

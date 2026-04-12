@@ -77,10 +77,11 @@
             {% set sched_display = '—' %}
           {% endif %}
           {% set sched_rows = [
-            ('Reference', job['reference']),
-            ('Region',    job['region_name']),
-            ('Scheduled', sched_display),
-            ('Tax',       'Inclusive (GST back-calc)' if job['tax_inclusive'] else 'Exclusive (GST added on top)'),
+            ('Reference',     job['reference']),
+            ('Region',        job['region_name']),
+            ('Scheduled',     sched_display),
+            ('Service Types', job['service_types'] or '—'),
+            ('Tax',           'Inclusive (GST back-calc)' if job['tax_inclusive'] else 'Exclusive (GST added on top)'),
           ] %}
           {% for label, value in sched_rows %}
           <tr style="border-bottom:1px solid var(--sd-border);">

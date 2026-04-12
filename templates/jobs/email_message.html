@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Email Message{% endblock %}
+{% block topbar_title %}Email Message{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('jobs.email_imports') }}" class="btn-ghost">
+    <i class="bi bi-arrow-left"></i> <span>Import Log</span>
+  </a>
+  {% if imp['job_id'] %}
+  <a href="{{ url_for('jobs.job_detail', job_id=imp['job_id']) }}" class="btn-accent">
+    <i class="bi bi-briefcase"></i> <span>{{ imp['reference'] or 'Job' }}</span>
+  </a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+
+    <div class="sd-card mb-3">
+      <div class="sd-card-header">
+        Message Details
+        <span class="badge-status
+          {% if imp['status'] == 'ok' %}status-complete
+          {% elif imp['status'] == 'thread' %}status-scheduled
+          {% else %}status-void{% endif %}"
+          style="font-size:0.7rem;">
+          {{ imp['status'] }}
+        </span>
+      </div>
+      <div style="padding:1.25rem;">
+        <table style="width:100%; border-collapse:collapse; font-size:0.875rem;">
+          {% for label, value in [
+            ('From',      imp['sender'] or '—'),
+            ('Subject',   imp['subject'] or '—'),
+            ('Received',  imp['imported_at'][:16] if imp['imported_at'] else '—'),
+            ('Job',       imp['reference'] or '—'),
+          ] %}
+          <tr style="border-bottom:1px solid var(--sd-border);">
+            <td style="padding:0.5rem 1rem 0.5rem 0; width:25%;
+                       color:var(--sd-muted); font-size:0.72rem;
+                       text-transform:uppercase; letter-spacing:0.06em;">
+              {{ label }}
+            </td>
+            <td style="padding:0.5rem 0;">
+              {% if label == 'Job' and imp['job_id'] %}
+              <a href="{{ url_for('jobs.job_detail', job_id=imp['job_id']) }}"
+                 style="color:var(--sd-accent);">{{ value }}</a>
+              {% else %}
+              {{ value }}
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </table>
+      </div>
+    </div>
+
+    <div class="sd-card">
+      <div class="sd-card-header">Message Body</div>
+      <div style="padding:1.25rem;">
+        {% if imp['body'] %}
+        <pre style="white-space:pre-wrap; word-break:break-word;
+                    font-family:'IBM Plex Sans',sans-serif;
+                    font-size:0.875rem; color:var(--sd-text);
+                    margin:0; line-height:1.6;">{{ imp['body'] }}</pre>
+        {% else %}
+        <span style="color:var(--sd-muted); font-size:0.875rem;">
+          No message body saved.
+        </span>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
