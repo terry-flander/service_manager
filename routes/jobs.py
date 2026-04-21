@@ -227,10 +227,23 @@ def job_detail(job_id):
             (job_id,)).fetchall()
         parts = conn.execute(
             "SELECT * FROM parts WHERE active=1 ORDER BY name").fetchall()
+        # All thread emails — inbound and outbound — chronological
+        thread_emails = conn.execute("""
+            SELECT 'inbound' as direction,
+                   id, imported_at as sent_at, sender as from_addr,
+                   subject, body, status, message_id
+            FROM email_imports WHERE job_id=?
+            UNION ALL
+            SELECT 'outbound' as direction,
+                   id, sent_at, to_address as from_addr,
+                   subject, body, 'sent' as status, message_id
+            FROM email_replies WHERE job_id=?
+            ORDER BY sent_at ASC
+        """, (job_id, job_id)).fetchall()
     total = sum(jp['quantity'] * jp['unit_cost'] for jp in job_parts)
     return render_template('jobs/detail.html', job=job, job_parts=job_parts,
                            parts=parts, total=total, TIME_LABELS=TIME_LABELS,
-                           JOB_TYPES=JOB_TYPES)
+                           JOB_TYPES=JOB_TYPES, thread_emails=thread_emails)
 
 
 @jobs_bp.route('/jobs/<int:job_id>/edit', methods=['GET', 'POST'])
@@ -287,7 +300,42 @@ def edit_job(job_id):
         """).fetchall()
     return render_template('jobs/edit.html', job=job, regions=regions,
                            TIME_SLOTS=TIME_SLOTS, TIME_LABELS=TIME_LABELS,
-                           JOB_TYPES=JOB_TYPES, suburbs_list=suburbs_list)
+                           JOB_TYPES=JOB_TYPES, SERVICE_TYPES=SERVICE_TYPES,
+                           suburbs_list=suburbs_list)
+
+
+@jobs_bp.route('/jobs/<int:job_id>/part/<int:jp_id>/update', methods=['POST'])
+def update_part(job_id, jp_id):
+    """Inline update of quantity or unit_cost on a job_part row."""
+    from flask import jsonify
+    data  = request.get_json()
+    field = data.get('field')
+    value = data.get('value')
+
+    if field not in ('quantity', 'unit_cost') or value is None:
+        return jsonify({'error': 'invalid field'}), 400
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'invalid value'}), 400
+
+    with get_db() as conn:
+        conn.execute(
+            f"UPDATE job_parts SET {field}=? WHERE id=? AND job_id=?",
+            (value, jp_id, job_id))
+        conn.commit()
+        jp = conn.execute(
+            "SELECT quantity, unit_cost FROM job_parts WHERE id=?",
+            (jp_id,)).fetchone()
+        grand = conn.execute(
+            "SELECT COALESCE(SUM(quantity*unit_cost),0) as t FROM job_parts WHERE job_id=?",
+            (job_id,)).fetchone()['t']
+
+    return jsonify({
+        'ok':          True,
+        'total':       round(jp['quantity'] * jp['unit_cost'], 2),
+        'grand_total': round(grand, 2),
+    })
 
 
 @jobs_bp.route('/jobs/<int:job_id>/add-part', methods=['POST'])
@@ -372,16 +420,31 @@ def delete_job(job_id):
 
 @jobs_bp.route('/jobs/<int:job_id>/status', methods=['POST'])
 def update_status(job_id):
+    from datetime import date as _date
+    payment_type = request.form.get('payment_type', '').strip()
     new_status   = request.form['status']
     paid_date    = request.form.get('paid_date') or None
     amount_paid  = request.form.get('amount_paid', '').strip()
     amount_paid  = float(amount_paid) if amount_paid else None
+
+    # Payment type shortcut — set status=paid, today's date, full total
+    if payment_type:
+        new_status = 'paid'
+        paid_date  = _date.today().isoformat()
+        with get_db() as conn:
+            total = conn.execute(
+                "SELECT COALESCE(SUM(quantity*unit_cost),0) FROM job_parts WHERE job_id=?",
+                (job_id,)).fetchone()[0]
+        amount_paid = round(float(total), 2)
+
     with get_db() as conn:
         conn.execute(
-            "UPDATE jobs SET status=?, paid_date=?, amount_paid=? WHERE id=?",
-            (new_status, paid_date, amount_paid, job_id))
+            "UPDATE jobs SET status=?, paid_date=?, amount_paid=?, "
+            "payment_type=? WHERE id=?",
+            (new_status, paid_date, amount_paid, payment_type or None, job_id))
         conn.commit()
-    flash(f'Status updated to {new_status}.', 'success')
+    msg = f'Paid via {payment_type}.' if payment_type else f'Status updated to {new_status}.'
+    flash(msg, 'success')
     return redirect(url_for('jobs.job_detail', job_id=job_id))
 
 
@@ -447,3 +510,41 @@ def poll_now():
     except Exception as e:
         flash(f'Poll error: {e}', 'danger')
     return redirect(url_for('jobs.email_imports'))
+
+
+@jobs_bp.route('/settings/status-colors', methods=['GET', 'POST'])
+def status_colors():
+    """Admin page to configure per-status badge colours."""
+    statuses = ['pending', 'scheduled', 'in_progress', 'complete',
+                'invoiced', 'paid', 'void']
+    defaults = {
+        'pending':     '#f59e0b',
+        'scheduled':   '#3b82f6',
+        'in_progress': '#8b5cf6',
+        'complete':    '#10b981',
+        'invoiced':    '#6b7280',
+        'paid':        '#10b981',
+        'void':        '#ef4444',
+    }
+    if request.method == 'POST':
+        with get_db() as conn:
+            for s in statuses:
+                color = request.form.get(f'color_{s}', defaults[s]).strip()
+                conn.execute(
+                    "INSERT INTO settings (key,value) VALUES (?,?) "
+                    "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    (f'status_color_{s}', color))
+            conn.commit()
+        flash('Status colours saved.', 'success')
+        return redirect(url_for('jobs.status_colors'))
+
+    with get_db() as conn:
+        colors_map = {}
+        for s in statuses:
+            row = conn.execute(
+                "SELECT value FROM settings WHERE key=?",
+                (f'status_color_{s}',)).fetchone()
+            colors_map[s] = row['value'] if row else defaults[s]
+    return render_template('jobs/status_colors.html',
+                           statuses=statuses, colors_map=colors_map,
+                           defaults=defaults)

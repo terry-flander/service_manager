@@ -1,6 +1,6 @@
 """
-PDF Invoice generator matching The Flying Bike invoice template.
-Layout: TAX INVOICE section + PAYMENT ADVICE tearoff at bottom.
+PDF Invoice generator for The Flying Bike.
+Layout: TAX INVOICE section only — no tearoff or payment advice.
 """
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
@@ -208,89 +208,23 @@ def generate_invoice_pdf(job, job_parts, tax_inclusive, subtotal, gst, total):
     _total_row("AMOUNT DUE AUD",     _fmt(amount_due)[1:], bold=True)
     _draw_hline(c, col['price'] - 5*mm, PAGE_W - M, totals_y + 3*mm, 0.5)
 
-    # ── Payment terms ─────────────────────────────────────────────────────────
-    terms_y = totals_y - 12*mm
-    _bold(c, 9)
-    c.drawString(M, terms_y, f"Due Date: {due_date.strftime('%-d %b %Y')}")
-    terms_y -= 5*mm
-    _reg(c, 8.5)
-    for line in [
-        f"Payment must be made within {PAYMENT_DAYS} days of issue",
-        "We accept payment via direct deposit into the following account:",
-        BUSINESS_BANK,
-        f"BSB: {BUSINESS_BSB}",
-        f"Account: {BUSINESS_ACCT}",
-        "*please state this invoice number when making a payment",
-    ]:
-        c.drawString(M, terms_y, line)
-        terms_y -= 4.5*mm
-
-    # ── Tearoff scissors line ─────────────────────────────────────────────────
-    tear_y = 105*mm
-    c.setDash([3, 3])
-    _draw_hline(c, M, PAGE_W - M, tear_y, 0.5, colors.HexColor('#999999'))
-    c.setDash([])
-    # Scissors icon approximation
-    _reg(c, 10)
-    c.drawString(M - 4*mm, tear_y - 1.5*mm, "✂")
-
-    # ── PAYMENT ADVICE section ────────────────────────────────────────────────
-    pa_y = tear_y - 8*mm
-
-    c.setFont("Helvetica-Bold", 22)
-    c.drawString(M, pa_y, "PAYMENT ADVICE")
-    pa_y -= 8*mm
-
-    # Left: "To" block
-    _reg(c, 9)
-    c.drawString(M, pa_y, "To:")
-    addr_x = M + 12*mm
-    for line in [BUSINESS_NAME] + BUSINESS_ADDR:
-        if len(line) > 30:
-            words = line.split(); cur = ""
-            for w in words:
-                if len(cur)+len(w)+1 > 30:
-                    c.drawString(addr_x, pa_y, cur.strip()); pa_y -= 4.5*mm; cur = w+" "
-                else:
-                    cur += w+" "
-            if cur.strip():
-                c.drawString(addr_x, pa_y, cur.strip()); pa_y -= 4.5*mm
-        else:
-            c.drawString(addr_x, pa_y, line); pa_y -= 4.5*mm
-
-    # Right: payment details grid
-    grid_x  = PAGE_W * 0.52
-    grid_x2 = PAGE_W - M
-    grid_y  = tear_y - 10*mm
-
-    pa_rows = [
-        ("Customer",       job['customer_name'], False),
-        ("Invoice Number", inv_num,              False),
-        ("Amount Due",     _fmt(amount_due),     True),
-        ("Due Date",       due_date.strftime("%-d %b %Y"), False),
-    ]
-    for label, value, bold in pa_rows:
-        _draw_hline(c, grid_x, grid_x2, grid_y + 4.5*mm, 0.3,
-                    colors.HexColor('#cccccc'))
-        _bold(c, 8);  c.drawString(grid_x, grid_y, label)
-        if bold:
-            _bold(c, 9)
-        else:
-            _reg(c, 9)
-        c.drawString(grid_x + 35*mm, grid_y, value)
-        grid_y -= 9*mm
-
-    # Amount Enclosed line
-    _draw_hline(c, grid_x, grid_x2, grid_y + 4.5*mm, 0.3,
-                colors.HexColor('#cccccc'))
-    _bold(c, 8)
-    c.drawString(grid_x, grid_y, "Amount Enclosed")
-    _draw_hline(c, grid_x, grid_x2, grid_y - 2*mm, 0.5)
-    grid_y -= 8*mm
-    _reg(c, 7.5)
-    c.setFillColor(colors.HexColor('#666666'))
-    c.drawString(grid_x, grid_y, "Enter the amount you are paying above")
-    c.setFillColor(colors.black)
+    # ── Payment terms — only shown when amount is outstanding ─────────────────
+    if amount_due > 0:
+        terms_y = totals_y - 12*mm
+        _bold(c, 9)
+        c.drawString(M, terms_y, f"Due Date: {due_date.strftime('%-d %b %Y')}")
+        terms_y -= 5*mm
+        _reg(c, 8.5)
+        for line in [
+            f"Payment must be made within {PAYMENT_DAYS} days of issue",
+            "We accept payment via direct deposit into the following account:",
+            BUSINESS_BANK,
+            f"BSB: {BUSINESS_BSB}",
+            f"Account: {BUSINESS_ACCT}",
+            "*please state this invoice number when making a payment",
+        ]:
+            c.drawString(M, terms_y, line)
+            terms_y -= 4.5*mm
 
     c.save()
     buf.seek(0)

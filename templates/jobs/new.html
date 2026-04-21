@@ -19,7 +19,7 @@
         <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;
                       font-size:0.875rem; color:var(--sd-text);">
           <input type="radio" name="job_type" value="{{ key }}"
-                 {% if loop.first %}checked{% endif %}
+                 {% if key == 'workshop' %}checked{% endif %}
                  onchange="updateJobType(this.value)"
                  style="accent-color:var(--sd-accent); width:15px; height:15px;">
           {{ info.label }}
@@ -82,7 +82,7 @@
               <input type="text" name="customer_phone" id="f_phone" class="sd-input"
                      placeholder="e.g. 0412 345 678">
             </div>
-            <div class="col-md-6">
+            <div class="col-md-6" id="suburb-col">
               <label class="sd-label">Suburb</label>
               <select name="suburb" id="f_suburb" class="sd-input"
                       onchange="suburbChanged(this.value)">
@@ -149,7 +149,7 @@
                 {% endfor %}
               </select>
             </div>
-            <div class="col-12">
+            <div class="col-12" id="address-col">
               <label class="sd-label">Full Site Address <span style="font-weight:400; text-transform:none; letter-spacing:0;">(optional)</span></label>
               <input type="text" name="address" id="address-input" class="sd-input"
                      data-address-autocomplete placeholder="Start typing an address…"
@@ -162,7 +162,7 @@
                 <option value="0">Tax Exclusive (GST added on top)</option>
               </select>
             </div>
-            <div class="col-12">
+            <div class="col-12" id="service-types-col">
               <label class="sd-label">Service Types</label>
               <div style="display:flex; flex-wrap:wrap; gap:0.5rem 1.25rem; padding-top:0.25rem;">
                 {% for st in SERVICE_TYPES %}
@@ -199,6 +199,40 @@
 {% block scripts %}
 <script>
 let searchTimer = null;
+
+document.getElementById('cust-search').addEventListener('keydown', function(e) {
+  const box     = document.getElementById('cust-results');
+  const items   = Array.from(box.querySelectorAll('.cust-option'));
+  const activeIdx = items.findIndex(el => el.classList.contains('dd-active'));
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (box.style.display === 'none' && this.value.trim().length >= 2) {
+      fetchCustomers(this.value.trim()); return;
+    }
+    const next = activeIdx < 0 ? 0 : Math.min(activeIdx + 1, items.length - 1);
+    items.forEach(el => { el.classList.remove('dd-active'); el.style.background = ''; });
+    if (items[next]) {
+      items[next].classList.add('dd-active');
+      items[next].style.background = 'rgba(255,255,255,0.06)';
+      items[next].scrollIntoView({ block: 'nearest' });
+    }
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    const prev = activeIdx <= 0 ? 0 : activeIdx - 1;
+    items.forEach(el => { el.classList.remove('dd-active'); el.style.background = ''; });
+    if (items[prev]) {
+      items[prev].classList.add('dd-active');
+      items[prev].style.background = 'rgba(255,255,255,0.06)';
+      items[prev].scrollIntoView({ block: 'nearest' });
+    }
+  } else if (e.key === 'Enter') {
+    const active = box.querySelector('.dd-active');
+    if (active) { e.preventDefault(); selectCustomer(active); }
+  } else if (e.key === 'Escape') {
+    hideResults();
+  }
+});
 
 document.getElementById('cust-search').addEventListener('input', function() {
   clearTimeout(searchTimer);
@@ -320,24 +354,36 @@ function regionChanged(regionId) {
 }
 
 function updateJobType(type) {
-  const timeCol   = document.getElementById('time-slot-col');
-  const regionCol = document.getElementById('region-col');
-  const regionSel = document.getElementById('region-select');
-  if (type === 'workshop') {
-    timeCol.style.display   = 'none';
-    document.getElementById('end-time-col').style.display = 'none';
-    regionCol.style.display = 'none';
-    timeCol.querySelector('select').value = '';
+  const timeCol     = document.getElementById('time-slot-col');
+  const endTimeCol  = document.getElementById('end-time-col');
+  const regionCol   = document.getElementById('region-col');
+  const regionSel   = document.getElementById('region-select');
+  const dateCol     = document.getElementById('date-col');
+  const suburbCol   = document.getElementById('suburb-col');
+  const addrCol     = document.getElementById('address-col');
+  const svcCol      = document.getElementById('service-types-col');
+  const isWorkshop  = type === 'workshop';
+
+  const bookingOnly = [timeCol, endTimeCol, regionCol, dateCol,
+                       suburbCol, addrCol, svcCol];
+  bookingOnly.forEach(function(el) {
+    if (el) el.style.display = isWorkshop ? 'none' : '';
+  });
+
+  if (isWorkshop) {
+    if (timeCol) timeCol.querySelector('select').value = '';
     regionSel.removeAttribute('required');
-    // Default region_id to first option so form submits
     if (!regionSel.value) regionSel.selectedIndex = 1;
   } else {
-    timeCol.style.display   = '';
-    document.getElementById('end-time-col').style.display = '';
-    regionCol.style.display = '';
     regionSel.setAttribute('required', '');
   }
 }
+
+// Run on page load to reflect defaulted job type
+document.addEventListener('DOMContentLoaded', function() {
+  const checked = document.querySelector('input[name="job_type"]:checked');
+  if (checked) updateJobType(checked.value);
+});
 
 // ── Auto-set end time to start + 1 hour ─────────────────────────────────────
 (function () {

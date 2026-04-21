@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ 'New Template' if is_new else 'Edit Template' }}{% endblock %}
+{% block topbar_title %}{{ 'New Email Template' if is_new else 'Edit Email Template' }}{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('email_replies.templates_index') }}" class="btn-ghost">
+    <i class="bi bi-arrow-left"></i> <span>Templates</span>
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <div class="sd-card">
+      <div class="sd-card-header">Template Details</div>
+      <div style="padding:1.5rem;">
+        <form method="post">
+          <div class="row g-3">
+
+            <div class="col-12">
+              <label class="sd-label">Template Name *</label>
+              <input type="text" name="name" class="sd-input" required
+                     placeholder="e.g. Booking Confirmation"
+                     value="{{ tmpl['name'] if tmpl else '' }}">
+            </div>
+
+            <div class="col-12">
+              <label class="sd-label">Subject Line *</label>
+              <input type="text" name="subject" class="sd-input" required
+                     placeholder="e.g. Your booking with The Flying Bike — {{reference}}"
+                     value="{{ tmpl['subject'] if tmpl else '' }}">
+            </div>
+
+            <div class="col-12">
+              <label class="sd-label">Body *</label>
+              <textarea name="body" class="sd-input" rows="14" required
+                        placeholder="Hi {{customer_name}},&#10;&#10;Thanks for your booking request...">{{ tmpl['body'] if tmpl else '' }}</textarea>
+              <div style="font-size:0.72rem; color:var(--sd-muted); margin-top:0.35rem;">
+                Use <code style="color:var(--sd-accent);">{{'{{'}}field{{'}}'}}</code> for auto-substitution.
+                Available:
+                {% for f in ['first_name','customer_name','customer_email','customer_phone','suburb',
+                             'address','reference','scheduled_date','scheduled_time',
+                             'end_time','scheduled_date_formatted',
+                             'scheduled_time_formatted','service_types',
+                             'description','region_name'] %}
+                <code style="color:var(--sd-accent); font-size:0.72rem;">{{'{{'}}{{ f }}{{'}}'}}</code>{% if not loop.last %},{% endif %}
+                {% endfor %}
+              </div>
+            </div>
+
+          </div>
+
+          <hr class="divider">
+
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            {% if not is_new %}
+            <form id="del-form" method="post"
+                  action="{{ url_for('email_replies.delete_template', tmpl_id=tmpl_id) }}"
+                  style="display:none;"></form>
+            <button type="button" class="btn-danger"
+                    onclick="if(confirm('Delete this template?')) document.getElementById('del-form').submit()">
+              <i class="bi bi-trash3"></i> Delete
+            </button>
+            {% else %}
+            <div></div>
+            {% endif %}
+            <div style="display:flex; gap:0.75rem;">
+              <a href="{{ url_for('email_replies.templates_index') }}" class="btn-ghost">Cancel</a>
+              <button type="submit" class="btn-accent">
+                <i class="bi bi-check-lg"></i>
+                {{ 'Create Template' if is_new else 'Save Changes' }}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -228,13 +228,13 @@
 
     /* ── Status badges ── */
     .badge-status { display:inline-block; padding:0.2rem 0.6rem; border-radius:4px; font-size:0.7rem; font-weight:600; font-family:'IBM Plex Mono',monospace; text-transform:uppercase; letter-spacing:0.05em; }
-    .status-pending     { background:rgba(245,158,11,0.15);  color:#fbbf24; }
-    .status-scheduled   { background:rgba(59,130,246,0.15);  color:#60a5fa; }
-    .status-in_progress { background:rgba(139,92,246,0.15);  color:#a78bfa; }
-    .status-complete    { background:rgba(16,185,129,0.15);   color:#34d399; }
-    .status-invoiced    { background:rgba(107,114,128,0.15);  color:#9ca3af; }
-    .status-paid        { background:rgba(16,185,129,0.18);   color:#6ee7b7; }
-    .status-void        { background:rgba(239,68,68,0.12);    color:#fca5a5; }
+    .status-pending     { background:var(--sc-pending-bg,rgba(245,158,11,0.15));     color:var(--sc-pending,#fbbf24); }
+    .status-scheduled   { background:var(--sc-scheduled-bg,rgba(59,130,246,0.15));   color:var(--sc-scheduled,#60a5fa); }
+    .status-in_progress { background:var(--sc-in_progress-bg,rgba(139,92,246,0.15)); color:var(--sc-in_progress,#a78bfa); }
+    .status-complete    { background:var(--sc-complete-bg,rgba(16,185,129,0.15));    color:var(--sc-complete,#34d399); }
+    .status-invoiced    { background:var(--sc-invoiced-bg,rgba(107,114,128,0.15));   color:var(--sc-invoiced,#9ca3af); }
+    .status-paid        { background:var(--sc-paid-bg,rgba(16,185,129,0.18));        color:var(--sc-paid,#6ee7b7); }
+    .status-void        { background:var(--sc-void-bg,rgba(239,68,68,0.12));         color:var(--sc-void,#fca5a5); }
 
     /* ── Buttons — min touch target 44px ── */
     .btn-accent {
@@ -345,6 +345,14 @@
       .topbar-right { width: 100%; justify-content: flex-end; padding-bottom: 0.25rem; }
     }
   </style>
+  <style>
+  :root {
+    {% for s, hex in status_colors.items() %}
+    --sc-{{ s }}: {{ hex }};
+    --sc-{{ s }}-bg: {{ hex }}26;
+    {% endfor %}
+  }
+  </style>
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -366,33 +374,25 @@
     <a href="{{ url_for('jobs.new_job') }}" class="sidebar-link {% if request.endpoint == 'jobs.new_job' %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-plus-circle"></i> New Job
     </a>
-    <a href="{{ url_for('jobs.email_imports') }}" class="sidebar-link {% if request.endpoint == 'jobs.email_imports' %}active{% endif %}" onclick="closeSidebar()">
-      <i class="bi bi-envelope-arrow-down"></i> Email Imports
-    </a>
-    <a href="{{ url_for('import_jobs.import_jobs') }}" class="sidebar-link {% if request.endpoint == 'import_jobs.import_jobs' %}active{% endif %}" onclick="closeSidebar()">
-      <i class="bi bi-upload"></i> Import Jobs
-    </a>
     <a href="{{ url_for('calendar.index') }}" class="sidebar-link {% if request.endpoint == 'calendar.index' %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-calendar3"></i> Calendar
     </a>
-    <a href="{{ url_for('customers.index') }}" class="sidebar-link {% if request.endpoint in ['customers.index','customers.new_customer','customers.edit_customer'] %}active{% endif %}" onclick="closeSidebar()">
+    <a href="{{ url_for('jobs.email_imports') }}" class="sidebar-link {% if request.endpoint in ['jobs.email_imports','jobs.email_message'] %}active{% endif %}" onclick="closeSidebar()">
+      <i class="bi bi-envelope-arrow-down"></i> Email
+    </a>
+    <div class="nav-section-label" style="margin-top:0.5rem;">Customers</div>
+    <a href="{{ url_for('customers.index') }}" class="sidebar-link {% if request.endpoint in ['customers.index','customers.edit_customer'] %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-people"></i> Customers
     </a>
-    <a href="{{ url_for('customers.new_customer') }}" class="sidebar-link" onclick="closeSidebar()">
+    <a href="{{ url_for('customers.new_customer') }}" class="sidebar-link {% if request.endpoint == 'customers.new_customer' %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-person-plus"></i> New Customer
     </a>
     <div class="nav-section-label" style="margin-top:0.5rem;">Regions</div>
-    <a href="{{ url_for('regions.index') }}" class="sidebar-link {% if request.endpoint and request.endpoint.startswith('regions.') %}active{% endif %}" onclick="closeSidebar()">
+    <a href="{{ url_for('regions.index') }}" class="sidebar-link {% if request.endpoint in ['regions.index','regions.detail','regions.edit_region'] %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-geo-alt"></i> Regions
-    </a>
-    <a href="{{ url_for('regions.new_region') }}" class="sidebar-link" onclick="closeSidebar()">
-      <i class="bi bi-plus-circle"></i> New Region
     </a>
     <a href="{{ url_for('regions.suburbs_index') }}" class="sidebar-link {% if request.endpoint and 'suburb' in request.endpoint %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-pin-map"></i> Suburbs
-    </a>
-    <a href="{{ url_for('regions.import_csv') }}" class="sidebar-link {% if request.endpoint == 'regions.import_csv' %}active{% endif %}" onclick="closeSidebar()">
-      <i class="bi bi-upload"></i> Import CSV
     </a>
     <div class="nav-section-label" style="margin-top:0.5rem;">Reports</div>
     <a href="{{ url_for('reports.sales') }}" class="sidebar-link {% if request.endpoint and request.endpoint.startswith('reports.') %}active{% endif %}" onclick="closeSidebar()">
@@ -402,14 +402,23 @@
     <a href="{{ url_for('parts.index') }}" class="sidebar-link {% if request.endpoint in ['parts.index','parts.new_part','parts.edit_part'] %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-box-seam"></i> Parts List
     </a>
-    <a href="{{ url_for('parts.new_part') }}" class="sidebar-link" onclick="closeSidebar()">
-      <i class="bi bi-plus-circle"></i> Add Part
-    </a>
   </div>
   {% if current_user and current_user['role'] == 'admin' %}
   <div class="nav-section-label" style="margin-top:0.5rem;">Admin</div>
   <a href="{{ url_for('auth.users') }}" class="sidebar-link {% if request.endpoint and request.endpoint.startswith('auth.') and request.endpoint != 'auth.change_password' %}active{% endif %}" onclick="closeSidebar()">
     <i class="bi bi-people"></i> Users
+  </a>
+  <a href="{{ url_for('email_replies.templates_index') }}" class="sidebar-link {% if request.endpoint and request.endpoint.startswith('email_replies.') %}active{% endif %}" onclick="closeSidebar()">
+    <i class="bi bi-envelope-paper"></i> Email Templates
+  </a>
+  <a href="{{ url_for('jobs.status_colors') }}" class="sidebar-link {% if request.endpoint == 'jobs.status_colors' %}active{% endif %}" onclick="closeSidebar()">
+    <i class="bi bi-palette"></i> Status Colours
+  </a>
+  <a href="{{ url_for('import_jobs.import_jobs') }}" class="sidebar-link {% if request.endpoint == 'import_jobs.import_jobs' %}active{% endif %}" onclick="closeSidebar()">
+    <i class="bi bi-upload"></i> Import Jobs
+  </a>
+  <a href="{{ url_for('regions.import_csv') }}" class="sidebar-link {% if request.endpoint == 'regions.import_csv' %}active{% endif %}" onclick="closeSidebar()">
+    <i class="bi bi-upload"></i> Import Regions
   </a>
   {% endif %}
   <div style="padding:1rem 1.25rem; border-top:1px solid var(--sd-border); margin-top:auto; flex-shrink:0;">

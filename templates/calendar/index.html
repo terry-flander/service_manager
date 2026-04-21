@@ -87,13 +87,49 @@ document.addEventListener('DOMContentLoaded', function() {
     toastTimer = setTimeout(() => { toast.className = ''; }, 3000);
   }
 
-  const calendar = new FullCalendar.Calendar(calendarEl, {
-    initialView:  'dayGridMonth',
+  // ── Saved prefs injected from server ──────────────────────────────────────
+  const SAVED_VIEW = {{ cal_view | tojson }};
+  const SAVED_DATE = {{ cal_date | tojson }};
+
+  // Only restore date if it is NOT the current month/week (avoids stale jumps)
+  function shouldRestoreDate(view, dateStr) {
+    if (!dateStr) return false;
+    const saved = new Date(dateStr);
+    const now   = new Date();
+    if (view === 'dayGridMonth') {
+      // Same year+month → don't force a date (show current month naturally)
+      return !(saved.getFullYear() === now.getFullYear() &&
+               saved.getMonth()    === now.getMonth());
+    }
+    if (view === 'timeGridWeek') {
+      // Same ISO week → don't force
+      const weekStart = d => { const s = new Date(d); s.setDate(s.getDate() - s.getDay()); return s; };
+      return weekStart(saved).toDateString() !== weekStart(now).toDateString();
+    }
+    return true; // day view — always restore
+  }
+
+  const calOpts = {
+    initialView: SAVED_VIEW,
     headerToolbar: {
       left:   'prev,next today',
       center: 'title',
       right:  'dayGridMonth,timeGridWeek,timeGridDay'
     },
+    initialDate:  (shouldRestoreDate(SAVED_VIEW, SAVED_DATE) ? SAVED_DATE : undefined),
+
+    // ── Save prefs whenever view or date changes ───────────────────────────
+    datesSet: function(info) {
+      const view = info.view.type;
+      // Use the first visible date as the anchor
+      const date = info.startStr ? info.startStr.slice(0, 10) : '';
+      fetch('/calendar/prefs', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ view: view, date: date }),
+      });
+    },
+
     slotMinTime:  '07:00:00',
     slotMaxTime:  '19:00:00',
     allDaySlot:   true,
@@ -183,8 +219,9 @@ document.addEventListener('DOMContentLoaded', function() {
         .catch(() => { info.revert(); showToast('Network error.', 'error'); });
       }
     }
-  });
+  };
 
+  const calendar = new FullCalendar.Calendar(calendarEl, calOpts);
   calendar.render();
 });
 </script>

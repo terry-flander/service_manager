@@ -24,7 +24,8 @@ def create_app():
     from routes.customers import customers_bp
     from routes.regions  import regions_bp
     from routes.reports     import reports_bp
-    from routes.import_jobs import import_jobs_bp
+    from routes.import_jobs   import import_jobs_bp
+    from routes.email_replies import email_replies_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(jobs_bp)
@@ -35,6 +36,7 @@ def create_app():
     app.register_blueprint(regions_bp)
     app.register_blueprint(reports_bp)
     app.register_blueprint(import_jobs_bp)
+    app.register_blueprint(email_replies_bp)
 
     # ── Global auth gate ──────────────────────────────────────────────────────
     PUBLIC_ENDPOINTS = {'auth.login', 'auth.totp_verify', 'static'}
@@ -73,10 +75,27 @@ def create_app():
 
     @app.context_processor
     def inject_globals():
+        # Load status colours from settings
+        status_colors = {}
+        _defaults = {
+            'pending':'#f59e0b','scheduled':'#3b82f6','in_progress':'#8b5cf6',
+            'complete':'#10b981','invoiced':'#6b7280','paid':'#10b981','void':'#ef4444',
+        }
+        try:
+            from models import get_db
+            with get_db() as _conn:
+                for _s, _d in _defaults.items():
+                    _row = _conn.execute(
+                        "SELECT value FROM settings WHERE key=?",
+                        (f'status_color_{_s}',)).fetchone()
+                    status_colors[_s] = _row['value'] if _row else _d
+        except Exception:
+            status_colors = dict(_defaults)
         return {
             'google_maps_api_key': app.config['GOOGLE_MAPS_API_KEY'],
             'current_user': g.get('user'),
             'theme': session.get('theme', 'dark'),
+            'status_colors': status_colors,
         }
 
     # ── DB init + seed ────────────────────────────────────────────────────────

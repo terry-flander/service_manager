@@ -217,6 +217,45 @@ def suburbs_index():
                            suburbs=suburbs, regions=regions)
 
 
+
+@regions_bp.route('/suburbs/new', methods=['GET', 'POST'])
+def new_suburb():
+    with get_db() as conn:
+        regions = conn.execute(
+            "SELECT id, name FROM regions ORDER BY name").fetchall()
+
+    if request.method == 'POST':
+        name      = request.form.get('name', '').strip().title()
+        region_id = int(request.form.get('region_id', 0))
+
+        if not name:
+            flash('Suburb name is required.', 'danger')
+            return render_template('regions/suburb_edit.html',
+                                   suburb=None, regions=regions)
+        if not region_id:
+            flash('Region is required.', 'danger')
+            return render_template('regions/suburb_edit.html',
+                                   suburb=None, regions=regions)
+
+        with get_db() as conn:
+            clash = conn.execute(
+                "SELECT id FROM suburbs WHERE LOWER(name)=LOWER(?)",
+                (name,)).fetchone()
+            if clash:
+                flash(f'Suburb "{name}" already exists.', 'danger')
+                return render_template('regions/suburb_edit.html',
+                                       suburb=None, regions=regions)
+            conn.execute(
+                "INSERT INTO suburbs (name, region_id) VALUES (?, ?)",
+                (name, region_id))
+            conn.commit()
+
+        flash(f'Suburb "{name}" created.', 'success')
+        return redirect(url_for('regions.suburbs_index'))
+
+    return render_template('regions/suburb_edit.html',
+                           suburb=None, regions=regions)
+
 @regions_bp.route('/suburbs/<int:suburb_id>/edit', methods=['GET', 'POST'])
 def edit_suburb(suburb_id):
     with get_db() as conn:

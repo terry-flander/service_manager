@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, jsonify, request
+from flask import Blueprint, render_template, jsonify, request, session
 from models import get_db
 
 calendar_bp = Blueprint('calendar', __name__)
@@ -14,7 +14,49 @@ STATUS_COLORS = {
 
 @calendar_bp.route('/calendar')
 def index():
-    return render_template('calendar/index.html')
+    user_id = session.get('user_id')
+    with get_db() as conn:
+        cal_view, cal_date = _get_cal_prefs(conn, user_id)
+    return render_template('calendar/index.html',
+                           cal_view=cal_view, cal_date=cal_date)
+
+
+
+def _get_cal_prefs(conn, user_id):
+    """Return (view, date) for the user, or defaults."""
+    row = conn.execute(
+        "SELECT value FROM settings WHERE key=?",
+        (f'cal_prefs_{user_id}',)).fetchone()
+    if row:
+        import json as _json
+        try:
+            p = _json.loads(row['value'])
+            return p.get('view', 'dayGridMonth'), p.get('date', '')
+        except Exception:
+            pass
+    return 'dayGridMonth', ''
+
+
+@calendar_bp.route('/calendar/prefs', methods=['POST'])
+def save_prefs():
+    """Save the user's calendar view and date preference."""
+    import json as _json
+    user_id = session.get('user_id')
+    if not user_id:
+        return jsonify({'ok': False}), 401
+    data = request.get_json()
+    view = data.get('view', 'dayGridMonth')
+    date = data.get('date', '')
+    # Validate view name
+    if view not in ('dayGridMonth', 'timeGridWeek', 'timeGridDay'):
+        view = 'dayGridMonth'
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (f'cal_prefs_{user_id}', _json.dumps({'view': view, 'date': date})))
+        conn.commit()
+    return jsonify({'ok': True})
 
 
 @calendar_bp.route('/calendar/events')

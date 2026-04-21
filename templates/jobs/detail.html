@@ -6,9 +6,44 @@
   <a href="{{ url_for('invoice.shop_ticket', job_id=job['id']) }}" class="btn-ghost" target="_blank"><i class="bi bi-printer"></i> Print Ticket</a>
   <a href="{{ url_for('invoice.view_invoice', job_id=job['id']) }}" class="btn-ghost"><i class="bi bi-receipt"></i> Invoice</a>
   <a href="{{ url_for('invoice.pdf_invoice', job_id=job['id']) }}" class="btn-accent" target="_blank"><i class="bi bi-file-pdf"></i> PDF</a>
+  <a href="{{ url_for('email_replies.compose_reply', job_id=job['id']) }}" class="btn-ghost"><i class="bi bi-reply"></i> <span>Reply</span></a>
+{% endblock %}
+
+{% block head %}
+<style>
+.jp-inline-input {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--sd-text);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.875rem;
+  padding: 0.2rem 0.35rem;
+  transition: border-color 0.15s, background 0.15s;
+  -webkit-appearance: none;
+}
+.jp-inline-input:hover {
+  border-color: var(--sd-border);
+  background: var(--sd-navy);
+}
+.jp-inline-input:focus {
+  outline: none;
+  border-color: var(--sd-accent);
+  background: var(--sd-navy);
+  box-shadow: 0 0 0 2px rgba(249,115,22,0.15);
+}
+.jp-inline-input.saving {
+  border-color: var(--sd-muted);
+  opacity: 0.6;
+}
+.jp-inline-input.saved {
+  border-color: #34d399;
+}
+</style>
 {% endblock %}
 
 {% block content %}
+{% set is_workshop = job['job_type'] == 'workshop' %}
 <div class="row g-3">
 
   <!-- Left column -->
@@ -37,7 +72,7 @@
           </tr>
           {% for label, value in [
             ('Phone',  job['customer_phone'] or '—'),
-            ('Suburb', job['suburb'] or '—'),
+          ] + ([] if is_workshop else [('Suburb', job['suburb'] or '—')]) + [
             ('Email',  job['customer_email'] or '—'),
           ] %}
           <tr style="border-bottom:1px solid var(--sd-border);">
@@ -79,8 +114,10 @@
           {% set sched_rows = [
             ('Reference',     job['reference']),
             ('Region',        job['region_name']),
+          ] + ([] if is_workshop else [
             ('Scheduled',     sched_display),
             ('Service Types', job['service_types'] or '—'),
+          ]) + [
             ('Tax',           'Inclusive (GST back-calc)' if job['tax_inclusive'] else 'Exclusive (GST added on top)'),
           ] %}
           {% for label, value in sched_rows %}
@@ -89,6 +126,7 @@
             <td style="padding:0.45rem 0 0.45rem 1rem; {% if label == 'Reference' %}font-family:'IBM Plex Mono',monospace;{% endif %}">{{ value }}</td>
           </tr>
           {% endfor %}
+          {% if not is_workshop %}
           <tr>
             <td style="color:var(--sd-muted); padding:0.45rem 0; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; vertical-align:top;">Address</td>
             <td style="padding:0.45rem 0 0.45rem 1rem;">
@@ -107,6 +145,7 @@
               {% endif %}
             </td>
           </tr>
+          {% endif %}
         </table>
       </div>
     </div>
@@ -126,6 +165,22 @@
             </option>
             {% endfor %}
           </select>
+        </div>
+        <!-- Payment type shortcut -->
+        <div style="padding:0 1.25rem 0.6rem; border-top:1px solid var(--sd-border);">
+          <div class="sd-label" style="margin-bottom:0.5rem;">Quick Pay</div>
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+            {% for pt in ['EFTPOS','Cash','Transfer'] %}
+            <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;
+                          font-size:0.875rem; color:var(--sd-text);">
+              <input type="radio" name="payment_type" value="{{ pt }}"
+                     {% if job['payment_type'] == pt %}checked{% endif %}
+                     onchange="quickPay(this.value)"
+                     style="accent-color:var(--sd-accent); width:14px; height:14px;">
+              {{ pt }}
+            </label>
+            {% endfor %}
+          </div>
         </div>
         <div style="padding:0 1.25rem 0.75rem; display:flex; gap:0.75rem; flex-wrap:wrap; align-items:flex-end;">
           <div style="flex:1; min-width:130px;">
@@ -178,12 +233,31 @@
         </thead>
         <tbody>
           {% for jp in job_parts %}
-          <tr>
+          <tr id="jp-row-{{ jp['id'] }}">
             <td>{{ jp['description'] }}</td>
             <td class="mono" style="font-size:0.78rem; color:var(--sd-muted);">{{ jp['part_number'] or '—' }}</td>
-            <td class="mono" style="text-align:right;">{{ jp['quantity'] }}</td>
-            <td class="mono" style="text-align:right;">${{ '%.2f'|format(jp['unit_cost']) }}</td>
-            <td class="mono" style="text-align:right; font-weight:600;">${{ '%.2f'|format(jp['quantity'] * jp['unit_cost']) }}</td>
+            <td class="mono" style="text-align:right; padding:0.4rem 0.875rem;">
+              <input type="number"
+                     class="jp-inline-input"
+                     data-jp="{{ jp['id'] }}"
+                     data-field="quantity"
+                     value="{{ jp['quantity'] }}"
+                     min="0.01" step="0.1"
+                     style="width:4.5rem; text-align:right;">
+            </td>
+            <td class="mono" style="text-align:right; padding:0.4rem 0.875rem;">
+              <input type="number"
+                     class="jp-inline-input"
+                     data-jp="{{ jp['id'] }}"
+                     data-field="unit_cost"
+                     value="{{ '%.2f'|format(jp['unit_cost']) }}"
+                     min="0" step="0.01"
+                     style="width:5.5rem; text-align:right;">
+            </td>
+            <td class="mono" style="text-align:right; font-weight:600;"
+                id="jp-total-{{ jp['id'] }}">
+              ${{ '%.2f'|format(jp['quantity'] * jp['unit_cost']) }}
+            </td>
             <td>
               <form method="post" action="{{ url_for('jobs.remove_part', job_id=job['id'], jp_id=jp['id']) }}" onsubmit="return confirm('Remove this part?')">
                 <button type="submit" class="btn-danger"><i class="bi bi-trash3"></i></button>
@@ -254,6 +328,68 @@
       </div>
     </div>
   </div>
+
+    <!-- Email Thread -->
+    {% if thread_emails %}
+    <div class="col-12" style="margin-top:0.5rem;">
+      <div class="sd-card">
+        <div class="sd-card-header">
+          Email Thread
+          <span style="font-size:0.78rem; font-weight:400; color:var(--sd-muted);">
+            {{ thread_emails|length }} message{{ 's' if thread_emails|length != 1 }}
+          </span>
+        </div>
+        {% for em in thread_emails %}
+        <div style="padding:0.875rem 1.25rem;
+                    {% if not loop.last %}border-bottom:1px solid var(--sd-border);{% endif %}
+                    {% if em['direction'] == 'outbound' %}background:rgba(249,115,22,0.04);{% endif %}">
+          <div style="display:flex; align-items:center; justify-content:space-between;
+                      gap:0.75rem; flex-wrap:wrap; margin-bottom:0.4rem;">
+            <div style="display:flex; align-items:center; gap:0.6rem;">
+              <i class="bi bi-{{ 'reply-fill' if em['direction'] == 'outbound' else 'envelope-open' }}"
+                 style="color:{{ 'var(--sd-accent)' if em['direction'] == 'outbound' else 'var(--sd-muted)' }};
+                        font-size:0.9rem;"></i>
+              <span style="font-size:0.82rem; font-weight:500;">
+                {% if em['direction'] == 'outbound' %}
+                  <span style="color:var(--sd-accent);">Sent</span> to {{ em['from_addr'] }}
+                {% else %}
+                  <span class="badge-status
+                    {% if em['status'] == 'ok' %}status-complete
+                    {% elif em['status'] == 'thread' %}status-scheduled
+                    {% else %}status-invoiced{% endif %}"
+                    style="font-size:0.65rem; margin-right:0.3rem;">
+                    {{ 'New Booking' if em['status'] == 'ok' else 'Reply' }}
+                  </span>
+                  from {{ em['from_addr'] }}
+                {% endif %}
+              </span>
+            </div>
+            <div style="display:flex; align-items:center; gap:0.75rem;">
+              <span class="mono" style="font-size:0.75rem; color:var(--sd-muted);">
+                {{ em['sent_at'][:16] }}
+              </span>
+              {% if em['direction'] == 'inbound' and em['body'] %}
+              <a href="{{ url_for('jobs.email_message', import_id=em['id']) }}"
+                 class="btn-ghost" style="padding:0.15rem 0.5rem; font-size:0.75rem;">
+                <i class="bi bi-envelope-open"></i> View
+              </a>
+              {% endif %}
+            </div>
+          </div>
+          <div style="font-size:0.82rem; color:var(--sd-muted); margin-left:1.6rem;">
+            {{ em['subject'] or '(no subject)' }}
+          </div>
+          {% if em['body'] %}
+          <div style="margin-top:0.4rem; margin-left:1.6rem; font-size:0.8rem;
+                      color:var(--sd-muted); white-space:pre-wrap; max-height:3.5rem;
+                      overflow:hidden; position:relative;">{{ em['body'][:200] }}{% if em['body']|length > 200 %}…{% endif %}</div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
 
 </div>
 {% endblock %}
@@ -347,7 +483,7 @@
   });
 
   searchInput.addEventListener('keydown', function (e) {
-    // If dropdown is closed and ArrowDown is pressed, open it first
+    // ArrowDown while dropdown closed → fetch and open
     if (e.key === 'ArrowDown' && dropdown.style.display === 'none') {
       e.preventDefault();
       const q = searchInput.value.trim();
@@ -355,34 +491,27 @@
       return;
     }
 
-    // Use a class-based selector so items are reliably found
-    const items = Array.from(dropdown.querySelectorAll('.dd-item'));
+    const items    = Array.from(dropdown.querySelectorAll('.dd-item'));
     const activeIdx = items.findIndex(function(el) { return el.classList.contains('dd-active'); });
+
+    function setActive(idx) {
+      items.forEach(function(el) { el.classList.remove('dd-active'); el.style.background = ''; });
+      if (items[idx]) {
+        items[idx].classList.add('dd-active');
+        items[idx].style.background = 'var(--sd-surface2)';
+        items[idx].scrollIntoView({ block: 'nearest' });
+      }
+    }
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      const nextIdx = activeIdx < 0 ? 0 : Math.min(activeIdx + 1, items.length - 1);
-      items.forEach(function(el) { el.classList.remove('dd-active'); el.style.background = ''; });
-      if (items[nextIdx]) {
-        items[nextIdx].classList.add('dd-active');
-        items[nextIdx].style.background = 'var(--sd-surface2)';
-        items[nextIdx].scrollIntoView({ block: 'nearest' });
-      }
+      setActive(activeIdx < 0 ? 0 : Math.min(activeIdx + 1, items.length - 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      const prevIdx = activeIdx <= 0 ? 0 : activeIdx - 1;
-      items.forEach(function(el) { el.classList.remove('dd-active'); el.style.background = ''; });
-      if (items[prevIdx]) {
-        items[prevIdx].classList.add('dd-active');
-        items[prevIdx].style.background = 'var(--sd-surface2)';
-        items[prevIdx].scrollIntoView({ block: 'nearest' });
-      }
+      setActive(activeIdx <= 0 ? 0 : activeIdx - 1);
     } else if (e.key === 'Enter') {
       const active = dropdown.querySelector('.dd-active');
-      if (active) {
-        e.preventDefault();
-        active.dispatchEvent(new MouseEvent('mousedown'));
-      }
+      if (active) { e.preventDefault(); active.dispatchEvent(new MouseEvent('mousedown')); }
     } else if (e.key === 'Escape') {
       closeDropdown();
     }
@@ -406,5 +535,103 @@
     });
   });
 })();
+
+// ── Quick Pay ────────────────────────────────────────────────────────────────────
+function quickPay(paymentType) {
+  // Set status to paid
+  const statusSel = document.querySelector('select[name="status"]');
+  if (statusSel) statusSel.value = 'paid';
+  // Set paid date to today
+  const today = new Date().toISOString().slice(0,10);
+  const paidDateInput = document.querySelector('input[name="paid_date"]');
+  if (paidDateInput) paidDateInput.value = today;
+  // Set amount paid to total
+  const totalText = document.querySelector('.sd-card-header .mono');
+  if (totalText) {
+    const match = totalText.textContent.match(/\$([\d,.]+)/);
+    if (match) {
+      const amt = parseFloat(match[1].replace(',',''));
+      const amtInput = document.querySelector('input[name="amount_paid"]');
+      if (amtInput && !isNaN(amt)) amtInput.value = amt.toFixed(2);
+    }
+  }
+}
+
+// ── Inline part editing ───────────────────────────────────────────────────────
+(function () {
+  const JOB_ID = {{ job['id'] }};
+
+  function updateTotal(jpId) {
+    const qtyInput  = document.querySelector(`.jp-inline-input[data-jp="${jpId}"][data-field="quantity"]`);
+    const costInput = document.querySelector(`.jp-inline-input[data-jp="${jpId}"][data-field="unit_cost"]`);
+    const totalCell = document.getElementById(`jp-total-${jpId}`);
+    if (!qtyInput || !costInput || !totalCell) return;
+    const total = parseFloat(qtyInput.value) * parseFloat(costInput.value);
+    totalCell.textContent = isNaN(total) ? '—' : '$' + total.toFixed(2);
+  }
+
+  function updateGrandTotal() {
+    let grand = 0;
+    document.querySelectorAll('[id^="jp-total-"]').forEach(function(cell) {
+      const v = parseFloat(cell.textContent.replace('$', ''));
+      if (!isNaN(v)) grand += v;
+    });
+    const hdr = document.querySelector('.sd-card-header .mono');
+    if (hdr) hdr.textContent = grand > 0 ? 'Total: $' + grand.toFixed(2) : '';
+  }
+
+  function saveField(jpId, field, value) {
+    const inputs = document.querySelectorAll(`.jp-inline-input[data-jp="${jpId}"]`);
+    inputs.forEach(function(el) { el.classList.add('saving'); });
+
+    fetch(`/jobs/${JOB_ID}/part/${jpId}/update`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ field: field, value: parseFloat(value) }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      inputs.forEach(function(el) {
+        el.classList.remove('saving');
+        el.classList.add('saved');
+        setTimeout(function() { el.classList.remove('saved'); }, 800);
+      });
+      if (data.total !== undefined) {
+        document.getElementById(`jp-total-${jpId}`).textContent = '$' + data.total.toFixed(2);
+      }
+      if (data.grand_total !== undefined) {
+        const hdr = document.querySelector('.sd-card-header .mono');
+        if (hdr) hdr.textContent = 'Total: $' + data.grand_total.toFixed(2);
+      }
+    })
+    .catch(function() {
+      inputs.forEach(function(el) { el.classList.remove('saving'); });
+    });
+  }
+
+  document.querySelectorAll('.jp-inline-input').forEach(function(input) {
+    const jpId  = input.dataset.jp;
+    const field = input.dataset.field;
+    var   origValue = input.value;
+
+    input.addEventListener('input', function() {
+      updateTotal(jpId);
+      updateGrandTotal();
+    });
+
+    input.addEventListener('change', function() {
+      if (this.value !== origValue) {
+        origValue = this.value;
+        saveField(jpId, field, this.value);
+      }
+    });
+
+    input.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
+      if (e.key === 'Escape') { this.value = origValue; this.blur(); }
+    });
+  });
+})();
+
 </script>
 {% endblock %}

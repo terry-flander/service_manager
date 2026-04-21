@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Edit Suburb{% endblock %}
-{% block topbar_title %}Edit Suburb{% endblock %}
+{% block title %}{{ 'New Suburb' if not suburb else 'Edit Suburb' }}{% endblock %}
+{% block topbar_title %}{{ 'New Suburb' if not suburb else 'Edit Suburb' }}{% endblock %}
 {% block topbar_actions %}
   <a href="{{ url_for('regions.suburbs_index') }}" class="btn-ghost">
     <i class="bi bi-arrow-left"></i> <span>Suburbs</span>
@@ -11,26 +11,32 @@
 <div class="row justify-content-center">
   <div class="col-lg-4">
     <div class="sd-card">
-      <div class="sd-card-header">Suburb Details</div>
+      <div class="sd-card-header">
+        {{ 'New Suburb' if not suburb else 'Suburb Details' }}
+      </div>
       <div style="padding:1.5rem;">
         <form method="post">
           <div class="row g-3">
             <div class="col-12">
               <label class="sd-label">Suburb Name *</label>
               <input type="text" name="name" class="sd-input" required
-                     value="{{ suburb['name'] }}">
+                     value="{{ suburb['name'] if suburb else '' }}"
+                     placeholder="e.g. Northcote" autofocus>
             </div>
             <div class="col-12">
               <label class="sd-label">Region *</label>
               <select name="region_id" class="sd-input">
+                {% if not suburb %}
+                <option value="">— Select region —</option>
+                {% endif %}
                 {% for r in regions %}
                 <option value="{{ r['id'] }}"
-                  {% if r['id'] == suburb['region_id'] %}selected{% endif %}>
+                  {% if suburb and r['id'] == suburb['region_id'] %}selected{% endif %}>
                   {{ r['name'] }}
                 </option>
                 {% endfor %}
               </select>
-              {% if suburb['job_count'] is defined and suburb['job_count'] %}
+              {% if suburb and suburb['job_count'] %}
               <div style="font-size:0.72rem; color:var(--sd-muted); margin-top:0.35rem;">
                 <i class="bi bi-info-circle"></i>
                 Changing region will update
@@ -44,36 +50,26 @@
           <hr class="divider">
 
           <div style="display:flex; justify-content:space-between; align-items:center; gap:0.75rem;">
-            <!-- Delete form outside save form -->
+            {% if suburb %}
             <form id="delete-suburb-form" method="post"
                   action="{{ url_for('regions.delete_suburb', suburb_id=suburb['id']) }}"
                   style="display:none;"></form>
             <button type="button" class="btn-danger"
-                    onclick="if(confirm('Delete suburb \'{{ suburb['name'] }}\'? This cannot be undone.')) document.getElementById('delete-suburb-form').submit()">
+                    onclick="if(confirm('Delete suburb \'{{ suburb['name'] }}\'?')) document.getElementById('delete-suburb-form').submit()">
               <i class="bi bi-trash3"></i> Delete
             </button>
+            {% else %}
+            <div></div>
+            {% endif %}
             <div style="display:flex; gap:0.75rem;">
               <a href="{{ url_for('regions.suburbs_index') }}" class="btn-ghost">Cancel</a>
               <button type="submit" class="btn-accent">
-                <i class="bi bi-check-lg"></i> Save Changes
+                <i class="bi bi-check-lg"></i>
+                {{ 'Create Suburb' if not suburb else 'Save Changes' }}
               </button>
             </div>
           </div>
         </form>
-      </div>
-    </div>
-
-    <!-- Region dates shortcut -->
-    <div class="sd-card mt-3">
-      <div style="padding:1rem 1.25rem; display:flex; justify-content:space-between; align-items:center;">
-        <span style="font-size:0.875rem; color:var(--sd-muted);">
-          <i class="bi bi-calendar3"></i>
-          Region dates for <strong style="color:var(--sd-text);">{{ suburb['region_name'] }}</strong>
-        </span>
-        <a href="{{ url_for('regions.detail', region_id=suburb['region_id']) }}"
-           class="btn-ghost" style="font-size:0.82rem; padding:0.3rem 0.75rem;">
-          <i class="bi bi-arrow-right"></i> Manage Dates
-        </a>
       </div>
     </div>
   </div>

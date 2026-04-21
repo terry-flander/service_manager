@@ -93,6 +93,35 @@
 
 {% block scripts %}
 <script>
+const FILTER_KEY = 'jobs_filters';
+
+// Restore saved selections if no query params present
+(function () {
+  const hasParams = window.location.search.length > 1;
+  if (hasParams) {
+    // URL params are active — sync them back into localStorage
+    const p = new URLSearchParams(window.location.search);
+    const saved = {
+      status:  p.get('status')    || '',
+      region:  p.get('region_id') || '',
+      jobType: p.get('job_type')  || '',
+    };
+    try { localStorage.setItem(FILTER_KEY, JSON.stringify(saved)); } catch(e) {}
+  } else {
+    // No params — restore from localStorage and redirect if anything saved
+    try {
+      const saved = JSON.parse(localStorage.getItem(FILTER_KEY) || '{}');
+      const params = new URLSearchParams();
+      if (saved.status)  params.set('status',    saved.status);
+      if (saved.region)  params.set('region_id', saved.region);
+      if (saved.jobType) params.set('job_type',  saved.jobType);
+      if (params.toString()) {
+        window.location = '?' + params.toString();
+      }
+    } catch(e) {}
+  }
+})();
+
 function applyFilters() {
   const status  = document.getElementById('filter-status').value;
   const region  = document.getElementById('filter-region').value;
@@ -101,7 +130,19 @@ function applyFilters() {
   if (status)  params.set('status', status);
   if (region)  params.set('region_id', region);
   if (jobType) params.set('job_type', jobType);
+  // Save to localStorage
+  try {
+    localStorage.setItem(FILTER_KEY, JSON.stringify({
+      status: status, region: region, jobType: jobType
+    }));
+  } catch(e) {}
   window.location = '?' + params.toString();
 }
+
+// Clear button also clears localStorage
+document.querySelector('a[href="{{ url_for("jobs.index") }}"]')
+  ?.addEventListener('click', function() {
+    try { localStorage.removeItem(FILTER_KEY); } catch(e) {}
+  });
 </script>
 {% endblock %}

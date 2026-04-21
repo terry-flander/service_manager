@@ -108,6 +108,27 @@ def edit_customer(customer_id):
             WHERE j.customer_id=?
             ORDER BY j.scheduled_date DESC, j.id DESC
         """, (customer_id,)).fetchall()
+        # All email thread messages across all jobs for this customer
+        thread_emails = conn.execute("""
+            SELECT 'inbound'  as direction,
+                   ei.id, ei.imported_at as sent_at,
+                   ei.sender  as from_addr,
+                   ei.subject, ei.body, ei.status,
+                   ei.message_id, j.reference, j.id as job_id
+            FROM email_imports ei
+            JOIN jobs j ON j.id = ei.job_id
+            WHERE j.customer_id = ?
+            UNION ALL
+            SELECT 'outbound' as direction,
+                   er.id, er.sent_at,
+                   er.to_address as from_addr,
+                   er.subject, er.body, 'sent' as status,
+                   er.message_id, j.reference, j.id as job_id
+            FROM email_replies er
+            JOIN jobs j ON j.id = er.job_id
+            WHERE j.customer_id = ?
+            ORDER BY sent_at ASC
+        """, (customer_id, customer_id)).fetchall()
 
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
@@ -115,7 +136,8 @@ def edit_customer(customer_id):
         if not email or not name:
             flash('Name and email are required.', 'danger')
             return render_template('customers/form.html',
-                                   customer=customer, action='edit', jobs=jobs)
+                                   customer=customer, action='edit', jobs=jobs,
+                                   thread_emails=thread_emails)
         with get_db() as conn:
             clash = conn.execute(
                 "SELECT id FROM customers WHERE email=? AND id!=?",
@@ -153,4 +175,4 @@ def edit_customer(customer_id):
         suburbs = get_suburbs(conn)
     return render_template('customers/form.html',
                            customer=customer, action='edit', jobs=jobs,
-                           suburbs=suburbs)
+                           thread_emails=thread_emails, suburbs=suburbs)
