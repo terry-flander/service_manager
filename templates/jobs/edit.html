@@ -94,7 +94,8 @@
               <input type="text" name="customer_phone" id="f_phone" class="sd-input"
                      value="{{ job['customer_phone'] or '' }}">
             </div>
-            <div class="col-md-6">
+            <div class="col-md-6" id="suburb-col"
+                 {% if job['job_type'] == 'workshop' %}style="display:none;"{% endif %}>
               <label class="sd-label">Suburb</label>
               <select name="suburb" id="f_suburb" class="sd-input"
                       onchange="suburbChanged(this.value)">
@@ -150,7 +151,8 @@
             </div>
 
             {% set sched_locked = job['status'] in ('complete', 'invoiced') %}
-            <div class="col-md-3">
+            <div class="col-md-3" id="date-col"
+                 {% if job['job_type'] == 'workshop' %}style="display:none;"{% endif %}>
               <label class="sd-label">
                 Service Date
                 {% if sched_locked %}
@@ -224,7 +226,8 @@
             </div>
             {% endif %}
 
-            <div class="col-12">
+            <div class="col-12" id="address-col"
+                 {% if job['job_type'] == 'workshop' %}style="display:none;"{% endif %}>
               <label class="sd-label">Full Site Address</label>
               <input type="text" name="address" id="address-input" class="sd-input"
                      data-address-autocomplete
@@ -266,7 +269,8 @@
                 </option>
               </select>
             </div>
-            <div class="col-12">
+            <div class="col-12" id="service-types-col"
+                 {% if job['job_type'] == 'workshop' %}style="display:none;"{% endif %}>
               <label class="sd-label">Service Types</label>
               <div style="display:flex; flex-wrap:wrap; gap:0.5rem 1.25rem; padding-top:0.25rem;">
                 {% for st in SERVICE_TYPES %}
@@ -460,20 +464,24 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function updateJobType(type) {
-  const timeCol   = document.getElementById('time-slot-col');
-  const regionCol = document.getElementById('region-col');
-  const regionSel = document.getElementById('region-select');
-  if (type === 'workshop') {
-    timeCol.style.display   = 'none';
-    document.getElementById('end-time-col').style.display = 'none';
-    regionCol.style.display = 'none';
-    const tSel = timeCol.querySelector('select');
+  const timeCol    = document.getElementById('time-slot-col');
+  const endTimeCol = document.getElementById('end-time-col');
+  const regionCol  = document.getElementById('region-col');
+  const regionSel  = document.getElementById('region-select');
+  const dateCol    = document.getElementById('date-col');
+  const suburbCol  = document.getElementById('suburb-col');
+  const addrCol    = document.getElementById('address-col');
+  const svcCol     = document.getElementById('service-types-col');
+  const isWorkshop = type === 'workshop';
+
+  [timeCol, endTimeCol, regionCol, dateCol, suburbCol, addrCol, svcCol]
+    .forEach(function(el) { if (el) el.style.display = isWorkshop ? 'none' : ''; });
+
+  if (isWorkshop) {
+    const tSel = timeCol && timeCol.querySelector('select');
     if (tSel && !tSel.disabled) tSel.value = '';
     regionSel.removeAttribute('required');
   } else {
-    timeCol.style.display   = '';
-    document.getElementById('end-time-col').style.display = '';
-    regionCol.style.display = '';
     regionSel.setAttribute('required', '');
   }
 }

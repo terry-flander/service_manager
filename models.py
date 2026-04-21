@@ -104,7 +104,8 @@ def init_db():
                 notes          TEXT,
                 paid_date      TEXT,
                 amount_paid    REAL,
-                service_types  TEXT
+                service_types  TEXT,
+                payment_type   TEXT
             );
 
             CREATE TABLE IF NOT EXISTS settings (
@@ -116,11 +117,36 @@ def init_db():
             CREATE TABLE IF NOT EXISTS email_imports (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 message_id  TEXT NOT NULL UNIQUE,
+                thread_id   TEXT,
+                in_reply_to TEXT,
                 subject     TEXT,
                 sender      TEXT,
+                body        TEXT,
                 imported_at TEXT DEFAULT (datetime('now')),
                 job_id      INTEGER REFERENCES jobs(id),
                 status      TEXT DEFAULT 'ok'
+            );
+
+            CREATE TABLE IF NOT EXISTS email_templates (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                name       TEXT NOT NULL,
+                subject    TEXT NOT NULL,
+                body       TEXT NOT NULL,
+                created_at TEXT DEFAULT (datetime('now')),
+                updated_at TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS email_replies (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_id      INTEGER NOT NULL REFERENCES jobs(id),
+                message_id  TEXT UNIQUE,
+                in_reply_to TEXT,
+                subject     TEXT,
+                to_address  TEXT,
+                body        TEXT,
+                sent_at     TEXT DEFAULT (datetime('now')),
+                sent_by     INTEGER REFERENCES users(id),
+                template_id INTEGER REFERENCES email_templates(id)
             );
 
             CREATE TABLE IF NOT EXISTS job_parts (

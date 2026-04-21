@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Email Templates{% endblock %}
+{% block topbar_title %}Email Templates{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('email_replies.new_template') }}" class="btn-accent">
+    <i class="bi bi-plus-lg"></i> <span>New Template</span>
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="sd-card">
+  <div class="sd-card-header">
+    Templates
+    <span style="font-size:0.78rem; font-weight:400; color:var(--sd-muted);">
+      Use <code style="font-size:0.78rem;">{{'{{'}}field{{'}}'}}</code> for substitution
+    </span>
+  </div>
+  <div class="table-responsive-sd">
+    <table class="sd-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Subject</th>
+          <th>Updated</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in templates %}
+        <tr>
+          <td style="font-weight:500;">{{ t['name'] }}</td>
+          <td style="font-size:0.82rem; color:var(--sd-muted);">
+            {{ t['subject'][:60] }}{% if t['subject']|length > 60 %}…{% endif %}
+          </td>
+          <td class="mono" style="font-size:0.78rem; color:var(--sd-muted);">
+            {{ t['updated_at'][:10] }}
+          </td>
+          <td style="white-space:nowrap;">
+            <a href="{{ url_for('email_replies.edit_template', tmpl_id=t['id']) }}"
+               class="btn-ghost" style="padding:0.2rem 0.6rem; font-size:0.78rem;">
+              <i class="bi bi-pencil"></i> Edit
+            </a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="4" style="text-align:center; color:var(--sd-muted); padding:2rem;">
+            No templates yet. Create one to enable quick replies on jobs.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Available fields reference -->
+<div style="margin-top:1rem; padding:1rem 1.25rem;
+            background:rgba(59,130,246,0.07);
+            border:1px solid rgba(59,130,246,0.2);
+            border-radius:8px; font-size:0.82rem; color:var(--sd-muted);">
+  <strong style="color:var(--sd-text);">Available substitution fields:</strong>
+  <div style="margin-top:0.5rem; display:flex; flex-wrap:wrap; gap:0.4rem;">
+    {% for f in ['first_name','customer_name','customer_email','customer_phone','suburb',
+                 'address','reference','scheduled_date','scheduled_time',
+                 'service_types','description','region_name'] %}
+    <code style="background:var(--sd-surface2); border:1px solid var(--sd-border);
+                 border-radius:4px; padding:0.1rem 0.4rem; font-size:0.78rem;
+                 color:var(--sd-accent);">{{'{{'}}{{ f }}{{'}}'}}</code>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

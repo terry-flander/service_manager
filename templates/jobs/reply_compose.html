@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Reply — {{ job['reference'] }}{% endblock %}
+{% block topbar_title %}Reply to {{ job['customer_name'] }}{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('jobs.job_detail', job_id=job['id']) }}" class="btn-ghost">
+    <i class="bi bi-arrow-left"></i> <span>{{ job['reference'] }}</span>
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+
+  {% if not preview %}
+  {# ── Step 1: Template picker ── #}
+  <div class="sd-card mb-3">
+    <div class="sd-card-header">Choose a Template</div>
+    <div style="padding:1.25rem;">
+      <form method="post" id="pick-form">
+
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="sd-label">Template</label>
+            <select name="template_id" id="tmpl-select" class="sd-input"
+                    onchange="loadTemplate(this.value)">
+              <option value="">— Start from scratch —</option>
+              {% for t in templates %}
+              <option value="{{ t['id'] }}"
+                      data-subject="{{ t['subject'] | e }}"
+                      data-body="{{ t['body'] | e }}">
+                {{ t['name'] }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="col-12">
+            <label class="sd-label">Thread Subject
+              <span style="font-weight:400; text-transform:none; letter-spacing:0;
+                           color:var(--sd-muted); font-size:0.72rem; margin-left:0.4rem;">
+                (locked — must match original to continue thread)
+              </span>
+            </label>
+            <div style="padding:0.55rem 0.75rem; background:var(--sd-surface2);
+                        border:1px solid var(--sd-border); border-radius:6px;
+                        font-size:0.875rem; color:var(--sd-muted);">
+              {{ thread_subject }}
+            </div>
+            <input type="hidden" name="subject" value="{{ thread_subject }}">
+          </div>
+
+          <div class="col-12">
+            <label class="sd-label">Body *</label>
+            <textarea name="body" id="body-input" class="sd-input"
+                      rows="14" required></textarea>
+          </div>
+        </div>
+
+        <hr class="divider">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem;">
+          <div style="font-size:0.8rem; color:var(--sd-muted);">
+            <i class="bi bi-send"></i>
+            Will be sent to <strong style="color:var(--sd-text);">{{ job['customer_email'] or '(no email)' }}</strong>
+          </div>
+          <div style="display:flex; gap:0.75rem;">
+            <a href="{{ url_for('email_replies.new_template') }}" class="btn-ghost"
+               target="_blank" style="font-size:0.8rem;">
+              <i class="bi bi-plus-circle"></i> New Template
+            </a>
+            <button type="submit" name="preview" value="1" class="btn-accent"
+                    {% if not job['customer_email'] %}disabled title="No customer email on file"{% endif %}>
+              <i class="bi bi-eye"></i> Preview & Edit
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% else %}
+  {# ── Step 2: Preview and send ── #}
+  <div class="sd-card">
+    <div class="sd-card-header">
+      Preview &amp; Send
+      <span style="font-size:0.78rem; font-weight:400; color:var(--sd-muted);">
+        Fields have been substituted — edit freely before sending
+      </span>
+    </div>
+    <div style="padding:1.5rem;">
+      <form method="post">
+        <input type="hidden" name="template_id" value="{{ template_id or '' }}">
+
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="sd-label">To</label>
+            <input type="email" name="to_address" class="sd-input" required
+                   value="{{ preview.to }}">
+          </div>
+          <div class="col-12">
+            <label class="sd-label">Subject
+              <span style="font-weight:400; text-transform:none; letter-spacing:0;
+                           color:var(--sd-muted); font-size:0.72rem; margin-left:0.4rem;">
+                (locked to original thread)
+              </span>
+            </label>
+            <div style="padding:0.55rem 0.75rem; background:var(--sd-surface2);
+                        border:1px solid var(--sd-border); border-radius:6px;
+                        font-size:0.875rem; color:var(--sd-muted);">
+              {{ preview.subject }}
+            </div>
+            <input type="hidden" name="subject" value="{{ preview.subject }}">
+          </div>
+          <div class="col-12">
+            <label class="sd-label">Body</label>
+            <textarea name="body" class="sd-input" rows="16" required
+                      style="font-family:'IBM Plex Mono',monospace; font-size:0.82rem;">{{ preview.body }}</textarea>
+          </div>
+        </div>
+
+        <hr class="divider">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.75rem;">
+          <a href="{{ url_for('email_replies.compose_reply', job_id=job['id']) }}"
+             class="btn-ghost">
+            <i class="bi bi-arrow-left"></i> Back
+          </a>
+          <button type="submit" name="send" value="1" class="btn-accent">
+            <i class="bi bi-send"></i> Send Email
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  {% endif %}
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const TEMPLATES = {
+  {% for t in templates %}
+  "{{ t['id'] }}": {
+    subject: {{ t['subject'] | tojson }},
+    body:    {{ t['body']    | tojson }}
+  },
+  {% endfor %}
+};
+
+function loadTemplate(id) {
+  const bodyInput = document.getElementById('body-input');
+  if (!bodyInput) return;
+  if (!id || !TEMPLATES[id]) {
+    if (!id) bodyInput.value = '';
+    return;
+  }
+  bodyInput.value = TEMPLATES[id].body;
+}
+</script>
+{% endblock %}

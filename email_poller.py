@@ -37,11 +37,21 @@ SERVICE_TYPES = [
 ]
 
 SERVICE_KEYWORDS = {
-    'General Service':          ['general service', 'general', 'service'],
-    'eBike Service':            ['ebike', 'e-bike', 'electric bike', 'e bike'],
-    'Tribe/Cargo Bike Service': ['tribe', 'cargo', 'longtail', 'long tail'],
+    # Matched in priority order — checked top to bottom
+    # eBike must come BEFORE cargo/tribe to catch 'e-cargo bike'
+    'eBike Service':            ['ebike', 'e-bike', 'electric bike', 'e-cargo',
+                                 'ebike', 'e bike', 'ecargo', 'electric'],
+    'Tribe/Cargo Bike Service': ['tribe', 'longtail', 'long tail', 'cargo bike',
+                                 'longtail', 'bakfiets'],
     '3 or More Bikes':          ['3 or more', '3+ bikes', 'three or more',
-                                 '4 bikes', '5 bikes', 'fleet'],
+                                 '4 bikes', '5 bikes', 'fleet',
+                                 '3 bikes', 'three bikes', 'four bikes',
+                                 '36 bikes',  # school/fleet
+                                 ],
+    'General Service':          ['general service', 'service', 'tune', 'repair',
+                                 'overhaul', 'brake', 'gear', 'tyre', 'tube',
+                                 'chain', 'derailleur', 'assemble', 'setup',
+                                 'check'],
 }
 
 
@@ -164,9 +174,34 @@ def _extract_email(text):
 
 
 def _detect_service_types(text):
+    import re as _re
     text_lower = text.lower()
-    found = [st for st, kws in SERVICE_KEYWORDS.items()
-             if any(kw in text_lower for kw in kws)]
+
+    found = []
+
+    # Count "N x " or "N bikes" patterns to detect 3+ bikes
+    counts = _re.findall(r'(\d+)\s*(?:x|bikes?)', text_lower)
+    if counts and sum(int(c) for c in counts) >= 3:
+        found.append('3 or More Bikes')
+
+    # Check keyword lists in order
+    for stype, kws in SERVICE_KEYWORDS.items():
+        if stype == '3 or More Bikes' and stype in found:
+            continue  # already detected above
+        if any(kw in text_lower for kw in kws):
+            if stype not in found:
+                found.append(stype)
+
+    # Remove General Service if more specific types found
+    # (keeps it only when truly nothing else matches)
+    specific = [f for f in found if f != 'General Service']
+    if specific and 'General Service' in found:
+        found.remove('General Service')
+        # Re-add General Service only if service/tune/repair mentioned
+        # alongside specific type (common: "full service on my ebike")
+        if any(kw in text_lower for kw in ['service', 'repair', 'tune', 'overhaul']):
+            found.insert(0, 'General Service')
+
     return ', '.join(found) if found else 'General Service'
 
 
@@ -189,8 +224,13 @@ def _parse_email(msg):
     svc_raw = _extract_field(body_norm, 'Service Type', 'Service Types', 'Service')
 
     if svc_raw:
+        # First try exact canonical matches (website form sends these)
         found = [st for st in SERVICE_TYPES if st.lower() in svc_raw.lower()]
-        service_types = ', '.join(found) if found else _detect_service_types(svc_raw + ' ' + message)
+        if found:
+            service_types = ', '.join(found)
+        else:
+            # Fall back to keyword detection on the service field + message
+            service_types = _detect_service_types(svc_raw + ' ' + message)
     else:
         service_types = _detect_service_types(message)
 
@@ -334,6 +374,90 @@ def _create_job(conn, parsed, message_id, thread_id=None, in_reply_to=None):
     return None
 
 
+
+def _poll_inbox_replies(imap, app):
+    """
+    Search INBOX for unread messages whose subject starts with 'Re:'
+    and matches a known job thread subject.  Log them as thread replies.
+    Returns count of messages processed.
+    """
+    status, _ = imap.select('INBOX')
+    if status != 'OK':
+        log.warning("Could not select INBOX for reply scanning")
+        return 0
+
+    # Search for unread messages with Re: prefix
+    status, data = imap.search(None, 'UNSEEN', 'SUBJECT', '"Re:"')
+    if status != 'OK' or not data[0]:
+        return 0
+
+    ids = data[0].split()
+    log.info(f"INBOX: found {len(ids)} unread Re: message(s)")
+    processed = 0
+
+    for num in ids:
+        status, msg_data = imap.fetch(num, '(RFC822)')
+        if status != 'OK':
+            continue
+        msg = email.message_from_bytes(msg_data[0][1])
+
+        message_id  = (msg.get('Message-ID') or '').strip() or                       f"{msg.get('Date','')}_{msg.get('From','')}"
+        in_reply_to = (msg.get('In-Reply-To') or '').strip()
+        references  = (msg.get('References')  or '').strip()
+        subject     = _decode_header(msg.get('Subject', ''))
+        from_raw    = _decode_header(msg.get('From', ''))
+        from_name, from_email = parseaddr(from_raw)
+        from_email  = from_email.strip().lower()
+
+        with app.app_context():
+            from models import get_db
+            with get_db() as db_conn:
+                if _already_imported(db_conn, message_id):
+                    continue
+
+                body = _get_text_body(msg)
+                thread_id = in_reply_to or message_id
+
+                # Try thread headers first
+                existing_job_id = _find_job_for_thread(
+                    db_conn, in_reply_to, references, from_email)
+
+                # If no thread match, try matching subject to a known job
+                # Strip Re: prefix(es) and match against email_imports subjects
+                if not existing_job_id and subject:
+                    base_subj = subject
+                    while base_subj.lower().startswith('re:'):
+                        base_subj = base_subj[3:].strip()
+                    row = db_conn.execute("""
+                        SELECT ei.job_id FROM email_imports ei
+                        WHERE ei.job_id IS NOT NULL
+                          AND ei.status = 'ok'
+                          AND LOWER(REPLACE(ei.subject,'Re: ','')) = LOWER(?)
+                        ORDER BY ei.imported_at DESC LIMIT 1
+                    """, (base_subj,)).fetchone()
+                    if row:
+                        existing_job_id = row['job_id']
+                        log.info(f"INBOX: matched subject '{base_subj}' "
+                                 f"to job_id={existing_job_id}")
+
+                if existing_job_id:
+                    _log_thread_email(
+                        db_conn, message_id, thread_id, in_reply_to,
+                        subject, from_email, body, existing_job_id)
+                    processed += 1
+                    log.info(f"INBOX reply logged for job {existing_job_id} "
+                             f"from {from_email}")
+                else:
+                    log.debug(f"INBOX: no job match for '{subject}' "
+                              f"from {from_email} — skipping")
+                    # Don't mark as read — not our email
+                    continue
+
+        # Mark as read only if we processed it
+        imap.store(num, '+FLAGS', '\\Seen')
+
+    return processed
+
 # ── IMAP polling ──────────────────────────────────────────────────────────────
 
 def poll_once(app, force=False):
@@ -432,6 +556,12 @@ def poll_once(app, force=False):
                             imported += 1
 
             imap.store(num, '+FLAGS', '\\Seen')
+
+        # Also scan INBOX for customer replies
+        inbox_count = _poll_inbox_replies(imap, app)
+        if inbox_count:
+            imported += inbox_count
+            log.info(f"INBOX: {inbox_count} reply/replies logged")
 
         imap.logout()
 

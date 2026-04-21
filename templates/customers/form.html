@@ -143,5 +143,75 @@
   </div>
   {% endif %}
 
+  {# ── Email Thread ── #}
+  {% if is_edit and thread_emails is defined and thread_emails %}
+  <div class="col-12" style="margin-top:0.5rem;">
+    <div class="sd-card">
+      <div class="sd-card-header">
+        Email Thread
+        <span style="font-size:0.78rem; font-weight:400; color:var(--sd-muted);">
+          {{ thread_emails|length }} message{{ 's' if thread_emails|length != 1 }}
+        </span>
+      </div>
+      {% for em in thread_emails %}
+      <div style="padding:0.75rem 1.25rem;
+                  {% if not loop.last %}border-bottom:1px solid var(--sd-border);{% endif %}
+                  {% if em['direction'] == 'outbound' %}background:rgba(249,115,22,0.04);{% endif %}">
+        <div style="display:flex; align-items:center; justify-content:space-between;
+                    gap:0.75rem; flex-wrap:wrap;">
+          <div style="display:flex; align-items:center; gap:0.6rem; min-width:0;">
+            <i class="bi bi-{{ 'reply-fill' if em['direction'] == 'outbound' else 'envelope-open' }}"
+               style="color:{{ 'var(--sd-accent)' if em['direction'] == 'outbound' else 'var(--sd-muted)' }};
+                      font-size:0.9rem; flex-shrink:0;"></i>
+            <div style="min-width:0;">
+              <div style="font-size:0.82rem; font-weight:500; white-space:nowrap;
+                          overflow:hidden; text-overflow:ellipsis;">
+                {% if em['direction'] == 'outbound' %}
+                  <span style="color:var(--sd-accent);">Sent</span>
+                  to {{ em['from_addr'] }}
+                {% else %}
+                  <span class="badge-status
+                    {% if em['status'] == 'ok' %}status-complete
+                    {% elif em['status'] == 'thread' %}status-scheduled
+                    {% else %}status-invoiced{% endif %}"
+                    style="font-size:0.65rem; margin-right:0.3rem;">
+                    {{ 'Booking' if em['status'] == 'ok' else 'Reply' }}
+                  </span>
+                  from {{ em['from_addr'] }}
+                {% endif %}
+              </div>
+              <div style="font-size:0.75rem; color:var(--sd-muted); margin-top:0.1rem;
+                          white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                {{ em['subject'] or '(no subject)' }}
+              </div>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.6rem; flex-shrink:0;">
+            <a href="{{ url_for('jobs.job_detail', job_id=em['job_id']) }}"
+               class="mono" style="font-size:0.75rem; color:var(--sd-muted);">
+              {{ em['reference'] }}
+            </a>
+            <span class="mono" style="font-size:0.72rem; color:var(--sd-muted);">
+              {{ em['sent_at'][:16] }}
+            </span>
+            {% if em['direction'] == 'inbound' and em['body'] %}
+            <a href="{{ url_for('jobs.email_message', import_id=em['id']) }}"
+               class="btn-ghost" style="padding:0.15rem 0.5rem; font-size:0.72rem;">
+              <i class="bi bi-envelope-open"></i> View
+            </a>
+            {% endif %}
+          </div>
+        </div>
+        {% if em['body'] %}
+        <div style="margin-top:0.35rem; margin-left:1.6rem; font-size:0.78rem;
+                    color:var(--sd-muted); white-space:pre-wrap; max-height:2.8rem;
+                    overflow:hidden;">{{ em['body'][:180] }}{% if em['body']|length > 180 %}…{% endif %}</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
 </div>
 {% endblock %}

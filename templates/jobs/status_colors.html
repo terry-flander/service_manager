@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Status Colours{% endblock %}
+{% block topbar_title %}Status Colours{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-5">
+    <div class="sd-card">
+      <div class="sd-card-header">Badge Colours</div>
+      <div style="padding:1.5rem;">
+        <form method="post">
+          <div class="row g-3">
+            {% for s in statuses %}
+            <div class="col-12">
+              <div style="display:flex; align-items:center; gap:1rem;">
+                <span class="badge-status status-{{ s }}"
+                      style="min-width:90px; text-align:center;">
+                  {{ s|replace('_',' ') }}
+                </span>
+                <div style="display:flex; align-items:center; gap:0.5rem; flex:1;">
+                  <input type="color" name="color_{{ s }}"
+                         value="{{ colors_map[s] }}"
+                         style="width:44px; height:36px; border:1px solid var(--sd-border);
+                                border-radius:6px; cursor:pointer; background:none; padding:2px;"
+                         oninput="updatePreview('{{ s }}', this.value)">
+                  <input type="text" id="hex_{{ s }}"
+                         value="{{ colors_map[s] }}"
+                         class="sd-input mono"
+                         style="max-width:100px; font-size:0.85rem;"
+                         oninput="syncColor('{{ s }}', this.value)"
+                         maxlength="7" placeholder="#rrggbb">
+                  <button type="button" class="btn-ghost"
+                          style="font-size:0.75rem; padding:0.3rem 0.6rem;"
+                          onclick="resetColor('{{ s }}','{{ defaults[s] }}')">
+                    Reset
+                  </button>
+                </div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          <hr class="divider">
+          <div style="display:flex; justify-content:flex-end; gap:0.75rem;">
+            <button type="submit" class="btn-accent">
+              <i class="bi bi-check-lg"></i> Save Colours
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function hexToRgba(hex) {
+  const r = parseInt(hex.slice(1,3),16);
+  const g = parseInt(hex.slice(3,5),16);
+  const b = parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},`;
+}
+
+function updatePreview(status, hex) {
+  // Update the badge colour live
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return;
+  document.getElementById('hex_' + status).value = hex;
+  const root = document.documentElement;
+  root.style.setProperty('--sc-' + status, hex);
+  root.style.setProperty('--sc-' + status + '-bg', hexToRgba(hex) + '0.15)');
+}
+
+function syncColor(status, hex) {
+  if (/^#[0-9a-fA-F]{6}$/.test(hex)) {
+    document.querySelector(`input[name="color_${status}"]`).value = hex;
+    updatePreview(status, hex);
+  }
+}
+
+function resetColor(status, def) {
+  document.querySelector(`input[name="color_${status}"]`).value = def;
+  document.getElementById('hex_' + status).value = def;
+  updatePreview(status, def);
+}
+</script>
+{% endblock %}
