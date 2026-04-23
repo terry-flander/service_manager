@@ -1,0 +1,342 @@
+{% extends "base.html" %}
+{% block title %}Merge Customer{% endblock %}
+{% block topbar_title %}Merge Customer{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('customers.edit_customer', customer_id=source['id']) }}" class="btn-ghost">
+    <i class="bi bi-arrow-left"></i> Back
+  </a>
+{% endblock %}
+
+{% block content %}
+<form method="post" id="merge-form">
+  <input type="hidden" name="target_id"    id="target-id-input">
+  <input type="hidden" name="keep_email"   id="keep-email-input"   value="target">
+  <input type="hidden" name="keep_phone"   id="keep-phone-input"   value="target">
+  <input type="hidden" name="keep_address" id="keep-address-input" value="target">
+
+  <div class="row g-3">
+
+    <!-- Source customer (merge away) -->
+    <div class="col-lg-5">
+      <div class="sd-card">
+        <div class="sd-card-header">
+          Merging Away
+          <span style="font-size:0.78rem; font-weight:400; color:var(--sd-muted);">will be deleted</span>
+        </div>
+        <div style="padding:1.25rem 1.5rem;">
+          <div style="font-size:1rem; font-weight:600; margin-bottom:0.75rem;">
+            {{ source['name'] }}
+          </div>
+          <div style="font-size:0.84rem; display:flex; flex-direction:column; gap:0.35rem;">
+            <div><span style="color:var(--sd-muted); width:4.5rem; display:inline-block;">Email</span>
+              <span class="mono">{{ source['email'] }}</span></div>
+            <div><span style="color:var(--sd-muted); width:4.5rem; display:inline-block;">Phone</span>
+              {{ source['phone'] or '—' }}</div>
+            <div><span style="color:var(--sd-muted); width:4.5rem; display:inline-block;">Address</span>
+              {{ source['address'] or '—' }}</div>
+            {% if source['suburb'] %}
+            <div><span style="color:var(--sd-muted); width:4.5rem; display:inline-block;">Suburb</span>
+              {{ source['suburb'] }}</div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Arrow -->
+    <div class="col-lg-2 d-flex align-items-center justify-content-center">
+      <i class="bi bi-arrow-right" style="font-size:2rem; color:var(--sd-muted);"></i>
+    </div>
+
+    <!-- Target customer search / display -->
+    <div class="col-lg-5">
+      <div class="sd-card">
+        <div class="sd-card-header">
+          Merge Into
+          <span style="font-size:0.78rem; font-weight:400; color:var(--sd-muted);">will be kept</span>
+        </div>
+        <div style="padding:1.25rem 1.5rem;">
+
+          <!-- Search box (shown until target is selected) -->
+          <div id="target-search-section">
+            <label class="sd-label">Search for target customer</label>
+            <div style="position:relative;">
+              <input type="text" id="target-search" class="sd-input" autocomplete="off"
+                     placeholder="Type name to search…">
+              <div id="target-results"></div>
+            </div>
+          </div>
+
+          <!-- Selected target display -->
+          <div id="target-selected" style="display:none;">
+            <div id="target-name"
+                 style="font-size:1rem; font-weight:600; margin-bottom:0.75rem;"></div>
+            <div id="target-details"
+                 style="font-size:0.84rem; display:flex; flex-direction:column; gap:0.35rem;"></div>
+            <button type="button" class="btn-ghost"
+                    style="margin-top:0.75rem; font-size:0.8rem;" onclick="clearTarget()">
+              <i class="bi bi-x"></i> Change target
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Comparison / contact detail selection (shown once target is chosen) -->
+    <div class="col-12" id="comparison-section" style="display:none;">
+      <div class="sd-card">
+        <div class="sd-card-header">Choose Contact Details to Keep</div>
+        <div style="padding:1.25rem 1.5rem; overflow-x:auto;">
+          <table class="sd-table" style="width:100%; min-width:500px;">
+            <thead>
+              <tr>
+                <th style="width:90px;">Field</th>
+                <th>
+                  <span style="color:var(--sd-muted); font-size:0.75rem;
+                               text-transform:uppercase; letter-spacing:.05em;">
+                    From</span>
+                  <strong id="th-source">{{ source['name'] }}</strong>
+                  <span style="color:var(--sd-muted); font-size:0.75rem; margin-left:0.4rem;">
+                    (deleted)</span>
+                </th>
+                <th>
+                  <span style="color:var(--sd-muted); font-size:0.75rem;
+                               text-transform:uppercase; letter-spacing:.05em;">
+                    From</span>
+                  <strong id="th-target"></strong>
+                  <span style="color:var(--sd-muted); font-size:0.75rem; margin-left:0.4rem;">
+                    (kept)</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+
+              <!-- Email -->
+              <tr id="row-email">
+                <td style="font-weight:500; vertical-align:middle;">Email</td>
+                <td>
+                  <label class="merge-option" id="opt-email-source">
+                    <input type="radio" name="keep_email_r" value="source"
+                           onchange="setKeep('email','source')">
+                    <span class="mono" style="font-size:0.84rem;">{{ source['email'] }}</span>
+                  </label>
+                </td>
+                <td>
+                  <label class="merge-option" id="opt-email-target">
+                    <input type="radio" name="keep_email_r" value="target" checked
+                           onchange="setKeep('email','target')">
+                    <span id="disp-email" class="mono" style="font-size:0.84rem;"></span>
+                  </label>
+                </td>
+              </tr>
+
+              <!-- Phone -->
+              <tr id="row-phone">
+                <td style="font-weight:500; vertical-align:middle;">Phone</td>
+                <td>
+                  <label class="merge-option" id="opt-phone-source">
+                    <input type="radio" name="keep_phone_r" value="source"
+                           onchange="setKeep('phone','source')">
+                    <span style="font-size:0.84rem;">
+                      {{ source['phone'] or '(none)' }}
+                    </span>
+                  </label>
+                </td>
+                <td>
+                  <label class="merge-option" id="opt-phone-target">
+                    <input type="radio" name="keep_phone_r" value="target" checked
+                           onchange="setKeep('phone','target')">
+                    <span id="disp-phone" style="font-size:0.84rem;"></span>
+                  </label>
+                </td>
+              </tr>
+
+              <!-- Address (carries suburb along) -->
+              <tr id="row-address">
+                <td style="font-weight:500; vertical-align:middle;">Address</td>
+                <td>
+                  <label class="merge-option" id="opt-address-source">
+                    <input type="radio" name="keep_address_r" value="source"
+                           onchange="setKeep('address','source')">
+                    <span style="font-size:0.84rem;">
+                      {{ source['address'] or '(none)' }}
+                      {% if source['suburb'] %}
+                        <br><span style="color:var(--sd-muted); font-size:0.78rem;">
+                          {{ source['suburb'] }}</span>
+                      {% endif %}
+                    </span>
+                  </label>
+                </td>
+                <td>
+                  <label class="merge-option" id="opt-address-target">
+                    <input type="radio" name="keep_address_r" value="target" checked
+                           onchange="setKeep('address','target')">
+                    <span id="disp-address" style="font-size:0.84rem;"></span>
+                  </label>
+                </td>
+              </tr>
+
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:0.75rem; margin-top:1rem;">
+        <a href="{{ url_for('customers.edit_customer', customer_id=source['id']) }}"
+           class="btn-ghost">Cancel</a>
+        <button type="submit" class="btn-accent" id="merge-btn">
+          <i class="bi bi-person-check"></i> Merge Customers
+        </button>
+      </div>
+    </div>
+
+  </div>
+</form>
+
+<style>
+.merge-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  cursor: pointer;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.4rem;
+  transition: background 0.1s;
+}
+.merge-option:hover { background: var(--sd-hover); }
+.merge-option input[type="radio"] { margin-top: 0.2rem; flex-shrink: 0; }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const SOURCE_ID = {{ source['id'] }};
+let targetData  = null;
+let searchTimer;
+
+document.getElementById('target-search').addEventListener('input', function () {
+  clearTimeout(searchTimer);
+  const q = this.value.trim();
+  if (q.length < 2) { clearResults(); return; }
+  searchTimer = setTimeout(() => fetchTargets(q), 250);
+});
+
+function fetchTargets(q) {
+  fetch('/customers/search?q=' + encodeURIComponent(q))
+    .then(r => r.json())
+    .then(results => renderResults(results.filter(c => c.id !== SOURCE_ID)));
+}
+
+function renderResults(results) {
+  const box = document.getElementById('target-results');
+  if (!results.length) { box.innerHTML = ''; return; }
+  box.innerHTML =
+    '<div style="position:absolute; z-index:100; width:100%; ' +
+    'background:var(--sd-surface); border:1px solid var(--sd-border); ' +
+    'border-radius:0.5rem; box-shadow:0 4px 16px rgba(0,0,0,0.18); ' +
+    'max-height:240px; overflow-y:auto; margin-top:0.25rem;">' +
+    results.map(c =>
+      `<div class="cust-result" data-id="${c.id}"
+            data-name="${esc(c.name)}" data-email="${esc(c.email)}"
+            data-phone="${esc(c.phone||'')}" data-address="${esc(c.address||'')}"
+            data-suburb="${esc(c.suburb||'')}"
+            style="padding:0.6rem 1rem; cursor:pointer;
+                   border-bottom:1px solid var(--sd-border);">
+         <div style="font-weight:500; font-size:0.88rem;">${esc(c.name)}</div>
+         <div style="font-size:0.76rem; color:var(--sd-muted);">
+           ${esc(c.email)}${c.phone ? ' · ' + esc(c.phone) : ''}</div>
+       </div>`
+    ).join('') + '</div>';
+
+  box.querySelectorAll('.cust-result').forEach(el => {
+    el.addEventListener('mouseenter', () => el.style.background = 'var(--sd-hover)');
+    el.addEventListener('mouseleave', () => el.style.background = '');
+    el.addEventListener('click', () => selectTarget(el.dataset));
+  });
+}
+
+function selectTarget(data) {
+  targetData = data;
+  document.getElementById('target-id-input').value = data.id;
+
+  // Switch panels
+  document.getElementById('target-search-section').style.display = 'none';
+  document.getElementById('target-selected').style.display  = 'block';
+  document.getElementById('target-name').textContent = data.name;
+  document.getElementById('target-details').innerHTML =
+    `<div><span style="color:var(--sd-muted);width:4.5rem;display:inline-block;">Email</span>
+       <span class="mono">${esc(data.email)}</span></div>` +
+    `<div><span style="color:var(--sd-muted);width:4.5rem;display:inline-block;">Phone</span>
+       ${data.phone || '—'}</div>` +
+    `<div><span style="color:var(--sd-muted);width:4.5rem;display:inline-block;">Address</span>
+       ${data.address || '—'}</div>` +
+    (data.suburb ? `<div><span style="color:var(--sd-muted);width:4.5rem;display:inline-block;">
+       Suburb</span>${data.suburb}</div>` : '');
+
+  // Fill comparison column header
+  document.getElementById('th-target').textContent = data.name;
+
+  // Fill comparison value cells
+  document.getElementById('disp-email').textContent   = data.email   || '(none)';
+  document.getElementById('disp-phone').textContent   = data.phone   || '(none)';
+  const addrText = (data.address || '(none)') +
+    (data.suburb ? '\n' + data.suburb : '');
+  document.getElementById('disp-address').textContent = addrText;
+
+  // Reset radios to "target" (the kept record)
+  setKeep('email',   'target');
+  setKeep('phone',   'target');
+  setKeep('address', 'target');
+  document.querySelector('input[name="keep_email_r"][value="target"]').checked   = true;
+  document.querySelector('input[name="keep_phone_r"][value="target"]').checked   = true;
+  document.querySelector('input[name="keep_address_r"][value="target"]').checked = true;
+
+  document.getElementById('comparison-section').style.display = 'block';
+  document.getElementById('comparison-section').scrollIntoView(
+    { behavior: 'smooth', block: 'start' }
+  );
+}
+
+function clearTarget() {
+  targetData = null;
+  document.getElementById('target-id-input').value = '';
+  document.getElementById('target-search-section').style.display = 'block';
+  document.getElementById('target-selected').style.display  = 'none';
+  document.getElementById('target-search').value = '';
+  clearResults();
+  document.getElementById('comparison-section').style.display = 'none';
+}
+
+function clearResults() {
+  document.getElementById('target-results').innerHTML = '';
+}
+
+function setKeep(field, value) {
+  document.getElementById('keep-' + field + '-input').value = value;
+}
+
+function esc(str) {
+  return String(str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+document.getElementById('merge-form').addEventListener('submit', function (e) {
+  if (!document.getElementById('target-id-input').value) {
+    e.preventDefault();
+    alert('Please select a target customer first.');
+    return;
+  }
+  const tName = targetData ? targetData.name : 'the target customer';
+  if (!confirm(
+    `Merge "{{ source['name'] }}" into "${tName}"?\n\n` +
+    `• All jobs will move to ${tName}\n` +
+    `• "{{ source['name'] }}" will be permanently deleted\n\n` +
+    `This cannot be undone.`
+  )) {
+    e.preventDefault();
+  }
+});
+</script>
+{% endblock %}
