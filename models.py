@@ -105,7 +105,8 @@ def init_db():
                 paid_date      TEXT,
                 amount_paid    REAL,
                 service_types  TEXT,
-                payment_type   TEXT
+                payment_type   TEXT,
+                bike_description TEXT
             );
 
             CREATE TABLE IF NOT EXISTS settings (
@@ -125,6 +126,19 @@ def init_db():
                 imported_at TEXT DEFAULT (datetime('now')),
                 job_id      INTEGER REFERENCES jobs(id),
                 status      TEXT DEFAULT 'ok'
+            );
+
+            CREATE TABLE IF NOT EXISTS calendar_events (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                date        TEXT NOT NULL,
+                start_time  TEXT,
+                end_time    TEXT,
+                title       TEXT NOT NULL,
+                description TEXT,
+                address     TEXT,
+                color       TEXT DEFAULT '#6366f1',
+                created_at  TEXT DEFAULT (datetime('now')),
+                updated_at  TEXT DEFAULT (datetime('now'))
             );
 
             CREATE TABLE IF NOT EXISTS email_templates (

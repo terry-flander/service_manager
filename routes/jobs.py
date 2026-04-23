@@ -168,11 +168,12 @@ def new_job():
                     conn.execute("""
                         INSERT INTO jobs (reference, job_type, customer_id, customer_name,
                             customer_email, customer_phone, suburb, address, description,
-                            service_types, region_id, tax_inclusive, scheduled_date, scheduled_time,
-                            end_time, status, notes)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+                            bike_description, service_types, region_id, tax_inclusive,
+                            scheduled_date, scheduled_time, end_time, status, notes)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
                     """, (ref, job_type, customer_id, cust_name, cust_email, cust_phone,
                           suburb, job_address, request.form.get('description', ''),
+                          request.form.get('bike_description', ''),
                           ', '.join(request.form.getlist('service_types')),
                           region_id,
                           1 if request.form.get('tax_inclusive', '1') == '1' else 0,
@@ -272,12 +273,13 @@ def edit_job(job_id):
             conn.execute("""
                 UPDATE jobs SET job_type=?, customer_id=?, customer_name=?,
                     customer_email=?, customer_phone=?, suburb=?, address=?,
-                    description=?, service_types=?, region_id=?, tax_inclusive=?,
-                    scheduled_date=?, scheduled_time=?, end_time=?, status=?,
-                    notes=?, paid_date=?, amount_paid=?
+                    description=?, bike_description=?, service_types=?, region_id=?,
+                    tax_inclusive=?, scheduled_date=?, scheduled_time=?, end_time=?,
+                    status=?, notes=?, paid_date=?, amount_paid=?
                 WHERE id=?
             """, (job_type, customer_id, cust_name, cust_email, cust_phone,
                   suburb, address, request.form.get('description', ''),
+                  request.form.get('bike_description', ''),
                   ', '.join(request.form.getlist('service_types')),
                   int(request.form['region_id']),
                   1 if request.form.get('tax_inclusive', '1') == '1' else 0,
@@ -374,6 +376,10 @@ def add_part(job_id):
                         unit_cost=excluded.unit_cost,
                         active=1
                 """, (description, part_number, unit_cost))
+                # Ensure active=1 regardless of pre-existing state
+                conn.execute(
+                    "UPDATE parts SET active=1 WHERE part_number=?",
+                    (part_number,))
                 master_part_id = conn.execute(
                     "SELECT id FROM parts WHERE part_number=?",
                     (part_number,)).fetchone()['id']
