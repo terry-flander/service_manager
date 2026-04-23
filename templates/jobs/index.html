@@ -61,7 +61,7 @@
     </thead>
     <tbody>
       {% for job in jobs %}
-      <tr>
+      <tr style="cursor:pointer;" onclick="window.location='{{ url_for('jobs.job_detail', job_id=job['id']) }}'">
         <td>
           <a href="{{ url_for('jobs.job_detail', job_id=job['id']) }}" class="mono">{{ job['reference'] }}</a>
           <span class="badge-status {% if job['job_type'] == 'workshop' %}status-in_progress{% else %}status-scheduled{% endif %}"

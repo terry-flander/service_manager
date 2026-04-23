@@ -162,7 +162,9 @@
       {% for em in thread_emails %}
       <div style="padding:0.75rem 1.25rem;
                   {% if not loop.last %}border-bottom:1px solid var(--sd-border);{% endif %}
-                  {% if em['direction'] == 'outbound' %}background:rgba(249,115,22,0.04);{% endif %}">
+                  {% if em['direction'] == 'outbound' %}background:rgba(249,115,22,0.04);{% endif %}
+                  {% if em['body'] %}cursor:pointer;{% endif %}"
+           {% if em['body'] %}onclick="openEmailPopup('{{ url_for('jobs.email_message', import_id=em['id']) }}')"{% endif %}>
         <div style="display:flex; align-items:center; justify-content:space-between;
                     gap:0.75rem; flex-wrap:wrap;">
           <div style="display:flex; align-items:center; gap:0.6rem; min-width:0;">
@@ -200,11 +202,11 @@
             <span class="mono" style="font-size:0.72rem; color:var(--sd-muted);">
               {{ em['sent_at'][:16] }}
             </span>
-            {% if em['direction'] == 'inbound' and em['body'] %}
-            <a href="{{ url_for('jobs.email_message', import_id=em['id']) }}"
-               class="btn-ghost" style="padding:0.15rem 0.5rem; font-size:0.72rem;">
+            {% if em['body'] %}
+            <button onclick="event.stopPropagation(); openEmailPopup('{{ url_for('jobs.email_message', import_id=em['id']) }}')"
+                    class="btn-ghost" style="padding:0.15rem 0.5rem; font-size:0.72rem;">
               <i class="bi bi-envelope-open"></i> View
-            </a>
+            </button>
             {% endif %}
           </div>
         </div>

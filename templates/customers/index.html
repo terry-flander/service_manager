@@ -41,7 +41,7 @@
     </thead>
     <tbody>
       {% for c in customers %}
-      <tr>
+      <tr style="cursor:pointer;" onclick="window.location='{{ url_for('customers.edit_customer', customer_id=c['id']) }}'">
         <td style="font-weight:500;">
           <a href="{{ url_for('customers.edit_customer', customer_id=c['id']) }}"
              style="color:var(--sd-text); text-decoration:none;">{{ c['name'] }}</a>

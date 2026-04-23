@@ -1,76 +1,126 @@
-{% extends "base.html" %}
-{% block title %}Email Message{% endblock %}
-{% block topbar_title %}Email Message{% endblock %}
-{% block topbar_actions %}
-  <a href="{{ url_for('jobs.email_imports') }}" class="btn-ghost">
-    <i class="bi bi-arrow-left"></i> <span>Import Log</span>
-  </a>
-  {% if imp['job_id'] %}
-  <a href="{{ url_for('jobs.job_detail', job_id=imp['job_id']) }}" class="btn-accent">
-    <i class="bi bi-briefcase"></i> <span>{{ imp['reference'] or 'Job' }}</span>
-  </a>
-  {% endif %}
-{% endblock %}
+<!DOCTYPE html>
+<html lang="en" data-theme="{{ theme }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email Message</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    :root, [data-theme="dark"] {
+      --sd-navy:   #0f172a;
+      --sd-slate:  #1e293b;
+      --sd-border: #334155;
+      --sd-accent: #f97316;
+      --sd-text:   #e2e8f0;
+      --sd-muted:  #94a3b8;
+      color-scheme: dark;
+    }
+    [data-theme="light"] {
+      --sd-navy:   #f1f5f9;
+      --sd-slate:  #ffffff;
+      --sd-border: #e2e8f0;
+      --sd-accent: #ea580c;
+      --sd-text:   #0f172a;
+      --sd-muted:  #64748b;
+      color-scheme: light;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+      font-size: 0.875rem;
+      background: var(--sd-navy);
+      color: var(--sd-text);
+    }
+    .card {
+      background: var(--sd-slate);
+      border: 1px solid var(--sd-border);
+      border-radius: 8px;
+      margin: 1rem;
+    }
+    .card-header {
+      padding: 0.65rem 1.1rem;
+      border-bottom: 1px solid var(--sd-border);
+      font-size: 0.78rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--sd-muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .meta-table { width: 100%; border-collapse: collapse; }
+    .meta-table td { padding: 0.45rem 0; }
+    .meta-table tr { border-bottom: 1px solid var(--sd-border); }
+    .meta-table tr:last-child { border-bottom: none; }
+    .label { width: 28%; color: var(--sd-muted); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; padding-right: 0.75rem; }
+    a { color: var(--sd-accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .mono { font-family: 'IBM Plex Mono', monospace; }
+    .badge {
+      display: inline-block;
+      padding: 0.1rem 0.45rem;
+      border-radius: 4px;
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      background: rgba(148,163,184,0.15);
+      color: var(--sd-muted);
+    }
+    .badge-ok { background: rgba(52,211,153,0.12); color: #34d399; }
+    .badge-thread { background: rgba(96,165,250,0.12); color: #60a5fa; }
+  </style>
+</head>
+<body>
 
-{% block content %}
-<div class="row justify-content-center">
-  <div class="col-lg-8">
-
-    <div class="sd-card mb-3">
-      <div class="sd-card-header">
-        Message Details
-        <span class="badge-status
-          {% if imp['status'] == 'ok' %}status-complete
-          {% elif imp['status'] == 'thread' %}status-scheduled
-          {% else %}status-void{% endif %}"
-          style="font-size:0.7rem;">
-          {{ imp['status'] }}
-        </span>
-      </div>
-      <div style="padding:1.25rem;">
-        <table style="width:100%; border-collapse:collapse; font-size:0.875rem;">
-          {% for label, value in [
-            ('From',      imp['sender'] or '—'),
-            ('Subject',   imp['subject'] or '—'),
-            ('Received',  imp['imported_at'][:16] if imp['imported_at'] else '—'),
-            ('Job',       imp['reference'] or '—'),
-          ] %}
-          <tr style="border-bottom:1px solid var(--sd-border);">
-            <td style="padding:0.5rem 1rem 0.5rem 0; width:25%;
-                       color:var(--sd-muted); font-size:0.72rem;
-                       text-transform:uppercase; letter-spacing:0.06em;">
-              {{ label }}
-            </td>
-            <td style="padding:0.5rem 0;">
-              {% if label == 'Job' and imp['job_id'] %}
-              <a href="{{ url_for('jobs.job_detail', job_id=imp['job_id']) }}"
-                 style="color:var(--sd-accent);">{{ value }}</a>
-              {% else %}
-              {{ value }}
-              {% endif %}
-            </td>
-          </tr>
-          {% endfor %}
-        </table>
-      </div>
+  <div class="card">
+    <div class="card-header">
+      <span>Message Details</span>
+      <span class="badge {% if imp['status'] == 'ok' %}badge-ok{% elif imp['status'] == 'thread' %}badge-thread{% endif %}">
+        {{ imp['status'] }}
+      </span>
     </div>
-
-    <div class="sd-card">
-      <div class="sd-card-header">Message Body</div>
-      <div style="padding:1.25rem;">
-        {% if imp['body'] %}
-        <pre style="white-space:pre-wrap; word-break:break-word;
-                    font-family:'IBM Plex Sans',sans-serif;
-                    font-size:0.875rem; color:var(--sd-text);
-                    margin:0; line-height:1.6;">{{ imp['body'] }}</pre>
-        {% else %}
-        <span style="color:var(--sd-muted); font-size:0.875rem;">
-          No message body saved.
-        </span>
+    <div style="padding: 0.75rem 1.1rem;">
+      <table class="meta-table">
+        <tr>
+          <td class="label">From</td>
+          <td>{{ imp['sender'] or '—' }}</td>
+        </tr>
+        <tr>
+          <td class="label">Subject</td>
+          <td>{{ imp['subject'] or '—' }}</td>
+        </tr>
+        <tr>
+          <td class="label">Received</td>
+          <td class="mono" style="font-size:0.8rem;">{{ imp['imported_at'][:16] if imp['imported_at'] else '—' }}</td>
+        </tr>
+        {% if imp['job_id'] %}
+        <tr>
+          <td class="label">Job</td>
+          <td>
+            <a href="{{ url_for('jobs.job_detail', job_id=imp['job_id']) }}" target="_top">
+              {{ imp['reference'] or imp['job_id'] }}
+              <i class="bi bi-box-arrow-up-right" style="font-size:0.7rem;"></i>
+            </a>
+          </td>
+        </tr>
         {% endif %}
-      </div>
+      </table>
     </div>
-
   </div>
-</div>
-{% endblock %}
+
+  <div class="card">
+    <div class="card-header">Message Body</div>
+    <div style="padding: 1rem 1.1rem;">
+      {% if imp['body'] %}
+      <pre style="white-space:pre-wrap; word-break:break-word; font-family:'IBM Plex Sans','Segoe UI',sans-serif; font-size:0.875rem; color:var(--sd-text); margin:0; line-height:1.65;">{{ imp['body'] }}</pre>
+      {% else %}
+      <span style="color:var(--sd-muted);">No message body saved.</span>
+      {% endif %}
+    </div>
+  </div>
+
+</body>
+</html>
