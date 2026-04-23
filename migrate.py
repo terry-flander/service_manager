@@ -1,7 +1,7 @@
 from models import get_db
 with get_db() as conn:
-    try: conn.execute('ALTER TABLE jobs ADD COLUMN payment_type TEXT')
+    try: conn.execute('ALTER TABLE jobs ADD COLUMN bike_description TEXT')
     except: pass
-    conn.commit()
-    print('Done')
+conn.commit() 
+print('Done')
     

@@ -3,13 +3,25 @@ from models import get_db
 
 calendar_bp = Blueprint('calendar', __name__)
 
-STATUS_COLORS = {
+STATUS_COLOR_DEFAULTS = {
     'pending':     '#f59e0b',
     'scheduled':   '#3b82f6',
     'in_progress': '#8b5cf6',
     'complete':    '#10b981',
     'invoiced':    '#6b7280',
+    'paid':        '#10b981',
+    'void':        '#ef4444',
 }
+
+def _get_status_colors(conn):
+    colors = dict(STATUS_COLOR_DEFAULTS)
+    for s in colors:
+        row = conn.execute(
+            "SELECT value FROM settings WHERE key=?",
+            (f'status_color_{s}',)).fetchone()
+        if row:
+            colors[s] = row['value']
+    return colors
 
 
 @calendar_bp.route('/calendar')
@@ -63,7 +75,7 @@ def save_prefs():
 def events():
     with get_db() as conn:
         jobs = conn.execute("""
-            SELECT j.id, j.reference, j.customer_name,
+            SELECT j.id, j.reference, j.customer_name, j.customer_phone,
                    j.scheduled_date, j.scheduled_time, j.end_time,
                    j.status, j.address, j.suburb, r.name as region_name
             FROM jobs j JOIN regions r ON j.region_id = r.id
@@ -81,6 +93,8 @@ def events():
             ORDER BY rd.date
         """).fetchall()
 
+    with get_db() as conn:
+        status_colors = _get_status_colors(conn)
     CANARY = '#FFEF00'
     result = []
 
@@ -115,14 +129,44 @@ def events():
             'title':   f"{job['reference']} — {job['customer_name']}",
             'start':   start,
             'allDay':  all_day,
-            'color':   STATUS_COLORS.get(job['status'], '#3b82f6'),
+            'color':   status_colors.get(job['status'], '#3b82f6'),
             'end':     end,
             'url':     f"/jobs/{job['id']}",
             'extendedProps': {
                 'region':  job['region_name'],
                 'status':  job['status'],
                 'address': location,
+                'phone':   job['customer_phone'] or '',
                 'time':    job['scheduled_time'] or '',
+            }
+        })
+
+    # Custom calendar events
+    with get_db() as conn:
+        cal_events = conn.execute(
+            "SELECT * FROM calendar_events ORDER BY date, start_time"
+        ).fetchall()
+    for ev in cal_events:
+        if ev['start_time']:
+            start = f"{ev['date']}T{ev['start_time']}:00"
+            end   = f"{ev['date']}T{ev['end_time']}:00" if ev['end_time'] else None
+            all_day = False
+        else:
+            start   = ev['date']
+            end     = None
+            all_day = True
+        result.append({
+            'id':    f"ce|{ev['id']}",
+            'title': ev['title'],
+            'start': start,
+            'end':   end,
+            'allDay': all_day,
+            'color': ev['color'] or '#6366f1',
+            'extendedProps': {
+                'type':        'cal_event',
+                'description': ev['description'] or '',
+                'address':     ev['address']     or '',
+                'event_id':    ev['id'],
             }
         })
     return jsonify(result)
@@ -181,3 +225,85 @@ def move_region_date():
         conn.commit()
 
     return jsonify({'ok': True, 'region_id': region_id, 'new_date': new_date})
+
+
+# ── Calendar event CRUD ───────────────────────────────────────────────────────
+
+@calendar_bp.route('/calendar/events/new', methods=['POST'])
+def new_event():
+    data = request.get_json()
+    with get_db() as conn:
+        conn.execute("""
+            INSERT INTO calendar_events
+                (date, start_time, end_time, title, description, address, color)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            data.get('date', ''),
+            data.get('start_time') or None,
+            data.get('end_time')   or None,
+            data.get('title', 'New Event'),
+            data.get('description', ''),
+            data.get('address', ''),
+            data.get('color', '#6366f1'),
+        ))
+        ev_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.commit()
+    return jsonify({'ok': True, 'id': ev_id})
+
+
+@calendar_bp.route('/calendar/events/<int:ev_id>', methods=['GET'])
+def get_event(ev_id):
+    with get_db() as conn:
+        ev = conn.execute(
+            "SELECT * FROM calendar_events WHERE id=?", (ev_id,)).fetchone()
+    if not ev:
+        return jsonify({'error': 'not found'}), 404
+    return jsonify(dict(ev))
+
+
+@calendar_bp.route('/calendar/events/<int:ev_id>', methods=['PUT'])
+def update_event(ev_id):
+    data = request.get_json()
+    with get_db() as conn:
+        conn.execute("""
+            UPDATE calendar_events
+            SET date=?, start_time=?, end_time=?, title=?,
+                description=?, address=?, color=?,
+                updated_at=datetime('now')
+            WHERE id=?
+        """, (
+            data.get('date', ''),
+            data.get('start_time') or None,
+            data.get('end_time')   or None,
+            data.get('title', ''),
+            data.get('description', ''),
+            data.get('address', ''),
+            data.get('color', '#6366f1'),
+            ev_id,
+        ))
+        conn.commit()
+    return jsonify({'ok': True})
+
+
+@calendar_bp.route('/calendar/events/<int:ev_id>', methods=['DELETE'])
+def delete_event(ev_id):
+    with get_db() as conn:
+        conn.execute("DELETE FROM calendar_events WHERE id=?", (ev_id,))
+        conn.commit()
+    return jsonify({'ok': True})
+
+
+@calendar_bp.route('/calendar/move-event', methods=['POST'])
+def move_event():
+    """Called when a custom calendar event is dragged to new date/time."""
+    data     = request.get_json()
+    ev_id    = int(data['id'])
+    new_date = data.get('date')
+    new_start = data.get('start_time')
+    new_end   = data.get('end_time')
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE calendar_events SET date=?, start_time=?, end_time=? WHERE id=?",
+            (new_date, new_start, new_end, ev_id))
+        conn.commit()
+    return jsonify({'ok': True})

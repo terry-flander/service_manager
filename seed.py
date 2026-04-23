@@ -47,12 +47,6 @@ def _seed_parts(conn):
                 active    = 1
         """, (name, part_number, unit_cost, unit))
 
-    # Deactivate any parts no longer in the CSV
-    conn.execute(
-        f"UPDATE parts SET active=0 WHERE part_number NOT IN "
-        f"({','.join('?' * len(csv_nums))})",
-        csv_nums)
-
     print(f'✓ {len(parts)} parts upserted from parts.csv')
 
 

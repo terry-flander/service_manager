@@ -35,9 +35,9 @@
   .legend { display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; font-size: 0.78rem; }
   .legend-item { display: flex; align-items: center; gap: 0.4rem; }
   .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
-
-  /* Drag feedback */
   .fc-event-dragging { opacity: 0.75; box-shadow: 0 4px 16px rgba(0,0,0,0.35); }
+
+  /* Toast */
   #drag-toast {
     position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
     background: var(--sd-slate); border: 1px solid var(--sd-border);
@@ -49,23 +49,153 @@
   #drag-toast.show { display: block; }
   #drag-toast.success { border-color: rgba(16,185,129,0.5); }
   #drag-toast.error   { border-color: rgba(248,113,113,0.5); color: #f87171; }
+
+  /* Event modal */
+  #event-modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55); z-index: 1000;
+    backdrop-filter: blur(2px);
+  }
+  #event-modal-overlay.open { display: flex; align-items: center; justify-content: center; }
+  #event-modal {
+    background: var(--sd-surface); border: 1px solid var(--sd-border);
+    border-radius: 10px; width: min(520px, calc(100vw - 2rem));
+    max-height: calc(100vh - 4rem); overflow-y: auto;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  }
+  #event-modal .modal-header {
+    padding: 1rem 1.25rem; border-bottom: 1px solid var(--sd-border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  #event-modal .modal-header h5 {
+    font-size: 0.9rem; font-weight: 600; color: var(--sd-text); margin: 0;
+  }
+  #event-modal .modal-body { padding: 1.25rem; }
+  #event-modal .modal-footer {
+    padding: 0.875rem 1.25rem; border-top: 1px solid var(--sd-border);
+    display: flex; justify-content: space-between; gap: 0.5rem;
+  }
+  #event-modal .btn-close-modal {
+    background: none; border: none; color: var(--sd-muted);
+    font-size: 1.2rem; cursor: pointer; line-height: 1; padding: 0.2rem;
+  }
+  /* Job event popup (read-only view) */
+  #job-popup {
+    display: none; position: absolute;
+    background: var(--sd-surface); border: 1px solid var(--sd-border);
+    border-radius: 8px; padding: 0.875rem 1rem;
+    min-width: 220px; max-width: 300px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    z-index: 500; font-size: 0.82rem;
+  }
+  #job-popup .popup-title { font-weight: 600; color: var(--sd-text); margin-bottom: 0.35rem; }
+  #job-popup .popup-row { color: var(--sd-muted); margin-bottom: 0.2rem; }
+  #job-popup .popup-close {
+    position: absolute; top: 0.4rem; right: 0.5rem;
+    background: none; border: none; color: var(--sd-muted);
+    cursor: pointer; font-size: 1rem; line-height: 1;
+  }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="legend">
-  <div class="legend-item"><div class="legend-dot" style="background:#f59e0b;"></div> Pending</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#3b82f6;"></div> Scheduled</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#8b5cf6;"></div> In Progress</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#10b981;"></div> Complete</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#6b7280;"></div> Invoiced</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--sc-pending,#f59e0b);"></div> Pending</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--sc-scheduled,#3b82f6);"></div> Scheduled</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--sc-in_progress,#8b5cf6);"></div> In Progress</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--sc-complete,#10b981);"></div> Complete</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--sc-invoiced,#6b7280);"></div> Invoiced</div>
   <div class="legend-item"><div class="legend-dot" style="background:#FFEF00; border:1px solid #ccc;"></div> Region Date</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#6366f1;"></div> Event</div>
   <div class="legend-item" style="margin-left:auto; color:var(--sd-muted); font-size:0.72rem;">
-    <i class="bi bi-arrows-move"></i> Drag events to reschedule
+    <i class="bi bi-arrows-move"></i> Drag to reschedule &nbsp;·&nbsp;
+    <i class="bi bi-plus-circle"></i> Click date to add event
   </div>
 </div>
 
 <div id="drag-toast"></div>
+
+<!-- Job info popup -->
+<div id="job-popup">
+  <button class="popup-close" onclick="document.getElementById('job-popup').style.display='none'">×</button>
+  <div class="popup-title" id="popup-title"></div>
+  <div class="popup-row" id="popup-status"></div>
+  <div class="popup-row" id="popup-time"></div>
+  <div class="popup-row" id="popup-phone" style="display:none;">
+    <i class="bi bi-telephone" style="font-size:0.75rem;"></i>
+    <a id="popup-phone-link" href="#" style="color:var(--sd-accent); text-decoration:none;"></a>
+  </div>
+  <div class="popup-row" id="popup-addr" style="display:none;">
+    <i class="bi bi-geo-alt" style="font-size:0.75rem;"></i>
+    <a id="popup-map-link" href="#" target="_blank" rel="noopener"
+       style="color:var(--sd-accent); text-decoration:none; word-break:break-word;"></a>
+  </div>
+  <div style="margin-top:0.5rem;">
+    <a id="popup-link" href="#" class="btn-accent" style="font-size:0.78rem; padding:0.3rem 0.75rem;">
+      View Job
+    </a>
+  </div>
+</div>
+
+<!-- Calendar event modal -->
+<div id="event-modal-overlay">
+  <div id="event-modal">
+    <div class="modal-header">
+      <h5 id="modal-title">New Event</h5>
+      <button class="btn-close-modal" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="row g-3">
+        <div class="col-12">
+          <label class="sd-label">Title *</label>
+          <input type="text" id="ev-title" class="sd-input" placeholder="Event title" required>
+        </div>
+        <div class="col-md-4">
+          <label class="sd-label">Date *</label>
+          <input type="date" id="ev-date" class="sd-input">
+        </div>
+        <div class="col-md-4">
+          <label class="sd-label">Start Time</label>
+          <input type="time" id="ev-start" class="sd-input" step="1800">
+        </div>
+        <div class="col-md-4">
+          <label class="sd-label">End Time</label>
+          <input type="time" id="ev-end" class="sd-input" step="1800">
+        </div>
+        <div class="col-12">
+          <label class="sd-label">Description</label>
+          <textarea id="ev-desc" class="sd-input" rows="3" placeholder="Optional notes…"></textarea>
+        </div>
+        <div class="col-md-8">
+          <label class="sd-label">Address</label>
+          <input type="text" id="ev-addr" class="sd-input" placeholder="Optional — links to Google Maps">
+        </div>
+        <div class="col-md-4">
+          <label class="sd-label">Colour</label>
+          <div style="display:flex; gap:0.5rem; align-items:center;">
+            <input type="color" id="ev-color" value="#6366f1"
+                   style="width:44px; height:40px; border:1px solid var(--sd-border);
+                          border-radius:6px; cursor:pointer; background:none; padding:2px;">
+            <input type="text" id="ev-color-hex" class="sd-input mono"
+                   value="#6366f1" maxlength="7" style="font-size:0.85rem;"
+                   oninput="syncHex(this.value)" placeholder="#6366f1">
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button id="modal-delete-btn" class="btn-danger" onclick="deleteEvent()" style="display:none;">
+        <i class="bi bi-trash3"></i> Delete
+      </button>
+      <div style="display:flex; gap:0.5rem; margin-left:auto;">
+        <button class="btn-ghost" onclick="closeModal()">Cancel</button>
+        <button class="btn-accent" onclick="saveEvent()">
+          <i class="bi bi-check-lg"></i> <span id="modal-save-label">Create Event</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div id="calendar-wrap">
   <div id="calendar"></div>
@@ -78,7 +208,7 @@
 document.addEventListener('DOMContentLoaded', function() {
   const calendarEl = document.getElementById('calendar');
   const toast      = document.getElementById('drag-toast');
-  let toastTimer;
+  let toastTimer, currentEventId = null;
 
   function showToast(msg, type) {
     toast.textContent = msg;
@@ -87,26 +217,150 @@ document.addEventListener('DOMContentLoaded', function() {
     toastTimer = setTimeout(() => { toast.className = ''; }, 3000);
   }
 
-  // ── Saved prefs injected from server ──────────────────────────────────────
+  // ── Modal helpers ──────────────────────────────────────────────────────────
+  function openModal(title, dateStr, startTime, endTime, isNew) {
+    currentEventId = isNew ? null : currentEventId;
+    document.getElementById('modal-title').textContent      = title;
+    document.getElementById('modal-save-label').textContent = isNew ? 'Create Event' : 'Save Changes';
+    document.getElementById('modal-delete-btn').style.display = isNew ? 'none' : '';
+    document.getElementById('ev-date').value  = dateStr || '';
+    document.getElementById('ev-start').value = startTime || '';
+    document.getElementById('ev-end').value   = endTime   || '';
+    if (isNew) {
+      document.getElementById('ev-title').value = '';
+      document.getElementById('ev-desc').value  = '';
+      document.getElementById('ev-addr').value  = '';
+      document.getElementById('ev-color').value     = '#6366f1';
+      document.getElementById('ev-color-hex').value = '#6366f1';
+    }
+    document.getElementById('event-modal-overlay').classList.add('open');
+    document.getElementById('ev-title').focus();
+  }
+
+  window.closeModal = function() {
+    document.getElementById('event-modal-overlay').classList.remove('open');
+    currentEventId = null;
+  };
+
+  // Close on backdrop click
+  document.getElementById('event-modal-overlay').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+
+  // Color pickers stay in sync
+  document.getElementById('ev-color').addEventListener('input', function() {
+    document.getElementById('ev-color-hex').value = this.value;
+  });
+  window.syncHex = function(hex) {
+    if (/^#[0-9a-fA-F]{6}$/.test(hex))
+      document.getElementById('ev-color').value = hex;
+  };
+
+  function getFormData() {
+    return {
+      title:       document.getElementById('ev-title').value.trim(),
+      date:        document.getElementById('ev-date').value,
+      start_time:  document.getElementById('ev-start').value || null,
+      end_time:    document.getElementById('ev-end').value   || null,
+      description: document.getElementById('ev-desc').value.trim(),
+      address:     document.getElementById('ev-addr').value.trim(),
+      color:       document.getElementById('ev-color').value,
+    };
+  }
+
+  // ── Save / Delete ──────────────────────────────────────────────────────────
+  window.saveEvent = function() {
+    const data = getFormData();
+    if (!data.title || !data.date) {
+      showToast('Title and date are required.', 'error'); return;
+    }
+    const isNew = currentEventId === null;
+    const url    = isNew ? '/calendar/events/new' : `/calendar/events/${currentEventId}`;
+    const method = isNew ? 'POST' : 'PUT';
+
+    fetch(url, { method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) })
+      .then(r => r.json())
+      .then(res => {
+        if (res.ok) {
+          closeModal();
+          calendar.refetchEvents();
+          showToast(isNew ? '✓ Event created' : '✓ Event saved', 'success');
+        }
+      });
+  };
+
+  window.deleteEvent = function() {
+    if (!currentEventId || !confirm('Delete this event?')) return;
+    fetch(`/calendar/events/${currentEventId}`, { method: 'DELETE' })
+      .then(r => r.json())
+      .then(res => {
+        if (res.ok) {
+          closeModal();
+          calendar.refetchEvents();
+          showToast('Event deleted.', 'success');
+        }
+      });
+  };
+
+  // ── Job popup ──────────────────────────────────────────────────────────────
+  const jobPopup = document.getElementById('job-popup');
+
+  function showJobPopup(info) {
+    const p = info.event.extendedProps;
+    document.getElementById('popup-title').textContent  = info.event.title;
+    document.getElementById('popup-status').textContent = '● ' + (p.status||'').replace('_',' ');
+    document.getElementById('popup-time').textContent   = p.time ? '🕐 ' + p.time : '';
+
+    // Phone
+    const phoneRow  = document.getElementById('popup-phone');
+    const phoneLink = document.getElementById('popup-phone-link');
+    if (p.phone) {
+      phoneLink.textContent = p.phone;
+      phoneLink.href        = 'tel:' + p.phone.replace(/\s/g, '');
+      phoneRow.style.display = '';
+    } else {
+      phoneRow.style.display = 'none';
+    }
+
+    // Address with Google Maps link
+    const addrRow = document.getElementById('popup-addr');
+    const mapLink = document.getElementById('popup-map-link');
+    if (p.address) {
+      mapLink.textContent = p.address;
+      mapLink.href        = 'https://maps.google.com/?q=' + encodeURIComponent(p.address);
+      addrRow.style.display = '';
+    } else {
+      addrRow.style.display = 'none';
+    }
+
+    document.getElementById('popup-link').href = info.event.url || '#';
+
+    // Position popup below the event, keeping it on screen
+    const rect   = info.el.getBoundingClientRect();
+    const popW   = 280;
+    let   left   = rect.left + window.scrollX;
+    let   top    = rect.bottom + window.scrollY + 4;
+    if (left + popW > window.innerWidth - 8)
+      left = window.innerWidth - popW - 8 + window.scrollX;
+    jobPopup.style.left    = left + 'px';
+    jobPopup.style.top     = top  + 'px';
+    jobPopup.style.display = 'block';
+  }
+
+  // ── Calendar init ──────────────────────────────────────────────────────────
   const SAVED_VIEW = {{ cal_view | tojson }};
   const SAVED_DATE = {{ cal_date | tojson }};
 
-  // Only restore date if it is NOT the current month/week (avoids stale jumps)
   function shouldRestoreDate(view, dateStr) {
     if (!dateStr) return false;
-    const saved = new Date(dateStr);
-    const now   = new Date();
-    if (view === 'dayGridMonth') {
-      // Same year+month → don't force a date (show current month naturally)
-      return !(saved.getFullYear() === now.getFullYear() &&
-               saved.getMonth()    === now.getMonth());
-    }
+    const saved = new Date(dateStr), now = new Date();
+    if (view === 'dayGridMonth')
+      return !(saved.getFullYear()===now.getFullYear() && saved.getMonth()===now.getMonth());
     if (view === 'timeGridWeek') {
-      // Same ISO week → don't force
-      const weekStart = d => { const s = new Date(d); s.setDate(s.getDate() - s.getDay()); return s; };
-      return weekStart(saved).toDateString() !== weekStart(now).toDateString();
+      const ws = d => { const s=new Date(d); s.setDate(s.getDate()-s.getDay()); return s; };
+      return ws(saved).toDateString() !== ws(now).toDateString();
     }
-    return true; // day view — always restore
+    return true;
   }
 
   const calOpts = {
@@ -116,17 +370,12 @@ document.addEventListener('DOMContentLoaded', function() {
       center: 'title',
       right:  'dayGridMonth,timeGridWeek,timeGridDay'
     },
-    initialDate:  (shouldRestoreDate(SAVED_VIEW, SAVED_DATE) ? SAVED_DATE : undefined),
+    initialDate: (shouldRestoreDate(SAVED_VIEW, SAVED_DATE) ? SAVED_DATE : undefined),
 
-    // ── Save prefs whenever view or date changes ───────────────────────────
     datesSet: function(info) {
-      const view = info.view.type;
-      // Use the first visible date as the anchor
-      const date = info.startStr ? info.startStr.slice(0, 10) : '';
       fetch('/calendar/prefs', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ view: view, date: date }),
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ view: info.view.type, date: info.startStr.slice(0,10) }),
       });
     },
 
@@ -135,24 +384,67 @@ document.addEventListener('DOMContentLoaded', function() {
     allDaySlot:   true,
     height:       'auto',
     nowIndicator: true,
-    editable:     true,      // enables drag-and-drop for all events
+    editable:     true,
     droppable:    true,
+    selectable:   true,
 
     events: '/calendar/events',
 
-    // ── Event click — navigate to job (only for job events) ──────────────────
+    // ── Click on empty date/slot → open new event modal ────────────────────
+    dateClick: function(info) {
+      // Don't open if clicking on an existing event
+      jobPopup.style.display = 'none';
+      const dateStr = info.dateStr.slice(0, 10);
+      const timeStr = info.allDay ? '' : info.dateStr.slice(11, 16);
+      // Default end = start + 1 hour
+      let endStr = '';
+      if (timeStr) {
+        const [h, m] = timeStr.split(':').map(Number);
+        const endH = String(Math.min(h + 1, 23)).padStart(2, '0');
+        endStr = `${endH}:${m.toString().padStart(2,'0')}`;
+      }
+      openModal('New Event', dateStr, timeStr, endStr, true);
+    },
+
+    // ── Click on event ─────────────────────────────────────────────────────
     eventClick: function(info) {
       info.jsEvent.preventDefault();
       const p = info.event.extendedProps;
-      if (p.type === 'region_date') return;  // rd| prefix  // region dates don't navigate
-      if (info.event.url) window.location.href = info.event.url;
+      jobPopup.style.display = 'none';
+
+      if (p.type === 'region_date') return;
+
+      if (p.type === 'cal_event') {
+        // Open edit modal for custom events
+        currentEventId = p.event_id;
+        fetch(`/calendar/events/${p.event_id}`)
+          .then(r => r.json())
+          .then(ev => {
+            openModal('Edit Event', ev.date, ev.start_time||'', ev.end_time||'', false);
+            document.getElementById('ev-title').value = ev.title       || '';
+            document.getElementById('ev-desc').value  = ev.description || '';
+            document.getElementById('ev-addr').value  = ev.address     || '';
+            const col = ev.color || '#6366f1';
+            document.getElementById('ev-color').value     = col;
+            document.getElementById('ev-color-hex').value = col;
+          });
+        return;
+      }
+
+      // Job event — show popup
+      showJobPopup(info);
     },
 
-    // ── Tooltip on hover ─────────────────────────────────────────────────────
     eventDidMount: function(info) {
       const p = info.event.extendedProps;
       if (p.type === 'region_date') {
         info.el.title = `Region: ${p.region}\nStatus: ${p.status}`;
+      } else if (p.type === 'cal_event') {
+        const parts = [p.description, p.address].filter(Boolean);
+        info.el.title = parts.join('\n') || info.event.title;
+        if (p.address) {
+          info.el.style.cursor = 'pointer';
+        }
       } else {
         const time = p.time ? ` @ ${p.time}` : '';
         info.el.title = `${p.region}${time}\n${p.address}\nStatus: ${p.status}`;
@@ -164,65 +456,82 @@ document.addEventListener('DOMContentLoaded', function() {
       const event = info.event;
       const p     = event.extendedProps;
       const id    = event.id;
+      jobPopup.style.display = 'none';
 
       if (p.type === 'region_date') {
-        // ── Region date drag ─────────────────────────────────────────────────
         const newDate = event.startStr.slice(0, 10);
-
         fetch('/calendar/move-region-date', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ id: id, date: newDate })
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body:   JSON.stringify({ id, date: newDate })
         })
         .then(r => r.json())
         .then(data => {
-          if (data.ok) {
-            showToast(`✓ ${event.title} moved to ${newDate}`, 'success');
-          } else {
-            info.revert();
-            showToast('Could not save — please try again.', 'error');
-          }
+          if (data.ok) showToast(`✓ ${event.title} moved to ${newDate}`, 'success');
+          else { info.revert(); showToast('Could not save.', 'error'); }
         })
         .catch(() => { info.revert(); showToast('Network error.', 'error'); });
-
-      } else {
-        // ── Job drag ─────────────────────────────────────────────────────────
-        const start   = event.start;
-        const newDate = start.toISOString().slice(0, 10);
-
-        let newTime   = null;
-        let newEndTime = null;
-        if (!event.allDay) {
-          const pad = n => String(n).padStart(2, '0');
-          newTime = `${pad(start.getHours())}:${pad(start.getMinutes())}`;
-          if (event.end) {
-            newEndTime = `${pad(event.end.getHours())}:${pad(event.end.getMinutes())}`;
-          }
-        }
-
-        fetch('/calendar/move-job', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ id: id, date: newDate, time: newTime, end_time: newEndTime })
-        })
-        .then(r => r.json())
-        .then(data => {
-          if (data.ok) {
-            const timeStr = data.scheduled_time
-              ? ` at ${data.scheduled_time}` : ' (all day)';
-            showToast(`✓ ${data.reference} → ${data.scheduled_date}${timeStr}`, 'success');
-          } else {
-            info.revert();
-            showToast('Could not save — please try again.', 'error');
-          }
-        })
-        .catch(() => { info.revert(); showToast('Network error.', 'error'); });
+        return;
       }
+
+      if (p.type === 'cal_event') {
+        const start    = event.start;
+        const pad      = n => String(n).padStart(2,'0');
+        const localDate = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+        const newDate  = localDate(start);
+        const newStart = event.allDay ? null : `${pad(start.getHours())}:${pad(start.getMinutes())}`;
+        const newEnd   = (event.end && !event.allDay)
+          ? `${pad(event.end.getHours())}:${pad(event.end.getMinutes())}` : null;
+        fetch('/calendar/move-event', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body:   JSON.stringify({ id: p.event_id, date: newDate, start_time: newStart, end_time: newEnd })
+        })
+        .then(r => r.json())
+        .then(data => {
+          if (data.ok) showToast('✓ Event moved', 'success');
+          else { info.revert(); showToast('Could not save.', 'error'); }
+        })
+        .catch(() => { info.revert(); showToast('Network error.', 'error'); });
+        return;
+      }
+
+      // Job drag — use local date/time to avoid UTC off-by-one
+      const start    = event.start;
+      const pad      = n => String(n).padStart(2, '0');
+      const localDate = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+      const newDate  = localDate(start);
+      let newTime    = null, newEndTime = null;
+      if (!event.allDay) {
+        newTime    = `${pad(start.getHours())}:${pad(start.getMinutes())}`;
+        if (event.end)
+          newEndTime = `${pad(event.end.getHours())}:${pad(event.end.getMinutes())}`;
+      }
+      fetch('/calendar/move-job', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body:   JSON.stringify({ id, date: newDate, time: newTime, end_time: newEndTime })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok) {
+          const timeStr = data.scheduled_time ? ` at ${data.scheduled_time}` : ' (all day)';
+          showToast(`✓ ${data.reference} → ${data.scheduled_date}${timeStr}`, 'success');
+        } else {
+          info.revert();
+          showToast('Could not save.', 'error');
+        }
+      })
+      .catch(() => { info.revert(); showToast('Network error.', 'error'); });
     }
   };
 
   const calendar = new FullCalendar.Calendar(calendarEl, calOpts);
   calendar.render();
+
+  // Close job popup on outside click
+  document.addEventListener('click', function(e) {
+    if (!jobPopup.contains(e.target) && !e.target.closest('.fc-event')) {
+      jobPopup.style.display = 'none';
+    }
+  });
 });
 </script>
 {% endblock %}
