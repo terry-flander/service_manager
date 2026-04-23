@@ -377,7 +377,7 @@
     <a href="{{ url_for('calendar.index') }}" class="sidebar-link {% if request.endpoint == 'calendar.index' %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-calendar3"></i> Calendar
     </a>
-    <a href="{{ url_for('jobs.email_imports') }}" class="sidebar-link {% if request.endpoint in ['jobs.email_imports','jobs.email_message'] %}active{% endif %}" onclick="closeSidebar()">
+    <a href="{{ url_for('jobs.email_imports') }}" class="sidebar-link {% if request.endpoint == 'jobs.email_imports' %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-envelope-arrow-down"></i> Email
     </a>
     <div class="nav-section-label" style="margin-top:0.5rem;">Customers</div>
@@ -550,6 +550,30 @@ function initAddressAutocomplete() {
 </script>
 <script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=places&callback=initAddressAutocomplete" async defer></script>
 {% endif %}
+
+<!-- Email message modal -->
+<dialog id="email-modal" style="padding:0; border:1px solid var(--sd-border); border-radius:10px;
+       background:var(--sd-slate); color:var(--sd-text); width:min(740px,95vw); overflow:hidden;">
+  <div style="display:flex; align-items:center; justify-content:flex-end;
+              padding:0.35rem 0.6rem; border-bottom:1px solid var(--sd-border);">
+    <button onclick="document.getElementById('email-modal').close()"
+            style="background:none; border:none; cursor:pointer; color:var(--sd-muted);
+                   font-size:1.2rem; line-height:1; padding:0.2rem 0.4rem;">
+      <i class="bi bi-x-lg"></i>
+    </button>
+  </div>
+  <iframe id="email-iframe" src="" style="border:none; width:100%; height:75vh; display:block;"></iframe>
+</dialog>
+<script>
+function openEmailPopup(url) {
+  var modal = document.getElementById('email-modal');
+  document.getElementById('email-iframe').src = url;
+  modal.showModal();
+}
+document.getElementById('email-modal').addEventListener('close', function() {
+  document.getElementById('email-iframe').src = '';
+});
+</script>
 
 {% block scripts %}{% endblock %}
 </body>

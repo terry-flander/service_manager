@@ -90,11 +90,11 @@
           </td>
           <td>
             {% if imp['body'] %}
-            <a href="{{ url_for('jobs.email_message', import_id=imp['id']) }}"
-               class="btn-ghost"
-               style="padding:0.2rem 0.6rem; font-size:0.75rem; white-space:nowrap;">
+            <button onclick="openEmailPopup('{{ url_for('jobs.email_message', import_id=imp['id']) }}')"
+                    class="btn-ghost"
+                    style="padding:0.2rem 0.6rem; font-size:0.75rem; white-space:nowrap;">
               <i class="bi bi-envelope-open"></i> View
-            </a>
+            </button>
             {% endif %}
           </td>
         </tr>
