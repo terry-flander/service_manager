@@ -93,6 +93,60 @@ def new_customer():
                            suburbs=suburbs)
 
 
+@customers_bp.route('/customers/<int:customer_id>/merge', methods=['GET', 'POST'])
+def merge_customer(customer_id):
+    with get_db() as conn:
+        source = conn.execute("SELECT * FROM customers WHERE id=?", (customer_id,)).fetchone()
+        if not source:
+            return "Customer not found", 404
+
+    if request.method == 'POST':
+        target_id  = request.form.get('target_id', type=int)
+        keep_email   = request.form.get('keep_email',   'target')
+        keep_phone   = request.form.get('keep_phone',   'target')
+        keep_address = request.form.get('keep_address', 'target')
+
+        if not target_id or target_id == customer_id:
+            flash('Please select a valid target customer.', 'danger')
+            return redirect(url_for('customers.merge_customer', customer_id=customer_id))
+
+        with get_db() as conn:
+            target = conn.execute("SELECT * FROM customers WHERE id=?", (target_id,)).fetchone()
+            if not target:
+                flash('Target customer not found.', 'danger')
+                return redirect(url_for('customers.merge_customer', customer_id=customer_id))
+
+            src = dict(source)
+            tgt = dict(target)
+
+            final_email   = src['email']   if keep_email   == 'source' else tgt['email']
+            final_phone   = src['phone']   if keep_phone   == 'source' else tgt['phone']
+            final_address = src['address'] if keep_address == 'source' else tgt['address']
+            final_suburb  = src['suburb']  if keep_address == 'source' else tgt['suburb']
+
+            # Update target with the chosen contact details
+            conn.execute("""
+                UPDATE customers SET email=?, phone=?, address=?, suburb=?
+                WHERE id=?
+            """, (final_email, final_phone, final_address, final_suburb, target_id))
+
+            # Move all source jobs to target and sync denormalised fields
+            conn.execute("""
+                UPDATE jobs
+                SET customer_id=?, customer_name=?, customer_email=?,
+                    customer_phone=?, suburb=?
+                WHERE customer_id=?
+            """, (target_id, tgt['name'], final_email, final_phone, final_suburb, customer_id))
+
+            conn.execute("DELETE FROM customers WHERE id=?", (customer_id,))
+            conn.commit()
+
+        flash(f'{src["name"]} merged into {tgt["name"]}.', 'success')
+        return redirect(url_for('customers.edit_customer', customer_id=target_id))
+
+    return render_template('customers/merge.html', source=source)
+
+
 @customers_bp.route('/customers/<int:customer_id>/edit', methods=['GET', 'POST'])
 def edit_customer(customer_id):
     with get_db() as conn:
