@@ -49,23 +49,12 @@ def _parse_time(raw):
 
 
 def _end_time(start):
-    """Return start + 1 hour, snapped to TIME_SLOTS."""
-    if not start:
+    """Return start + 1 hour, snapped to the nearest TIME_SLOT."""
+    if not start or not TIME_SLOTS:
         return None
     h, m = int(start[:2]), int(start[3:])
-    mins  = h * 60 + m + 60          # +1 hour
-    mins  = min(mins, 23 * 60 + 30)  # cap at 23:30
-    end   = f"{mins // 60:02d}:{mins % 60:02d}"
-    # Snap to nearest slot
-    if end not in TIME_SLOTS and TIME_SLOTS:
-        idx = min(range(len(TIME_SLOTS)),
-                  key=lambda i: abs(TIME_SLOTS.index(TIME_SLOTS[i])
-                                    if TIME_SLOTS[i] == end else float('inf'))
-                  if end in TIME_SLOTS else
-                  lambda i: abs((int(TIME_SLOTS[i][:2])*60 + int(TIME_SLOTS[i][3:]))
-                                - mins))
-        end = TIME_SLOTS[idx]
-    return end
+    mins = h * 60 + m + 60
+    return min(TIME_SLOTS, key=lambda s: abs(int(s[:2]) * 60 + int(s[3:]) - mins))
 
 
 def _suburb_to_region(conn, suburb):
