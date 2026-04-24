@@ -147,6 +147,31 @@ def _get_text_body(msg):
     return body.strip()
 
 
+def _strip_footer(text):
+    """Remove contact-form footer and standard email signature separator."""
+    text = re.sub(r'\n--\s*\n.*', '', text, flags=re.DOTALL)
+    text = re.sub(r'\nThis e-?mail was sent from a contact form.*', '', text,
+                  flags=re.DOTALL | re.IGNORECASE)
+    return text
+
+
+def _extract_message(text):
+    """Extract a multi-line message body, stopping at the next field label or end of text."""
+    all_stops = (r'(?:Name|Email|Phone|Mobile|Suburb|Address|Location|'
+                 r'Service Type|Service|Message Body|Message|From)\s*[:\-]')
+    for label in ('Message Body', 'Message'):
+        pat = re.compile(
+            r'(?:' + re.escape(label) + r')\s*[:\-]\s*(.*?)(?=\s*(?:' + all_stops + r')|\s*$)',
+            re.IGNORECASE | re.DOTALL
+        )
+        m = pat.search(text)
+        if m:
+            val = re.sub(r'<[^>]+>', ' ', m.group(1)).strip()
+            if val:
+                return val
+    return ''
+
+
 def _extract_field(text, *labels):
     """
     Extract value after a label, stopping at next known label or end of line.
@@ -215,12 +240,13 @@ def _parse_email(msg):
     body      = _get_text_body(msg)
     body_norm = re.sub(r'\bMessage Body\s*:', 'Message:', body, flags=re.IGNORECASE)
     body_norm = re.sub(r'\bMobile\s*:', 'Phone:', body_norm, flags=re.IGNORECASE)
+    body_norm = _strip_footer(body_norm)
 
     name    = _extract_field(body_norm, 'Name', 'From') or from_name
     email_  = _extract_field(body_norm, 'Email') or _extract_email(body_norm) or from_email
     phone   = _extract_field(body_norm, 'Phone')
     suburb  = _extract_field(body_norm, 'Suburb', 'Location')
-    message = _extract_field(body_norm, 'Message', 'Message Body') or body[:1000]
+    message = _extract_message(body_norm) or body_norm.strip()[:1000]
     svc_raw = _extract_field(body_norm, 'Service Type', 'Service Types', 'Service')
 
     if svc_raw:
