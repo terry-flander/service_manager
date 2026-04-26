@@ -10,3 +10,6 @@ build/
 certs/
 .images 
 .venv/
+.claude
+.pytest_cache
+tests/__pycache__/

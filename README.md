@@ -11,3 +11,8 @@ Modules
 ```
 python3 -m pip install -r requirements.txt
 ```
+
+Test Suite
+```
+python3 -m pytest tests/unit/ -v
+```
