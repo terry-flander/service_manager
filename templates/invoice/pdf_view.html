@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="{{ theme }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>{{ page_title }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    :root, [data-theme="dark"] {
+      --sd-navy:   #0f172a;
+      --sd-slate:  #1e293b;
+      --sd-border: #334155;
+      --sd-accent: #f97316;
+      --sd-text:   #e2e8f0;
+      --sd-muted:  #94a3b8;
+      color-scheme: dark;
+    }
+    [data-theme="light"] {
+      --sd-navy:   #f1f5f9;
+      --sd-slate:  #ffffff;
+      --sd-border: #e2e8f0;
+      --sd-accent: #ea580c;
+      --sd-text:   #0f172a;
+      --sd-muted:  #64748b;
+      color-scheme: light;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; }
+    body {
+      font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+      background: var(--sd-navy);
+      color: var(--sd-text);
+      display: flex;
+      flex-direction: column;
+    }
+    .toolbar {
+      background: var(--sd-slate);
+      border-bottom: 1px solid var(--sd-border);
+      padding: env(safe-area-inset-top, 0px) 1rem 0;
+      height: calc(52px + env(safe-area-inset-top, 0px));
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      flex-shrink: 0;
+    }
+    .toolbar-title {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--sd-text);
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      padding: 0.4rem 0.75rem;
+      border-radius: 6px; border: 1px solid var(--sd-border);
+      background: transparent; color: var(--sd-muted);
+      font-size: 0.8rem; font-weight: 500;
+      cursor: pointer; text-decoration: none;
+      white-space: nowrap;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn:hover { color: var(--sd-text); border-color: var(--sd-muted); }
+    .btn-accent {
+      background: var(--sd-accent); border-color: var(--sd-accent); color: #fff;
+    }
+    .btn-accent:hover { opacity: 0.9; }
+    .pdf-frame {
+      flex: 1;
+      width: 100%;
+      border: none;
+      display: block;
+      background: var(--sd-navy);
+    }
+    /* Fallback shown on iOS where iframe PDF may not render inline */
+    .pdf-fallback {
+      display: none;
+      flex: 1;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 1rem;
+      padding: 2rem;
+      text-align: center;
+      color: var(--sd-muted);
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button class="btn" onclick="window.close()">
+      <i class="bi bi-x-lg"></i> Close
+    </button>
+    <span class="toolbar-title">{{ page_title }}</span>
+    <a href="{{ pdf_url }}" download class="btn btn-accent">
+      <i class="bi bi-download"></i> Download
+    </a>
+  </div>
+
+  <iframe class="pdf-frame" id="pdf-frame"
+          src="{{ pdf_url }}"
+          title="{{ page_title }}">
+  </iframe>
+
+  <div class="pdf-fallback" id="pdf-fallback">
+    <i class="bi bi-file-earmark-pdf" style="font-size:3rem; color:var(--sd-accent);"></i>
+    <div>PDF preview is not available in this browser.</div>
+    <a href="{{ pdf_url }}" download class="btn btn-accent" style="margin-top:0.5rem;">
+      <i class="bi bi-download"></i> Download PDF
+    </a>
+  </div>
+
+  <script>
+    // On iOS, iframe PDF may silently fail — detect and show fallback
+    var frame = document.getElementById('pdf-frame');
+    frame.addEventListener('error', function() {
+      frame.style.display = 'none';
+      document.getElementById('pdf-fallback').style.display = 'flex';
+    });
+    // iOS detection: show fallback immediately since iOS doesn't support inline PDFs in iframes
+    var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    if (isIOS) {
+      frame.style.display = 'none';
+      document.getElementById('pdf-fallback').style.display = 'flex';
+    }
+  </script>
+</body>
+</html>
