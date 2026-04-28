@@ -19,89 +19,138 @@
 
 {% block content %}
 
-<!-- Status banner -->
-<div style="margin-bottom:1rem; padding:0.75rem 1.25rem;
+<!-- Polling status banner -->
+<div style="margin-bottom:1rem; padding:0.6rem 1.25rem;
             background:{{ 'rgba(16,185,129,0.08)' if polling_on else 'rgba(248,113,113,0.08)' }};
             border:1px solid {{ 'rgba(16,185,129,0.25)' if polling_on else 'rgba(248,113,113,0.25)' }};
             border-radius:8px; display:flex; align-items:center; gap:0.75rem;
-            font-size:0.875rem;">
+            font-size:0.875rem; flex-wrap:wrap;">
   <i class="bi bi-{{ 'envelope-check' if polling_on else 'envelope-slash' }}"
      style="font-size:1.1rem; color:{{ '#34d399' if polling_on else '#f87171' }};"></i>
   <span>
-    Automatic email polling is
+    Automatic polling
     <strong style="color:{{ '#34d399' if polling_on else '#f87171' }};">
       {{ 'enabled' if polling_on else 'disabled' }}
     </strong>
     {% if polling_on %}
-    — new booking emails are imported every {{ poll_minutes }} minute{{ 's' if poll_minutes != 1 }}.
-    {% else %}
-    — use <strong>Poll Now</strong> to import manually.
+      — checks every {{ poll_minutes }} minute{{ 's' if poll_minutes != 1 }}
     {% endif %}
   </span>
+  {% set unread_count = imports | selectattr('read', 'equalto', 1) | list | length %}
+  {% if unread_count %}
+  <span style="margin-left:auto; background:var(--sd-accent); color:#fff;
+               border-radius:12px; padding:0.15rem 0.6rem; font-size:0.75rem;
+               font-weight:600;">
+    {{ unread_count }} unread
+  </span>
+  {% endif %}
 </div>
 
-<!-- Import log -->
-<div class="sd-card">
-  <div class="sd-card-header">
-    Import Log
-    <span style="font-size:0.78rem; color:var(--sd-muted); font-weight:400;">
-      {{ imports|length }} entries
+<!-- Search bar -->
+<div class="sd-card mb-3">
+  <div style="padding:0.75rem 1.25rem; display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap;">
+    <form method="get" action="{{ url_for('jobs.email_imports') }}"
+          style="display:flex; gap:0.5rem; flex:1; min-width:0;">
+      <div style="position:relative; flex:1; min-width:0;">
+        <i class="bi bi-search"
+           style="position:absolute; left:0.75rem; top:50%; transform:translateY(-50%);
+                  color:var(--sd-muted); pointer-events:none; font-size:0.85rem;"></i>
+        <input type="text" name="q" id="search-input" value="{{ q }}"
+               class="sd-input" style="padding-left:2.25rem;"
+               placeholder="Search sender or subject…"
+               autofocus>
+      </div>
+      <button type="submit" class="btn-accent" style="white-space:nowrap;">
+        <i class="bi bi-search"></i> Search
+      </button>
+    </form>
+    {% if q %}
+    <form method="post" action="{{ url_for('jobs.clear_email_search') }}" id="clear-search-form">
+      <button type="submit" class="btn-ghost" title="Clear search">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </form>
+    {% endif %}
+    <span style="font-size:0.8rem; color:var(--sd-muted); flex-shrink:0;">
+      {{ imports|length }} message{{ 's' if imports|length != 1 }}
+      {% if q %}<span style="color:var(--sd-accent);"> matching "{{ q }}"</span>{% endif %}
     </span>
   </div>
+</div>
+
+<!-- Inbox table -->
+<div class="sd-card">
   <div class="table-responsive-sd">
-    <table class="sd-table">
+    <table class="sd-table" id="inbox-table">
       <thead>
         <tr>
-          <th>Received</th>
+          <th style="width:130px;">Received</th>
           <th>From</th>
           <th>Subject</th>
-          <th>Type</th>
-          <th>Job</th>
-          <th></th>
+          <th style="width:90px;">Type</th>
+          <th style="width:80px;">Job</th>
+          <th style="width:60px;"></th>
         </tr>
       </thead>
       <tbody>
         {% for imp in imports %}
-        <tr>
+        {% set is_unread = imp['read'] == 1 or imp['read'] is none %}
+        <tr style="cursor:pointer;
+                   {% if is_unread %}font-weight:600;{% endif %}
+                   {% if not is_unread %}opacity:0.72;{% endif %}"
+            onclick="markReadAndNavigate({{ imp['id'] }}, '{{ url_for('jobs.mark_email_read', import_id=imp['id']) }}', '{{ url_for('jobs.job_detail', job_id=imp['job_id']) if imp['job_id'] else '' }}')">
+
           <td class="mono" style="font-size:0.78rem; white-space:nowrap;">
-            {{ imp['imported_at'][:16] }}
+            {% set dt = imp['received_at'] or imp['imported_at'] %}
+            {% if dt %}{{ dt[:16] }}{% else %}—{% endif %}
+            {% if is_unread %}
+            <span style="display:inline-block; width:7px; height:7px; border-radius:50%;
+                         background:var(--sd-accent); margin-left:0.35rem;
+                         vertical-align:middle;"></span>
+            {% endif %}
           </td>
-          <td style="font-size:0.82rem;">{{ imp['sender'] or '—' }}</td>
-          <td style="font-size:0.82rem; color:var(--sd-muted); max-width:240px;
+          <td style="font-size:0.82rem; max-width:160px;
                      overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-            {{ imp['subject'][:60] if imp['subject'] else '—' }}
+            {{ imp['sender'] or '—' }}
+          </td>
+          <td style="font-size:0.82rem; max-width:280px;
+                     overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+            {{ imp['subject'] or '(no subject)' }}
           </td>
           <td>
             {% if imp['status'] == 'ok' %}
-            <span class="badge-status status-complete">New Job</span>
+            <span class="badge-status status-complete">Booking</span>
             {% elif imp['status'] == 'thread' %}
-            <span class="badge-status status-scheduled">Follow-up</span>
+            <span class="badge-status status-scheduled">Reply</span>
             {% else %}
             <span class="badge-status status-void">{{ imp['status'] }}</span>
             {% endif %}
           </td>
           <td>
             {% if imp['job_id'] %}
-            <a href="{{ url_for('jobs.job_detail', job_id=imp['job_id']) }}"
-               class="mono" style="font-size:0.82rem; color:var(--sd-accent);">
+            <span class="mono" style="font-size:0.82rem; color:var(--sd-accent);">
               {{ imp['reference'] or imp['job_id'] }}
-            </a>
+            </span>
             {% else %}—{% endif %}
           </td>
-          <td>
+          <td onclick="event.stopPropagation();">
             {% if imp['body'] %}
             <button onclick="openEmailPopup('{{ url_for('jobs.email_message', import_id=imp['id']) }}')"
                     class="btn-ghost"
-                    style="padding:0.2rem 0.6rem; font-size:0.75rem; white-space:nowrap;">
-              <i class="bi bi-envelope-open"></i> View
+                    style="padding:0.2rem 0.5rem; font-size:0.75rem; white-space:nowrap;">
+              <i class="bi bi-envelope-open"></i>
             </button>
             {% endif %}
           </td>
         </tr>
         {% else %}
         <tr>
-          <td colspan="6" style="text-align:center; color:var(--sd-muted); padding:2rem;">
+          <td colspan="6" style="text-align:center; color:var(--sd-muted); padding:2.5rem;">
+            {% if q %}
+            No emails matching "{{ q }}".
+            {% else %}
             No email imports yet.
+            {% endif %}
           </td>
         </tr>
         {% endfor %}
@@ -109,4 +158,22 @@
     </table>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function markReadAndNavigate(importId, markUrl, jobUrl) {
+  // POST to mark as read, then navigate to job (or stay if no job)
+  fetch(markUrl, { method: 'POST',
+                   headers: {'X-Requested-With': 'XMLHttpRequest'} })
+    .then(function() {
+      if (jobUrl) {
+        window.location = jobUrl;
+      } else {
+        // No job — just refresh to update read state
+        window.location.reload();
+      }
+    });
+}
+</script>
 {% endblock %}
