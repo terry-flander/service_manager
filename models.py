@@ -124,8 +124,10 @@ def init_db():
                 sender      TEXT,
                 body        TEXT,
                 imported_at TEXT DEFAULT (datetime('now')),
+                received_at TEXT,
                 job_id      INTEGER REFERENCES jobs(id),
-                status      TEXT DEFAULT 'ok'
+                status      TEXT DEFAULT 'ok',
+                read        INTEGER DEFAULT 1
             );
 
             CREATE TABLE IF NOT EXISTS calendar_events (

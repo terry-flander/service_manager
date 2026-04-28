@@ -423,6 +423,9 @@
   <a href="{{ url_for('jobs.status_colors') }}" class="sidebar-link {% if request.endpoint == 'jobs.status_colors' %}active{% endif %}" onclick="closeSidebar()">
     <i class="bi bi-palette"></i> Status Colours
   </a>
+  <a href="{{ url_for('jobs.backup_db') }}" class="sidebar-link" onclick="closeSidebar()">
+    <i class="bi bi-download"></i> Backup DB
+  </a>
   <a href="{{ url_for('import_jobs.import_jobs') }}" class="sidebar-link {% if request.endpoint == 'import_jobs.import_jobs' %}active{% endif %}" onclick="closeSidebar()">
     <i class="bi bi-upload"></i> Import Jobs
   </a>

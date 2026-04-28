@@ -28,6 +28,23 @@ from email.utils import parseaddr
 
 log = logging.getLogger('email_poller')
 
+
+def _parse_received_date(msg):
+    """Parse the email Date: header into an ISO datetime string (local time)."""
+    from email.utils import parsedate_to_datetime
+    raw = msg.get('Date', '')
+    if not raw:
+        return None
+    try:
+        dt = parsedate_to_datetime(raw)
+        # Convert to UTC naive then format
+        import datetime as _dt
+        if dt.tzinfo:
+            dt = dt.astimezone(_dt.timezone.utc).replace(tzinfo=None)
+        return dt.strftime('%Y-%m-%d %H:%M:%S')
+    except Exception:
+        return None
+
 SERVICE_TYPES = [
     'General Service',
     'eBike Service',
@@ -277,6 +294,7 @@ def _parse_email(msg):
         'subject':       subject,
         'from_name':     from_name,
         'from_email':    from_email,
+        'received_at':   None,  # filled in by poll loop from msg headers
     }
 
 
@@ -328,13 +346,16 @@ def _find_job_for_thread(conn, in_reply_to, references, from_email):
 
 
 def _log_thread_email(conn, message_id, thread_id, in_reply_to,
-                      subject, sender, body, job_id):
+                      subject, sender, body, job_id, received_at=None):
     """Record a follow-up email against an existing job — no new job created."""
     conn.execute("""
         INSERT OR IGNORE INTO email_imports
-            (message_id, thread_id, in_reply_to, subject, sender, body, job_id, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'thread')
-    """, (message_id, thread_id, in_reply_to, subject, sender, body[:4000], job_id))
+            (message_id, thread_id, in_reply_to, subject, sender, body,
+             imported_at, received_at, job_id, status, read)
+        VALUES (?, ?, ?, ?, ?, ?, coalesce(?,datetime('now')),
+                ?, ?, 'thread', 1)
+    """, (message_id, thread_id, in_reply_to, subject, sender, body[:4000],
+            received_at, received_at, job_id))
     conn.commit()
     log.info(f"Logged thread email {message_id[:40]} against job_id={job_id}")
 
@@ -383,11 +404,14 @@ def _create_job(conn, parsed, message_id, thread_id=None, in_reply_to=None):
             conn.execute("""
                 INSERT INTO email_imports
                     (message_id, thread_id, in_reply_to, subject, sender,
-                     body, job_id, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'ok')
+                     body, imported_at, received_at, job_id, status, read)
+                VALUES (?, ?, ?, ?, ?, ?, coalesce(?,datetime('now')),
+                        ?, ?, 'ok', 1)
             """, (message_id, thread_id, in_reply_to,
                     parsed['subject'], parsed['from_email'],
-                    parsed['message'][:4000], job_id))
+                    parsed['message'][:4000],
+                    parsed.get('received_at'), parsed.get('received_at'),
+                    job_id))
             conn.commit()
             log.info(f"Created job {ref} from email {message_id[:40]}")
             return job_id
@@ -469,7 +493,7 @@ def _poll_inbox_replies(imap, app):
                 if existing_job_id:
                     _log_thread_email(
                         db_conn, message_id, thread_id, in_reply_to,
-                        subject, from_email, body, existing_job_id)
+                        subject, from_email, body, existing_job_id, received_at)
                     processed += 1
                     log.info(f"INBOX reply logged for job {existing_job_id} "
                              f"from {from_email}")
@@ -538,9 +562,10 @@ def poll_once(app, force=False):
             message_id = msg.get('Message-ID', '').strip() or \
                          f"{msg.get('Date','')}_{msg.get('From','')}"
 
-            # Extract thread-tracking headers
-            in_reply_to = (msg.get('In-Reply-To') or '').strip()
-            references  = (msg.get('References')  or '').strip()
+            # Extract thread-tracking headers and date
+            in_reply_to  = (msg.get('In-Reply-To') or '').strip()
+            references   = (msg.get('References')  or '').strip()
+            received_at  = _parse_received_date(msg)
             # Gmail thread ID (X-GM-THRID) — requires FETCH X-GM-THRID
             thread_id   = in_reply_to or message_id
 
@@ -551,6 +576,7 @@ def poll_once(app, force=False):
                         continue
 
                     parsed = _parse_email(msg)
+                    parsed['received_at'] = received_at
                     body   = _get_text_body(msg)
 
                     # Is this a reply in an existing thread?
@@ -562,7 +588,7 @@ def poll_once(app, force=False):
                         _log_thread_email(
                             db_conn, message_id, thread_id, in_reply_to,
                             parsed['subject'], parsed['from_email'],
-                            body, existing_job_id)
+                            body, existing_job_id, received_at)
                         log.info(f"Thread follow-up logged for job {existing_job_id}")
                     else:
                         # New booking — create job
