@@ -14,8 +14,27 @@ customers_bp = Blueprint('customers', __name__)
 
 @customers_bp.route('/customers')
 def index():
+    from flask import session as _sess
+    user_id = _sess.get('user_id')
     q = request.args.get('q', '').strip()
+
     with get_db() as conn:
+        if 'q' in request.args:
+            # Save search to settings
+            conn.execute(
+                "INSERT INTO settings (key,value) VALUES (?,?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (f'customer_search_{user_id}', q))
+            conn.commit()
+        else:
+            # First load — restore saved search
+            row = conn.execute(
+                "SELECT value FROM settings WHERE key=?",
+                (f'customer_search_{user_id}',)).fetchone()
+            if row and row['value']:
+                from flask import redirect as _red
+                return _red(url_for('customers.index', q=row['value']))
+
         if q:
             like = f'%{q}%'
             customers = conn.execute("""
@@ -230,3 +249,15 @@ def edit_customer(customer_id):
     return render_template('customers/form.html',
                            customer=customer, action='edit', jobs=jobs,
                            thread_emails=thread_emails, suburbs=suburbs)
+
+
+@customers_bp.route('/customers/clear-search', methods=['POST'])
+def clear_search():
+    from flask import session as _sess
+    user_id = _sess.get('user_id')
+    if user_id:
+        with get_db() as conn:
+            conn.execute("DELETE FROM settings WHERE key=?",
+                         (f'customer_search_{user_id}',))
+            conn.commit()
+    return redirect(url_for('customers.index'))

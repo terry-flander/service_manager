@@ -7,6 +7,8 @@ import os
 import smtplib
 import email.mime.text
 import email.mime.multipart
+import email.mime.base
+import email.encoders
 import base64
 import json
 import urllib.request
@@ -49,34 +51,41 @@ def _get_access_token():
         raise RuntimeError(f"Token refresh failed {e.code}: {e.read().decode()}")
 
 
+def _smtp_connect():
+    """Return an authenticated SMTP connection."""
+    from_addr    = os.environ.get('GMAIL_USER', '')
+    access_token = _get_access_token()
+    auth_str     = base64.b64encode(
+        f"user={from_addr}\x01auth=Bearer {access_token}\x01\x01".encode()
+    ).decode()
+
+    smtp = smtplib.SMTP('smtp.gmail.com', 587)
+    smtp.ehlo()
+    smtp.starttls()
+    smtp.ehlo()
+    code, resp = smtp.docmd('AUTH', 'XOAUTH2 ' + auth_str)
+    if code != 235:
+        raise RuntimeError(f"SMTP AUTH failed {code}: {resp}")
+    return smtp, from_addr
+
+
+def _new_message_id(from_addr):
+    import uuid, time
+    domain = from_addr.split('@')[-1]
+    return f"<{int(time.time())}.{uuid.uuid4().hex[:12]}@{domain}>"
+
+
 def send_reply(to_address, subject, body_text,
                in_reply_to=None, references=None,
                message_id_out=None):
-    """
-    Send an email from GMAIL_USER via Gmail SMTP+OAuth2.
-
-    Args:
-        to_address:     Recipient email
-        subject:        Email subject line
-        body_text:      Plain-text body
-        in_reply_to:    Message-ID of the email being replied to
-        references:     Full References header string
-        message_id_out: Pre-generated Message-ID to use (optional)
-
-    Returns:
-        message_id: The Message-ID header of the sent email
-    """
+    """Send a plain-text reply. Returns the Message-ID."""
     from_addr = os.environ.get('GMAIL_USER', '')
     if not from_addr:
         raise RuntimeError("GMAIL_USER not set")
 
-    # Build Message-ID if not supplied
     if not message_id_out:
-        import uuid, time
-        domain = from_addr.split('@')[-1]
-        message_id_out = f"<{int(time.time())}.{uuid.uuid4().hex[:12]}@{domain}>"
+        message_id_out = _new_message_id(from_addr)
 
-    # Build MIME message
     msg = email.mime.text.MIMEText(body_text, 'plain', 'utf-8')
     msg['From']       = from_addr
     msg['To']         = to_address
@@ -85,29 +94,61 @@ def send_reply(to_address, subject, body_text,
 
     if in_reply_to:
         msg['In-Reply-To'] = in_reply_to
-        refs = (references or in_reply_to)
+        refs = references or in_reply_to
         if in_reply_to not in refs:
             refs = refs + ' ' + in_reply_to
         msg['References'] = refs.strip()
 
-    # Get access token
-    access_token = _get_access_token()
-
-    # Build XOAUTH2 string for SMTP
-    auth_str = base64.b64encode(
-        f"user={from_addr}\x01auth=Bearer {access_token}\x01\x01".encode()
-    ).decode()
-
-    # Connect and send
-    with smtplib.SMTP('smtp.gmail.com', 587) as smtp:
-        smtp.ehlo()
-        smtp.starttls()
-        smtp.ehlo()
-        # SMTP XOAUTH2 — send pre-encoded base64 directly
-        code, resp = smtp.docmd('AUTH', 'XOAUTH2 ' + auth_str)
-        if code != 235:
-            raise RuntimeError(f"SMTP AUTH failed {code}: {resp}")
+    smtp, from_addr = _smtp_connect()
+    with smtp:
         smtp.sendmail(from_addr, [to_address], msg.as_bytes())
 
     log.info(f"Sent email to {to_address}, Message-ID: {message_id_out}")
     return message_id_out
+
+
+def send_reply_with_attachment(to_address, subject, body_text,
+                                attachment_bytes, attachment_filename,
+                                attachment_mimetype='application/pdf',
+                                in_reply_to=None, references=None,
+                                message_id_out=None):
+    """Send a reply with a binary attachment. Returns the Message-ID."""
+    from_addr = os.environ.get('GMAIL_USER', '')
+    if not from_addr:
+        raise RuntimeError("GMAIL_USER not set")
+
+    if not message_id_out:
+        message_id_out = _new_message_id(from_addr)
+
+    # Build multipart message
+    outer = email.mime.multipart.MIMEMultipart()
+    outer['From']       = from_addr
+    outer['To']         = to_address
+    outer['Subject']    = subject
+    outer['Message-ID'] = message_id_out
+
+    if in_reply_to:
+        outer['In-Reply-To'] = in_reply_to
+        refs = references or in_reply_to
+        if in_reply_to not in refs:
+            refs = refs + ' ' + in_reply_to
+        outer['References'] = refs.strip()
+
+    # Plain text body
+    outer.attach(email.mime.text.MIMEText(body_text, 'plain', 'utf-8'))
+
+    # PDF attachment
+    part = email.mime.base.MIMEBase(*attachment_mimetype.split('/'))
+    part.set_payload(attachment_bytes)
+    email.encoders.encode_base64(part)
+    part.add_header('Content-Disposition', 'attachment',
+                    filename=attachment_filename)
+    outer.attach(part)
+
+    smtp, from_addr = _smtp_connect()
+    with smtp:
+        smtp.sendmail(from_addr, [to_address], outer.as_bytes())
+
+    log.info(f"Sent email+attachment to {to_address}, Message-ID: {message_id_out}")
+    return message_id_out
+

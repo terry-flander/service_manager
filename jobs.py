@@ -181,6 +181,25 @@ def new_job():
                           request.form.get('notes', '')))
                     job_id = conn.execute(
                         "SELECT id FROM jobs WHERE reference=?", (ref,)).fetchone()['id']
+
+                    # Auto-add a job_part for each selected service type
+                    # Match part by name = service type string (case-insensitive)
+                    selected_types = request.form.getlist('service_types')
+                    for stype in selected_types:
+                        part = conn.execute(
+                            """SELECT id, name, part_number, unit_cost FROM parts
+                                WHERE LOWER(name) = LOWER(?) AND active = 1
+                                LIMIT 1""",
+                            (stype,)).fetchone()
+                        if part:
+                            conn.execute(
+                                """INSERT INTO job_parts
+                                    (job_id, part_id, description, part_number,
+                                     quantity, unit_cost)
+                                   VALUES (?, ?, ?, ?, 1, ?)""",
+                                (job_id, part['id'], part['name'],
+                                 part['part_number'] or '', part['unit_cost']))
+
                     conn.commit()
                     break  # success
                 except _sqlite3.IntegrityError as e:
@@ -228,6 +247,9 @@ def job_detail(job_id):
             (job_id,)).fetchall()
         parts = conn.execute(
             "SELECT * FROM parts WHERE active=1 ORDER BY name").fetchall()
+        # Use calc_totals so GST is included for tax-exclusive jobs
+        from routes.invoice import calc_totals as _calc
+        _, _, total = _calc(job_parts, bool(job['tax_inclusive']))
         # All thread emails — inbound and outbound — chronological
         thread_emails = conn.execute("""
             SELECT 'inbound' as direction,
@@ -241,7 +263,6 @@ def job_detail(job_id):
             FROM email_replies WHERE job_id=?
             ORDER BY sent_at ASC
         """, (job_id, job_id)).fetchall()
-    total = sum(jp['quantity'] * jp['unit_cost'] for jp in job_parts)
     return render_template('jobs/detail.html', job=job, job_parts=job_parts,
                            parts=parts, total=total, TIME_LABELS=TIME_LABELS,
                            JOB_TYPES=JOB_TYPES, thread_emails=thread_emails)
@@ -267,32 +288,53 @@ def edit_job(job_id):
             sched_time = None
             end_time   = None
         cust_address = request.form.get('customer_address', '').strip()
-        with get_db() as conn:
-            customer_id, _ = upsert_customer(
-                conn, cust_name, cust_email, cust_phone, suburb, cust_address)
-            conn.execute("""
-                UPDATE jobs SET job_type=?, customer_id=?, customer_name=?,
-                    customer_email=?, customer_phone=?, suburb=?, address=?,
-                    description=?, bike_description=?, service_types=?, region_id=?,
-                    tax_inclusive=?, scheduled_date=?, scheduled_time=?, end_time=?,
-                    status=?, notes=?, paid_date=?, amount_paid=?
-                WHERE id=?
-            """, (job_type, customer_id, cust_name, cust_email, cust_phone,
-                  suburb, address, request.form.get('description', ''),
-                  request.form.get('bike_description', ''),
-                  ', '.join(request.form.getlist('service_types')),
-                  int(request.form['region_id']),
-                  1 if request.form.get('tax_inclusive', '1') == '1' else 0,
-                  request.form.get('scheduled_date') or None,
-                  sched_time,
-                  request.form.get('end_time') or None,
-                  request.form['status'],
-                  request.form.get('notes', ''),
-                  request.form.get('paid_date') or None,
-                  float(request.form['amount_paid']) if request.form.get('amount_paid') else None,
-                  job_id))
-            conn.commit()
-        flash('Job updated.', 'success')
+        import sqlite3 as _sqlite3
+        for _attempt in range(5):
+            with get_db() as conn:
+                customer_id, _ = upsert_customer(
+                    conn, cust_name, cust_email, cust_phone, suburb, cust_address)
+
+                # Re-number if job_type changed
+                new_ref = job['reference']
+                if job_type != job['job_type']:
+                    new_ref = generate_reference(job_type, conn)
+
+                try:
+                    conn.execute("""
+                        UPDATE jobs SET job_type=?, reference=?, customer_id=?,
+                            customer_name=?, customer_email=?, customer_phone=?,
+                            suburb=?, address=?, description=?, bike_description=?,
+                            service_types=?, region_id=?, tax_inclusive=?,
+                            scheduled_date=?, scheduled_time=?, end_time=?,
+                            status=?, notes=?, paid_date=?, amount_paid=?
+                        WHERE id=?
+                    """, (job_type, new_ref, customer_id,
+                          cust_name, cust_email, cust_phone,
+                          suburb, address, request.form.get('description', ''),
+                          request.form.get('bike_description', ''),
+                          ', '.join(request.form.getlist('service_types')),
+                          int(request.form['region_id']),
+                          1 if request.form.get('tax_inclusive', '1') == '1' else 0,
+                          request.form.get('scheduled_date') or None,
+                          sched_time,
+                          request.form.get('end_time') or None,
+                          request.form['status'],
+                          request.form.get('notes', ''),
+                          request.form.get('paid_date') or None,
+                          float(request.form['amount_paid']) if request.form.get('amount_paid') else None,
+                          job_id))
+                    conn.commit()
+                    break
+                except _sqlite3.IntegrityError as e:
+                    if 'reference' in str(e) and _attempt < 4:
+                        conn.rollback()
+                        continue
+                    raise
+
+        if job_type != job['job_type']:
+            flash(f'Job type changed — re-numbered to {new_ref}.', 'success')
+        else:
+            flash('Job updated.', 'success')
         return redirect(url_for('jobs.job_detail', job_id=job_id))
     with get_db() as conn:
         suburbs_list = conn.execute("""
@@ -329,9 +371,12 @@ def update_part(job_id, jp_id):
         jp = conn.execute(
             "SELECT quantity, unit_cost FROM job_parts WHERE id=?",
             (jp_id,)).fetchone()
-        grand = conn.execute(
-            "SELECT COALESCE(SUM(quantity*unit_cost),0) as t FROM job_parts WHERE job_id=?",
-            (job_id,)).fetchone()['t']
+        job_row = conn.execute(
+            "SELECT tax_inclusive FROM jobs WHERE id=?", (job_id,)).fetchone()
+        all_parts = conn.execute(
+            "SELECT * FROM job_parts WHERE job_id=?", (job_id,)).fetchall()
+        from routes.invoice import calc_totals as _calc
+        _, _, grand = _calc(all_parts, bool(job_row['tax_inclusive']))
 
     return jsonify({
         'ok':          True,
@@ -433,15 +478,23 @@ def update_status(job_id):
     amount_paid  = request.form.get('amount_paid', '').strip()
     amount_paid  = float(amount_paid) if amount_paid else None
 
-    # Payment type shortcut — set status=paid, today's date, full total
+    # Payment type set — ensure status=paid and fill defaults for empty fields
     if payment_type:
         new_status = 'paid'
-        paid_date  = _date.today().isoformat()
-        with get_db() as conn:
-            total = conn.execute(
-                "SELECT COALESCE(SUM(quantity*unit_cost),0) FROM job_parts WHERE job_id=?",
-                (job_id,)).fetchone()[0]
-        amount_paid = round(float(total), 2)
+        # Only compute defaults if the form fields were not filled in by the user
+        if not paid_date or not amount_paid:
+            with get_db() as conn:
+                _parts = conn.execute(
+                    "SELECT * FROM job_parts WHERE job_id=?", (job_id,)).fetchall()
+                _job_row = conn.execute(
+                    "SELECT tax_inclusive, scheduled_date FROM jobs WHERE id=?",
+                    (job_id,)).fetchone()
+                from routes.invoice import calc_totals as _calc
+                _, _, _total = _calc(_parts, bool(_job_row['tax_inclusive']))
+            if not paid_date:
+                paid_date = _job_row['scheduled_date'] or _date.today().isoformat()
+            if not amount_paid:
+                amount_paid = round(_total, 2)
 
     with get_db() as conn:
         conn.execute(
@@ -614,3 +667,40 @@ def clear_email_search():
                          (f'email_search_{user_id}',))
             conn.commit()
     return redirect(url_for('jobs.email_imports'))
+
+
+@jobs_bp.route('/admin/backup-db')
+def backup_db():
+    """Download a live backup of the SQLite database. Admin only."""
+    from flask import send_file, session as _session
+    import sqlite3 as _sq
+    import tempfile, os
+    from datetime import datetime
+
+    if _session.get('user_role') != 'admin':
+        flash('Admin access required.', 'danger')
+        return redirect(url_for('jobs.index'))
+
+    from models import DB_PATH
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    fname     = f'field_service_{timestamp}.db'
+
+    # Write to a temp file using sqlite3.backup() — safe on a live DB
+    tmp = tempfile.NamedTemporaryFile(suffix='.db', delete=False)
+    tmp.close()
+    try:
+        src_conn = _sq.connect(DB_PATH)
+        bak_conn = _sq.connect(tmp.name)
+        src_conn.backup(bak_conn)
+        bak_conn.close()
+        src_conn.close()
+        return send_file(
+            tmp.name,
+            as_attachment=True,
+            download_name=fname,
+            mimetype='application/x-sqlite3',
+        )
+    except Exception as e:
+        os.unlink(tmp.name)
+        flash(f'Backup failed: {e}', 'danger')
+        return redirect(url_for('jobs.index'))

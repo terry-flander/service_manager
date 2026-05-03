@@ -6,9 +6,55 @@ parts_bp = Blueprint('parts', __name__)
 
 @parts_bp.route('/parts')
 def index():
+    from flask import session as _sess, request as _req
+    user_id = _sess.get('user_id')
+    q             = _req.args.get('q', '').strip()
+    show_inactive = _req.args.get('inactive', '')  # 'on' | 'off' | '' (not set)
+
     with get_db() as conn:
-        parts = conn.execute("SELECT * FROM parts ORDER BY name").fetchall()
-    return render_template('parts/index.html', parts=parts)
+        # ── Persist / restore user prefs ──────────────────────────────────────
+        if 'q' in _req.args or 'inactive' in _req.args:
+            # User just submitted — save current values
+            conn.execute(
+                "INSERT INTO settings (key,value) VALUES (?,?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (f'parts_search_{user_id}', q))
+            conn.execute(
+                "INSERT INTO settings (key,value) VALUES (?,?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (f'parts_inactive_{user_id}', show_inactive or 'off'))
+            conn.commit()
+        else:
+            # First load — restore saved prefs
+            r_q = conn.execute(
+                "SELECT value FROM settings WHERE key=?",
+                (f'parts_search_{user_id}',)).fetchone()
+            r_i = conn.execute(
+                "SELECT value FROM settings WHERE key=?",
+                (f'parts_inactive_{user_id}',)).fetchone()
+            saved_q        = r_q['value'] if r_q else ''
+            saved_inactive = r_i['value'] if r_i else 'off'
+            if saved_q or saved_inactive == 'on':
+                from flask import redirect as _red, url_for as _url
+                return _red(_url('parts.index',
+                                 q=saved_q,
+                                 inactive='on' if saved_inactive == 'on' else None))
+
+        # ── Build query ───────────────────────────────────────────────────────
+        conditions, params = [], []
+        if not (show_inactive == 'on'):
+            conditions.append("active = 1")
+        if q:
+            conditions.append("(LOWER(name) LIKE LOWER(?) OR LOWER(COALESCE(part_number,'')) LIKE LOWER(?))")
+            params += [f'%{q}%', f'%{q}%']
+        where = ('WHERE ' + ' AND '.join(conditions)) if conditions else ''
+        parts = conn.execute(
+            f"SELECT * FROM parts {where} ORDER BY name",
+            params).fetchall()
+
+    return render_template('parts/index.html',
+                           parts=parts, q=q,
+                           show_inactive=(show_inactive == 'on'))
 
 
 @parts_bp.route('/parts/new', methods=['GET', 'POST'])
@@ -84,3 +130,27 @@ def search():
         'unit_cost':   p['unit_cost'],
         'label':       f"{p['name']}{' (' + p['part_number'] + ')' if p['part_number'] else ''} — ${p['unit_cost']:.2f}",
     } for p in parts])
+
+
+@parts_bp.route('/parts/<int:part_id>/reactivate', methods=['POST'])
+def reactivate_part(part_id):
+    with get_db() as conn:
+        name = conn.execute("SELECT name FROM parts WHERE id=?", (part_id,)).fetchone()
+        conn.execute("UPDATE parts SET active=1 WHERE id=?", (part_id,))
+        conn.commit()
+    if name:
+        flash(f'"{name["name"]}" reactivated.', 'success')
+    return redirect(url_for('parts.index'))
+
+@parts_bp.route('/parts/clear-search', methods=['POST'])
+def clear_search():
+    from flask import session as _sess
+    user_id = _sess.get('user_id')
+    if user_id:
+        from models import get_db
+        with get_db() as conn:
+            conn.execute("DELETE FROM settings WHERE key IN (?,?)",
+                         (f'parts_search_{user_id}', f'parts_inactive_{user_id}'))
+            conn.commit()
+    from flask import redirect, url_for
+    return redirect(url_for('parts.index'))

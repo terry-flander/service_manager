@@ -101,6 +101,10 @@ def _seed_regions(conn):
 
 def seed_data():
     with get_db() as conn:
-        _seed_parts(conn)
+        parts_count = conn.execute("SELECT COUNT(*) FROM parts").fetchone()[0]
+        if parts_count == 0:
+            _seed_parts(conn)
+        else:
+            print(f'  Parts already present ({parts_count}) — skipping CSV load')
         _seed_regions(conn)
         conn.commit()
