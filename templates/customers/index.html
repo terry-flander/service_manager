@@ -10,17 +10,29 @@
 {% block content %}
 <!-- Search -->
 <div class="sd-card mb-3">
-  <div style="padding:0.875rem 1.25rem; display:flex; gap:0.75rem; align-items:center;">
-    <i class="bi bi-search" style="color:var(--sd-muted);"></i>
-    <input type="text" id="search-input" class="sd-input" style="max-width:320px;"
-           placeholder="Search by name or phone…" value="{{ q }}" autofocus>
-    <button class="btn-accent" onclick="doSearch()">Search</button>
+  <div style="padding:0.75rem 1.25rem; display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap;">
+    <form method="get" action="{{ url_for('customers.index') }}"
+          style="display:flex; gap:0.5rem; flex:1; min-width:0;">
+      <div style="position:relative; flex:1; min-width:0;">
+        <i class="bi bi-search"
+           style="position:absolute; left:0.75rem; top:50%; transform:translateY(-50%);
+                  color:var(--sd-muted); pointer-events:none; font-size:0.85rem;"></i>
+        <input type="text" name="q" value="{{ q }}" class="sd-input"
+               style="padding-left:2.25rem;"
+               placeholder="Search by name or phone…" autofocus>
+      </div>
+      <button type="submit" class="btn-accent">Search</button>
+    </form>
     {% if q %}
-    <a href="{{ url_for('customers.index') }}" class="btn-ghost">Clear</a>
+    <form method="post" action="{{ url_for('customers.clear_search') }}">
+      <button type="submit" class="btn-ghost" title="Clear search">
+        <i class="bi bi-x-lg"></i> Clear
+      </button>
+    </form>
     {% endif %}
-    <span style="margin-left:auto; font-size:0.8rem; color:var(--sd-muted);">
+    <span style="margin-left:auto; font-size:0.8rem; color:var(--sd-muted); flex-shrink:0;">
       {{ customers|length }} customer{{ 's' if customers|length != 1 }}
-      {% if q %}matching <strong style="color:var(--sd-text);">"{{ q }}"</strong> <span style="font-size:0.72rem;">(name or phone)</span>{% endif %}
+      {% if q %}matching <strong style="color:var(--sd-text);">"{{ q }}"</strong>{% endif %}
     </span>
   </div>
 </div>
@@ -76,14 +88,4 @@
 </div>
 {% endblock %}
 
-{% block scripts %}
-<script>
-function doSearch() {
-  const q = document.getElementById('search-input').value.trim();
-  window.location = '{{ url_for("customers.index") }}' + (q ? '?q=' + encodeURIComponent(q) : '');
-}
-document.getElementById('search-input').addEventListener('keydown', function(e) {
-  if (e.key === 'Enter') doSearch();
-});
-</script>
-{% endblock %}
+{% block scripts %}{% endblock %}

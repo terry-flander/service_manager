@@ -4,8 +4,7 @@
 {% block topbar_actions %}
   <a href="{{ url_for('jobs.edit_job', job_id=job['id']) }}" class="btn-ghost"><i class="bi bi-pencil"></i> Edit</a>
   <a href="{{ url_for('invoice.shop_ticket', job_id=job['id']) }}" class="btn-ghost" target="_blank"><i class="bi bi-printer"></i> Print Ticket</a>
-  <a href="{{ url_for('invoice.view_invoice', job_id=job['id']) }}" class="btn-ghost"><i class="bi bi-receipt"></i> Invoice</a>
-  <a href="{{ url_for('invoice.pdf_invoice', job_id=job['id']) }}" class="btn-accent" target="_blank"><i class="bi bi-file-pdf"></i> PDF</a>
+  <a href="{{ url_for('invoice.pdf_invoice', job_id=job['id']) }}" class="btn-ghost" target="_blank"><i class="bi bi-file-pdf"></i> Preview Invoice</a>
   <a href="{{ url_for('email_replies.compose_reply', job_id=job['id']) }}" class="btn-ghost"><i class="bi bi-reply"></i> <span>Reply</span></a>
 {% endblock %}
 
@@ -173,15 +172,16 @@
           </select>
         </div>
         <!-- Payment type shortcut -->
+        <!-- Hidden field — only populated by JS when user actively clicks a method -->
+        <input type="hidden" name="payment_type" id="payment-type-hidden" value="">
         <div style="padding:0 1.25rem 0.6rem; border-top:1px solid var(--sd-border);">
           <div class="sd-label" style="margin-bottom:0.5rem;">Quick Pay</div>
-          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;" id="quick-pay-radios">
             {% for pt in ['EFTPOS','Cash','Transfer'] %}
             <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;
                           font-size:0.875rem; color:var(--sd-text);">
-              <input type="radio" name="payment_type" value="{{ pt }}"
+              <input type="radio" name="_payment_display" value="{{ pt }}"
                      {% if job['payment_type'] == pt %}checked{% endif %}
-                     onchange="quickPay(this.value)"
                      style="accent-color:var(--sd-accent); width:14px; height:14px;">
               {{ pt }}
             </label>
@@ -544,26 +544,62 @@
   });
 })();
 
-// ── Quick Pay ────────────────────────────────────────────────────────────────────
-function quickPay(paymentType) {
-  // Set status to paid
-  const statusSel = document.querySelector('select[name="status"]');
-  if (statusSel) statusSel.value = 'paid';
-  // Set paid date to today
-  const today = new Date().toISOString().slice(0,10);
-  const paidDateInput = document.querySelector('input[name="paid_date"]');
-  if (paidDateInput) paidDateInput.value = today;
-  // Set amount paid to total
-  const totalText = document.querySelector('.sd-card-header .mono');
-  if (totalText) {
-    const match = totalText.textContent.match(/\$([\d,.]+)/);
-    if (match) {
-      const amt = parseFloat(match[1].replace(',',''));
-      const amtInput = document.querySelector('input[name="amount_paid"]');
-      if (amtInput && !isNaN(amt)) amtInput.value = amt.toFixed(2);
+// ── Quick Pay ─────────────────────────────────────────────────────────────────
+(function () {
+  // Radios are display-only (_payment_display) — the real submission value
+  // is in the hidden field, set only when user actively clicks a method.
+  const radios     = document.querySelectorAll('#quick-pay-radios input[type="radio"]');
+  const hiddenPT   = document.getElementById('payment-type-hidden');
+  const amtInput   = document.querySelector('input[name="amount_paid"]');
+  const dateInput  = document.querySelector('input[name="paid_date"]');
+  const statusSel  = document.querySelector('select[name="status"]');
+
+  // Snapshot values at page load — used to detect whether user has edited
+  var loadedDate   = dateInput ? dateInput.value : '';
+  var loadedAmount = amtInput  ? amtInput.value  : '';
+  var prevDisplay  = '';
+  radios.forEach(function(r) { if (r.checked) prevDisplay = r.value; });
+
+  var defaultDate   = {{ (job['scheduled_date'] or '')|tojson }} ||
+                      new Date().toISOString().slice(0, 10);
+  var defaultAmount = null;
+
+  function getTotal() {
+    const el = document.querySelector('.sd-card-header .mono');
+    if (!el) return null;
+    const m = el.textContent.match(/\$([\d,.]+)/);
+    return m ? parseFloat(m[1].replace(',', '')) : null;
+  }
+
+  function applyQuickPay(method) {
+    // Set hidden field so server knows payment method was actively chosen
+    if (hiddenPT) hiddenPT.value = method;
+    if (statusSel) statusSel.value = 'paid';
+
+    // Only fill date if unchanged since page load
+    if (dateInput && dateInput.value === loadedDate) {
+      dateInput.value = defaultDate;
+    }
+
+    // Only fill amount if unchanged since page load
+    if (amtInput && amtInput.value === loadedAmount) {
+      if (defaultAmount === null) defaultAmount = getTotal();
+      if (defaultAmount !== null && !isNaN(defaultAmount)) {
+        amtInput.value = defaultAmount.toFixed(2);
+      }
     }
   }
-}
+
+  radios.forEach(function(radio) {
+    radio.addEventListener('click', function() {
+      if (this.value === prevDisplay) return;  // already selected — no-op
+      prevDisplay = this.value;
+      applyQuickPay(this.value);
+    });
+  });
+
+  window.quickPay = applyQuickPay;
+})();
 
 // ── Inline part editing ───────────────────────────────────────────────────────
 (function () {

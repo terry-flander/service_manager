@@ -2,50 +2,155 @@
 {% block title %}Parts List{% endblock %}
 {% block topbar_title %}Parts Master List{% endblock %}
 {% block topbar_actions %}
-  <a href="{{ url_for('parts.new_part') }}" class="btn-accent"><i class="bi bi-plus-lg"></i> Add Part</a>
+  <a href="{{ url_for('parts.new_part') }}" class="btn-accent">
+    <i class="bi bi-plus-lg"></i> <span>Add Part</span>
+  </a>
 {% endblock %}
 
 {% block content %}
-<div class="sd-card">
-  <div class="sd-card-header">{{ parts|length }} parts</div>
-  <div class="table-responsive-sd"><table class="sd-table">
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Part Number</th>
-        <th style="text-align:right;">Unit Cost</th>
-        <th>Unit</th>
-        <th>Status</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for part in parts %}
-      <tr>
-        <td style="font-weight:500;">{{ part.name }}</td>
-        <td class="mono" style="font-size:0.8rem; color:var(--sd-muted);">{{ part.part_number or '—' }}</td>
-        <td class="mono" style="text-align:right;">${{ '%.2f'|format(part.unit_cost) }}</td>
-        <td style="font-size:0.8rem; color:var(--sd-muted);">{{ part.unit }}</td>
-        <td>
-          {% if part.active %}
-          <span class="badge-status status-complete">Active</span>
-          {% else %}
-          <span class="badge-status status-invoiced">Inactive</span>
-          {% endif %}
-        </td>
-        <td style="display:flex; gap:0.5rem;">
-          <a href="{{ url_for('parts.edit_part', part_id=part.id) }}" class="btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.8rem;"><i class="bi bi-pencil"></i></a>
-          {% if part.active %}
-          <form method="post" action="{{ url_for('parts.delete_part', part_id=part.id) }}" onsubmit="return confirm('Deactivate this part?')">
-            <button type="submit" class="btn-danger"><i class="bi bi-trash3"></i></button>
-          </form>
-          {% endif %}
-        </td>
-      </tr>
+
+<!-- Controls bar — all forms are siblings, never nested -->
+<div class="sd-card mb-3">
+  <div style="padding:0.75rem 1.25rem; display:flex; gap:0.75rem;
+              align-items:center; flex-wrap:wrap;">
+
+    <!-- Search form -->
+    <form method="get" action="{{ url_for('parts.index') }}"
+          id="parts-search-form"
+          style="display:flex; gap:0.5rem; flex:1; min-width:200px;">
+      <!-- Carry inactive toggle into search submission -->
+      {% if show_inactive %}
+      <input type="hidden" name="inactive" value="on">
+      {% endif %}
+      <div style="position:relative; flex:1; min-width:0;">
+        <i class="bi bi-search"
+           style="position:absolute; left:0.75rem; top:50%;
+                  transform:translateY(-50%); color:var(--sd-muted);
+                  pointer-events:none; font-size:0.85rem;"></i>
+        <input type="text" name="q" id="parts-q" value="{{ q }}"
+               class="sd-input" style="padding-left:2.25rem;"
+               placeholder="Search name or part number…">
+      </div>
+      <button type="submit" class="btn-accent" style="white-space:nowrap;">
+        <i class="bi bi-search"></i>
+      </button>
+    </form>
+
+    <!-- Inactive toggle — standalone form, never nested -->
+    <form method="get" action="{{ url_for('parts.index') }}"
+          id="inactive-toggle-form">
+      <!-- Carry search query into toggle submission -->
+      {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
+      {% if show_inactive %}
+      <!-- Currently showing inactive — clicking hides them -->
+      <button type="submit" name="inactive" value="off"
+              class="btn-ghost" style="white-space:nowrap;">
+        <i class="bi bi-eye-slash"></i> Hide Inactive
+      </button>
       {% else %}
-      <tr><td colspan="6" style="text-align:center; color:var(--sd-muted); padding:2rem;">No parts in master list yet.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table></div>
+      <!-- Currently hiding inactive — clicking shows them -->
+      <button type="submit" name="inactive" value="on"
+              class="btn-ghost" style="white-space:nowrap;">
+        <i class="bi bi-eye"></i> Show Inactive
+      </button>
+      {% endif %}
+    </form>
+
+    <!-- Clear — standalone POST form -->
+    {% if q or show_inactive %}
+    <form method="post" action="{{ url_for('parts.clear_search') }}"
+          id="parts-clear-form">
+      <button type="submit" class="btn-ghost" title="Clear search and filters">
+        <i class="bi bi-x-lg"></i> Clear
+      </button>
+    </form>
+    {% endif %}
+
+    <span style="font-size:0.8rem; color:var(--sd-muted); margin-left:auto; flex-shrink:0;">
+      {{ parts|length }} part{{ 's' if parts|length != 1 }}
+      {% if q %}
+        <span style="color:var(--sd-accent);"> matching "{{ q }}"</span>
+      {% endif %}
+      {% if show_inactive %}
+        <span style="color:var(--sd-muted);"> (incl. inactive)</span>
+      {% endif %}
+    </span>
+
+  </div>
+</div>
+
+<!-- Parts table -->
+<div class="sd-card">
+  <div class="table-responsive-sd">
+    <table class="sd-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Part Number</th>
+          <th style="text-align:right;">Unit Cost</th>
+          <th>Unit</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for part in parts %}
+        <tr {% if not part.active %}style="opacity:0.6;"{% endif %}>
+          <td style="font-weight:500;">{{ part.name }}</td>
+          <td class="mono" style="font-size:0.8rem; color:var(--sd-muted);">
+            {{ part.part_number or '—' }}
+          </td>
+          <td class="mono" style="text-align:right;">
+            ${{ '%.2f'|format(part.unit_cost) }}
+          </td>
+          <td style="font-size:0.8rem; color:var(--sd-muted);">{{ part.unit }}</td>
+          <td>
+            {% if part.active %}
+            <span class="badge-status status-complete">Active</span>
+            {% else %}
+            <span class="badge-status status-invoiced">Inactive</span>
+            {% endif %}
+          </td>
+          <td style="display:flex; gap:0.5rem;">
+            <a href="{{ url_for('parts.edit_part', part_id=part.id) }}"
+               class="btn-ghost"
+               style="padding:0.25rem 0.6rem; font-size:0.8rem;">
+              <i class="bi bi-pencil"></i>
+            </a>
+            {% if part.active %}
+            <form method="post"
+                  action="{{ url_for('parts.delete_part', part_id=part.id) }}"
+                  onsubmit="return confirm('Deactivate \'{{ part.name }}\'?')">
+              <button type="submit" class="btn-danger">
+                <i class="bi bi-trash3"></i>
+              </button>
+            </form>
+            {% else %}
+            <form method="post"
+                  action="{{ url_for('parts.reactivate_part', part_id=part.id) }}">
+              <button type="submit" class="btn-ghost"
+                      style="padding:0.25rem 0.6rem; font-size:0.8rem;"
+                      title="Reactivate">
+                <i class="bi bi-arrow-counterclockwise"></i>
+              </button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6"
+              style="text-align:center; color:var(--sd-muted); padding:2rem;">
+            {% if q %}
+            No parts matching "{{ q }}".
+            {% else %}
+            No parts in master list yet.
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endblock %}

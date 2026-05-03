@@ -46,23 +46,44 @@ def _fmt_time_range(start, end):
     return start_fmt or end_fmt
 
 
-def _substitute(text, job, customer=None):
+def _substitute(text, job, customer=None, totals=None):
     """
     Replace {{field}} placeholders with job/customer values.
 
     Available fields:
-      {{customer_name}}          {{customer_email}}   {{customer_phone}}
-      {{suburb}}                 {{address}}          {{reference}}
+      {{first_name}}             {{customer_name}}    {{customer_email}}
+      {{customer_phone}}         {{suburb}}           {{address}}
+      {{reference}}              {{description}}      {{region_name}}
       {{scheduled_date}}         {{scheduled_time}}   {{end_time}}
       {{scheduled_date_formatted}}  — e.g. Friday, 1 May 2026
       {{scheduled_time_formatted}}  — e.g. 9:00am to 10:00am
-      {{service_types}}          {{description}}      {{region_name}}
+      {{service_types}}          {{invoice_pdf}}
+      {{job_total}}              {{amount_due}}
     """
     raw_date   = job['scheduled_date'] or ''
     raw_start  = job['scheduled_time'] or ''
     raw_end    = (job['end_time'] if 'end_time' in job.keys() else '') or ''
     full_name  = job['customer_name'] or ''
     first_name = full_name.split()[0] if full_name.strip() else ''
+
+    # Totals — compute from DB if not supplied
+    if totals is None:
+        try:
+            from models import get_db
+            from routes.invoice import calc_totals
+            with get_db() as _c:
+                _jp = _c.execute(
+                    "SELECT * FROM job_parts WHERE job_id=?",
+                    (job['id'],)).fetchall()
+            _tax = bool(job['tax_inclusive'])
+            _, _, _total = calc_totals(_jp, _tax)
+            _paid = float(job['amount_paid'] or 0)
+            totals = {'job_total': _total, 'amount_due': max(_total - _paid, 0)}
+        except Exception:
+            totals = {'job_total': 0.0, 'amount_due': 0.0}
+
+    def _fmt_money(v):
+        return f"${v:,.2f}"
 
     fields = {
         'first_name':                first_name,
@@ -80,6 +101,9 @@ def _substitute(text, job, customer=None):
         'service_types':             job['service_types']  or '',
         'description':               job['description']    or '',
         'region_name':               (job['region_name'] if 'region_name' in job.keys() else '') or '',
+        'invoice_pdf':               '[Invoice PDF attached]',
+        'job_total':                 _fmt_money(totals.get('job_total', 0)),
+        'amount_due':                _fmt_money(totals.get('amount_due', 0)),
     }
 
     def replacer(m):
@@ -260,15 +284,43 @@ def compose_reply(job_id):
         with get_db() as conn:
             in_reply_to, references = _get_thread_refs(conn, job_id)
 
+        # Check if invoice PDF attachment is requested
+        has_invoice = '{{invoice_pdf}}' in body or '[Invoice PDF attached]' in body
+        # Remove the placeholder from the body text
+        body_clean = body.replace('{{invoice_pdf}}', '').replace('[Invoice PDF attached]', '').strip()
+
         try:
-            from email_sender import send_reply
-            msg_id = send_reply(
-                to_address  = to_addr,
-                subject     = subject,
-                body_text   = body,
-                in_reply_to = in_reply_to,
-                references  = references,
-            )
+            if has_invoice:
+                # Generate the invoice PDF
+                from routes.invoice import calc_totals
+                from invoice_pdf import generate_invoice_pdf
+                with get_db() as _inv_conn:
+                    _jp = _inv_conn.execute(
+                        "SELECT * FROM job_parts WHERE job_id=? ORDER BY id",
+                        (job_id,)).fetchall()
+                _tax  = bool(job['tax_inclusive'])
+                _sub, _gst, _tot = calc_totals(_jp, _tax)
+                _buf  = generate_invoice_pdf(job, _jp, _tax, _sub, _gst, _tot)
+                _fname = f"INV-{job['reference'].lower()}.pdf"
+                from email_sender import send_reply_with_attachment
+                msg_id = send_reply_with_attachment(
+                    to_address          = to_addr,
+                    subject             = subject,
+                    body_text           = body_clean,
+                    attachment_bytes    = _buf.read(),
+                    attachment_filename = _fname,
+                    in_reply_to         = in_reply_to,
+                    references          = references,
+                )
+            else:
+                from email_sender import send_reply
+                msg_id = send_reply(
+                    to_address  = to_addr,
+                    subject     = subject,
+                    body_text   = body,
+                    in_reply_to = in_reply_to,
+                    references  = references,
+                )
         except Exception as e:
             flash(f'Send failed: {e}', 'danger')
             return render_template('jobs/reply_compose.html',
@@ -299,8 +351,12 @@ def compose_reply(job_id):
         subject = request.form.get('subject', '').strip()
         body    = request.form.get('body', '').strip()
 
-        # Apply substitution to body only — subject is locked to thread subject
+        # Apply substitution to body only
         body = _substitute(body, job)
+        has_invoice = '{{invoice_pdf}}' in body or '[Invoice PDF attached]' in body
+
+        from flask import url_for as _uf
+        invoice_url = _uf('invoice.pdf_invoice', job_id=job_id) if has_invoice else None
 
         return render_template('jobs/reply_compose.html',
                                job=job, templates=templates,
@@ -310,13 +366,15 @@ def compose_reply(job_id):
                                    'body':    body,
                                },
                                template_id=tmpl_id,
-                               thread_subject=thread_subject)
+                               thread_subject=thread_subject,
+                               invoice_url=invoice_url)
 
     # ── GET — template picker ─────────────────────────────────────────────────
     return render_template('jobs/reply_compose.html',
                            job=job, templates=templates,
                            preview=None, template_id=None,
-                           thread_subject=thread_subject)
+                           thread_subject=thread_subject,
+                           invoice_url=None)
 
 
 @email_replies_bp.route('/email-templates/preview-fields')
@@ -343,4 +401,7 @@ def preview_fields():
         # Schedule — formatted
         'scheduled_date_formatted',   # e.g. Friday, 1 May 2026
         'scheduled_time_formatted',   # e.g. 9:00am to 10:00am
+        'invoice_pdf',               # attaches the PDF invoice
+        'job_total',                 # e.g. $150.00
+        'amount_due',                # e.g. $150.00 (total minus any payment)
     ])

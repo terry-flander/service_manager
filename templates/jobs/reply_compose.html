@@ -115,6 +115,23 @@
             <textarea name="body" class="sd-input" rows="16" required
                       style="font-family:'IBM Plex Mono',monospace; font-size:0.82rem;">{{ preview.body }}</textarea>
           </div>
+          {% if invoice_url %}
+          <div class="col-12">
+            <div style="padding:0.65rem 1rem; background:rgba(16,185,129,0.08);
+                        border:1px solid rgba(16,185,129,0.25); border-radius:6px;
+                        display:flex; align-items:center; gap:0.75rem; font-size:0.85rem;">
+              <i class="bi bi-paperclip" style="color:#34d399;"></i>
+              <span style="color:var(--sd-text);">
+                <strong>INV-{{ job['reference'] }}.pdf</strong> will be attached
+              </span>
+              <a href="{{ invoice_url }}" target="_blank"
+                 class="btn-ghost"
+                 style="margin-left:auto; font-size:0.78rem; padding:0.25rem 0.6rem;">
+                <i class="bi bi-eye"></i> Preview Invoice
+              </a>
+            </div>
+          </div>
+          {% endif %}
         </div>
 
         <hr class="divider">

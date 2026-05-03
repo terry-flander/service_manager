@@ -40,8 +40,8 @@
                 {% for f in ['first_name','customer_name','customer_email','customer_phone','suburb',
                              'address','reference','scheduled_date','scheduled_time',
                              'end_time','scheduled_date_formatted',
-                             'scheduled_time_formatted','service_types',
-                             'description','region_name'] %}
+                             'scheduled_time_formatted','service_types','invoice_pdf',
+                             'job_total','amount_due','description','region_name'] %}
                 <code style="color:var(--sd-accent); font-size:0.72rem;">{{'{{'}}{{ f }}{{'}}'}}</code>{% if not loop.last %},{% endif %}
                 {% endfor %}
               </div>

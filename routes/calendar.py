@@ -73,7 +73,17 @@ def save_prefs():
 
 @calendar_bp.route('/calendar/events')
 def events():
+    from datetime import date as _date
+    today = _date.today().isoformat()
+
     with get_db() as conn:
+        # Auto-close any region_dates whose date has passed and are still open/pending
+        conn.execute("""
+            UPDATE region_dates SET status='closed'
+            WHERE date < ? AND status IN ('open', 'pending')
+        """, (today,))
+        conn.commit()
+
         jobs = conn.execute("""
             SELECT j.id, j.reference, j.customer_name, j.customer_phone,
                    j.scheduled_date, j.scheduled_time, j.end_time,
