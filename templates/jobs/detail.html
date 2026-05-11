@@ -159,6 +159,7 @@
     <div class="sd-card">
       <div class="sd-card-header">Status &amp; Payment</div>
       <form method="post" action="{{ url_for('jobs.update_status', job_id=job['id']) }}">
+        <input type="hidden" name="return_to" id="return-to-field" value="">
         <div style="padding:1rem 1.25rem; display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
           <span class="badge-status status-{{ job['status'] }}" style="flex-shrink:0;">
             {{ job['status']|replace('_',' ') }}
@@ -265,7 +266,7 @@
               ${{ '%.2f'|format(jp['quantity'] * jp['unit_cost']) }}
             </td>
             <td>
-              <form method="post" action="{{ url_for('jobs.remove_part', job_id=job['id'], jp_id=jp['id']) }}" onsubmit="return confirm('Remove this part?')">
+              <form method="post" action="{{ url_for('jobs.remove_part', job_id=job['id'], jp_id=jp['id']) }}{% if request.args.get('from') %}?from={{ request.args.get('from') }}{% endif %}" onsubmit="return confirm('Remove this part?')">
                 <button type="submit" class="btn-danger"><i class="bi bi-trash3"></i></button>
               </form>
             </td>
@@ -281,33 +282,24 @@
     <div class="sd-card">
       <div class="sd-card-header">Add Part</div>
       <div style="padding:1rem 1.25rem;">
-        <form method="post" action="{{ url_for('jobs.add_part', job_id=job['id']) }}"
+        <form method="post"
+              action="{{ url_for('jobs.add_part', job_id=job['id']) }}{% if request.args.get('from') %}?from={{ request.args.get('from') }}{% endif %}"
               id="add-part-form">
 
-          <!-- Live search -->
-          <div style="margin-bottom:0.75rem; position:relative;">
-            <label class="sd-label">Search parts list</label>
-            <input type="text" id="part-search" class="sd-input"
-                   placeholder="Type name or part number…"
-                   autocomplete="off" spellcheck="false">
-            <div id="part-dropdown"
-                 style="display:none; position:absolute; top:100%; left:0; right:0;
-                        background:var(--sd-slate); border:1px solid var(--sd-border);
-                        border-radius:6px; box-shadow:0 6px 20px rgba(0,0,0,0.35);
-                        z-index:200; max-height:240px; overflow-y:auto;
-                        margin-top:2px;">
-            </div>
-          </div>
-
-          <hr class="divider" style="margin:0.5rem 0 0.75rem;">
-
-          <!-- Editable fields — pre-filled from search or typed manually -->
           <div class="row g-2 align-items-end">
             <input type="hidden" name="part_id" id="part-id-hidden" value="">
+            <!-- Merged search + description — type to search, or enter new part name -->
             <div class="col-md-4">
-              <label class="sd-label">Description *</label>
-              <input type="text" name="description" id="part-description"
-                     class="sd-input" required placeholder="Part or service name">
+              <label class="sd-label">Description *
+                <span style="font-weight:400;text-transform:none;letter-spacing:0;
+                             color:var(--sd-muted);font-size:0.7rem;margin-left:0.3rem;">
+                  — search or enter new
+                </span>
+              </label>
+              <input type="text" name="description" id="part-search"
+                     class="sd-input" required
+                     placeholder="Name or part number…"
+                     autocomplete="off" spellcheck="false">
             </div>
             <div class="col-md-3">
               <label class="sd-label">Part Number</label>
@@ -350,7 +342,7 @@
                     {% if not loop.last %}border-bottom:1px solid var(--sd-border);{% endif %}
                     {% if em['direction'] == 'outbound' %}background:rgba(249,115,22,0.04);{% endif %}
                     {% if em['body'] %}cursor:pointer;{% endif %}"
-             {% if em['body'] %}onclick="openEmailPopup('{{ url_for('jobs.email_message', import_id=em['id']) }}')"{% endif %}>
+             {% if em['body'] and em['direction'] == 'inbound' %}onclick="openEmailPopup('{{ url_for('jobs.email_message', import_id=em['id']) }}')"{% elif em['body'] and em['direction'] == 'outbound' %}onclick="openEmailPopup('{{ url_for('jobs.email_reply_message', reply_id=em['id']) }}')"{% endif %}>
           <div style="display:flex; align-items:center; justify-content:space-between;
                       gap:0.75rem; flex-wrap:wrap; margin-bottom:0.4rem;">
             <div style="display:flex; align-items:center; gap:0.6rem;">
@@ -376,8 +368,13 @@
               <span class="mono" style="font-size:0.75rem; color:var(--sd-muted);">
                 {{ em['sent_at'][:16] }}
               </span>
-              {% if em['body'] %}
+              {% if em['body'] and em['direction'] == 'inbound' %}
               <button onclick="event.stopPropagation(); openEmailPopup('{{ url_for('jobs.email_message', import_id=em['id']) }}')"
+                      class="btn-ghost" style="padding:0.15rem 0.5rem; font-size:0.75rem;">
+                <i class="bi bi-envelope-open"></i> View
+              </button>
+              {% elif em['body'] and em['direction'] == 'outbound' %}
+              <button onclick="event.stopPropagation(); openEmailPopup('{{ url_for('jobs.email_reply_message', reply_id=em['id']) }}')"
                       class="btn-ghost" style="padding:0.15rem 0.5rem; font-size:0.75rem;">
                 <i class="bi bi-envelope-open"></i> View
               </button>
@@ -403,12 +400,18 @@
 {% endblock %}
 
 {% block scripts %}
+<!-- Part search dropdown — position:fixed keeps it above all clipping ancestors -->
+<div id="part-dropdown"
+     style="display:none; position:fixed;
+            background:var(--sd-slate); border:1px solid var(--sd-border);
+            border-radius:6px; box-shadow:0 6px 20px rgba(0,0,0,0.4);
+            z-index:9000; max-height:260px; overflow-y:auto; min-width:280px;">
+</div>
 <script>
 (function () {
-  const searchInput = document.getElementById('part-search');
+  const searchInput = document.getElementById('part-search');  // merged search + description
   const dropdown    = document.getElementById('part-dropdown');
   const idH         = document.getElementById('part-id-hidden');
-  const desc        = document.getElementById('part-description');
   const pnum        = document.getElementById('part-number');
   const cost        = document.getElementById('part-cost');
   const qty         = document.getElementById('part-qty');
@@ -416,7 +419,19 @@
 
   let debounceTimer;
 
-  // ── Fetch and render results ───────────────────────────────────────────────
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function positionDropdown() {
+    const rect = searchInput.getBoundingClientRect();
+    dropdown.style.left  = rect.left + 'px';
+    dropdown.style.top   = (rect.bottom + 2) + 'px';
+    dropdown.style.width = rect.width + 'px';
+  }
+
+  function closeDropdown() { dropdown.style.display = 'none'; }
+
   function fetchResults(q) {
     if (!q || q.length < 1) { closeDropdown(); return; }
     fetch('/parts/search?q=' + encodeURIComponent(q))
@@ -425,7 +440,9 @@
         dropdown.innerHTML = '';
         if (!results.length) {
           dropdown.innerHTML =
-            '<div style="padding:0.6rem 1rem; font-size:0.82rem; color:var(--sd-muted);">No parts found</div>';
+            '<div style="padding:0.6rem 1rem;font-size:0.82rem;color:var(--sd-muted);">' +
+            'No match — will be added as new part</div>';
+          positionDropdown();
           dropdown.style.display = 'block';
           return;
         }
@@ -433,77 +450,57 @@
           const item = document.createElement('div');
           item.className = 'dd-item';
           item.style.cssText =
-            'padding:0.55rem 1rem; cursor:pointer; font-size:0.875rem;' +
-            'border-bottom:1px solid var(--sd-border); display:flex;' +
-            'justify-content:space-between; align-items:center; gap:0.5rem;';
+            'padding:0.55rem 1rem;cursor:pointer;font-size:0.875rem;' +
+            'border-bottom:1px solid var(--sd-border);display:flex;' +
+            'justify-content:space-between;align-items:center;gap:0.5rem;';
           item.innerHTML =
             '<span>' +
               '<span style="font-weight:500;">' + escHtml(p.name) + '</span>' +
               (p.part_number
-                ? ' <span style="font-size:0.75rem; color:var(--sd-muted);">(' + escHtml(p.part_number) + ')</span>'
+                ? ' <span style="font-size:0.75rem;color:var(--sd-muted);">(' + escHtml(p.part_number) + ')</span>'
                 : '') +
             '</span>' +
-            "<span style=\"font-family:'IBM Plex Mono',monospace; font-size:0.82rem; color:var(--sd-accent); flex-shrink:0;\">" + '$' +
-              parseFloat(p.unit_cost).toFixed(2) +
-            '</span>';
-          item.addEventListener('mousedown', function (e) {
-            e.preventDefault(); // prevent input blur before click registers
-            selectPart(p);
-          });
-          item.addEventListener('mouseover', function () {
-            this.style.background = 'var(--sd-surface2)';
-          });
-          item.addEventListener('mouseout', function () {
-            this.style.background = '';
-          });
+            '<span class="mono" style="font-size:0.82rem;color:var(--sd-accent);flex-shrink:0;">$' +
+              parseFloat(p.unit_cost).toFixed(2) + '</span>';
+          item.addEventListener('mousedown', function (e) { e.preventDefault(); selectPart(p); });
+          item.addEventListener('mouseover', function () { this.style.background = 'var(--sd-surface2)'; });
+          item.addEventListener('mouseout',  function () { this.style.background = ''; });
           dropdown.appendChild(item);
         });
+        positionDropdown();
         dropdown.style.display = 'block';
       })
       .catch(() => closeDropdown());
   }
 
-  // ── Fill form fields from selected part ───────────────────────────────────
   function selectPart(p) {
-    idH.value       = p.id;
-    desc.value      = p.name;
-    pnum.value      = p.part_number || '';
-    cost.value      = parseFloat(p.unit_cost).toFixed(2);
-    qty.value       = '1';
-    searchInput.value = p.label || p.name;
+    idH.value         = p.id;
+    searchInput.value = p.name;          // description = selected part name
+    pnum.value        = p.part_number || '';
+    cost.value        = parseFloat(p.unit_cost).toFixed(2);
+    qty.value         = '1';
     closeDropdown();
     qty.focus();
   }
 
-  function closeDropdown() {
-    dropdown.style.display = 'none';
-  }
-
-  function escHtml(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  }
-
-  // ── Event listeners ───────────────────────────────────────────────────────
   searchInput.addEventListener('input', function () {
-    idH.value = '';
+    idH.value = '';  // clear selection when user types (treat as new if no pick)
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => fetchResults(searchInput.value.trim()), 180);
   });
 
   searchInput.addEventListener('keydown', function (e) {
-    // ArrowDown while dropdown closed → fetch and open
     if (e.key === 'ArrowDown' && dropdown.style.display === 'none') {
       e.preventDefault();
       const q = searchInput.value.trim();
       if (q) fetchResults(q);
       return;
     }
-
-    const items    = Array.from(dropdown.querySelectorAll('.dd-item'));
-    const activeIdx = items.findIndex(function(el) { return el.classList.contains('dd-active'); });
+    const items     = Array.from(dropdown.querySelectorAll('.dd-item'));
+    const activeIdx = items.findIndex(el => el.classList.contains('dd-active'));
 
     function setActive(idx) {
-      items.forEach(function(el) { el.classList.remove('dd-active'); el.style.background = ''; });
+      items.forEach(el => { el.classList.remove('dd-active'); el.style.background = ''; });
       if (items[idx]) {
         items[idx].classList.add('dd-active');
         items[idx].style.background = 'var(--sd-surface2)';
@@ -511,18 +508,13 @@
       }
     }
 
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setActive(activeIdx < 0 ? 0 : Math.min(activeIdx + 1, items.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setActive(activeIdx <= 0 ? 0 : activeIdx - 1);
-    } else if (e.key === 'Enter') {
+    if      (e.key === 'ArrowDown') { e.preventDefault(); setActive(activeIdx < 0 ? 0 : Math.min(activeIdx+1, items.length-1)); }
+    else if (e.key === 'ArrowUp')   { e.preventDefault(); setActive(activeIdx <= 0 ? 0 : activeIdx-1); }
+    else if (e.key === 'Enter') {
       const active = dropdown.querySelector('.dd-active');
       if (active) { e.preventDefault(); active.dispatchEvent(new MouseEvent('mousedown')); }
-    } else if (e.key === 'Escape') {
-      closeDropdown();
     }
+    else if (e.key === 'Escape') { closeDropdown(); }
   });
 
   searchInput.addEventListener('focus', function () {
@@ -530,18 +522,14 @@
   });
 
   document.addEventListener('click', function (e) {
-    if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
-      closeDropdown();
-    }
+    if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) closeDropdown();
   });
 
-  // Clear search + part_id if description is manually edited
-  [desc, cost].forEach(function (el) {
-    el.addEventListener('input', function () {
-      idH.value = '';
-      searchInput.value = '';
-    });
-  });
+  // ── Restore focus after add (page reloads to #add-part) ───────────────────
+  if (window.location.hash === '#add-part') {
+    searchInput.focus();
+    searchInput.closest('.sd-card')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
 })();
 
 // ── Quick Pay ─────────────────────────────────────────────────────────────────
@@ -675,6 +663,23 @@
       if (e.key === 'Escape') { this.value = origValue; this.blur(); }
     });
   });
+})();
+
+
+// ── Return-to on status update ────────────────────────────────────────────────
+(function () {
+  var ref = document.referrer || '';
+  var val = '';
+  if (ref.includes('/calendar'))      val = 'calendar';
+  else if (ref.includes('/email'))    val = 'email';
+  else if (ref === '' || ref.includes('/jobs') && !ref.includes('/jobs/')) val = 'jobs';
+  // Also detect if page was opened from All Jobs via URL param
+  var params = new URLSearchParams(window.location.search);
+  if (params.get('from') === 'calendar')   val = 'calendar';
+  if (params.get('from') === 'email')      val = 'email';
+  if (params.get('from') === 'jobs')       val = 'jobs';
+  var field = document.getElementById('return-to-field');
+  if (field && val) field.value = val;
 })();
 
 </script>

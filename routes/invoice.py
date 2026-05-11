@@ -41,7 +41,12 @@ def view_invoice(job_id):
         return "Job not found", 404
 
     tax_inclusive = bool(job['tax_inclusive'])
-    subtotal, gst, total = calc_totals(job_parts, tax_inclusive)
+    if (job['payment_type'] or '').lower() == 'cash':
+        raw = round(sum(jp['quantity'] * jp['unit_cost'] for jp in job_parts), 2)
+        subtotal, gst, total = raw, 0.0, raw
+    else:
+        subtotal, gst, total = calc_totals(job_parts, tax_inclusive)
+
     today    = date.today()
     due_date = today + timedelta(days=30)
 
@@ -151,7 +156,12 @@ def pdf_invoice_file(job_id):
         return "Job not found", 404
 
     tax_inclusive = bool(job['tax_inclusive'])
-    subtotal, gst, total = calc_totals(job_parts, tax_inclusive)
+    if (job['payment_type'] or '').lower() == 'cash':
+        # Cash: no GST — raw line total only, no back-calc or addition
+        raw = round(sum(jp['quantity'] * jp['unit_cost'] for jp in job_parts), 2)
+        subtotal, gst, total = raw, 0.0, raw
+    else:
+        subtotal, gst, total = calc_totals(job_parts, tax_inclusive)
 
     from invoice_pdf import generate_invoice_pdf
     buf = generate_invoice_pdf(job, job_parts, tax_inclusive, subtotal, gst, total)

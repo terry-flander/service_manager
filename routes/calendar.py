@@ -141,7 +141,7 @@ def events():
             'allDay':  all_day,
             'color':   status_colors.get(job['status'], '#3b82f6'),
             'end':     end,
-            'url':     f"/jobs/{job['id']}",
+            'url':     f"/jobs/{job['id']}?from=calendar",
             'extendedProps': {
                 'region':  job['region_name'],
                 'status':  job['status'],

@@ -98,7 +98,7 @@
         <tr style="cursor:pointer;
                    {% if is_unread %}font-weight:600;{% endif %}
                    {% if not is_unread %}opacity:0.72;{% endif %}"
-            onclick="markReadAndNavigate({{ imp['id'] }}, '{{ url_for('jobs.mark_email_read', import_id=imp['id']) }}', '{{ url_for('jobs.job_detail', job_id=imp['job_id']) if imp['job_id'] else '' }}')">
+            onclick="markReadAndNavigate({{ imp['id'] }}, '{{ url_for('jobs.mark_email_read', import_id=imp['id']) }}', '{{ (url_for('jobs.job_detail', job_id=imp['job_id']) + '?from=email') if imp['job_id'] else '' }}')">
 
           <td class="mono" style="font-size:0.78rem; white-space:nowrap;">
             {% set dt = imp['received_at'] or imp['imported_at'] %}

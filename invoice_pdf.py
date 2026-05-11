@@ -56,9 +56,10 @@ def generate_invoice_pdf(job, job_parts, tax_inclusive, subtotal, gst, total):
     buf = io.BytesIO()
     c   = canvas.Canvas(buf, pagesize=A4)
 
-    amount_paid = float(job['amount_paid'] or 0)
-    amount_due  = max(total - amount_paid, 0)
-    paid_date   = job['paid_date'] or ''
+    amount_paid  = float(job['amount_paid'] or 0)
+    amount_due   = max(total - amount_paid, 0)
+    paid_date    = job['paid_date'] or ''
+    payment_type = job['payment_type'] or ''
     inv_date    = date.today()
     due_date    = inv_date + timedelta(days=PAYMENT_DAYS)
     inv_num     = f"INV-{job['reference'].lower()}"
@@ -162,7 +163,11 @@ def generate_invoice_pdf(job, job_parts, tax_inclusive, subtotal, gst, total):
         qty  = jp['quantity']
         uc   = jp['unit_cost']
         line = qty * uc
-        if tax_inclusive:
+        if gst == 0.0:
+            # Cash job — no GST, show raw prices as-is
+            unit_ex = uc
+            line_ex = line
+        elif tax_inclusive:
             unit_ex = uc / 1.1
             line_ex = qty * unit_ex
         else:
@@ -177,7 +182,7 @@ def generate_invoice_pdf(job, job_parts, tax_inclusive, subtotal, gst, total):
         c.drawString(col['desc'],  row_y, desc)
         c.drawRightString(col['qty'],   row_y, f"{qty:.2f}")
         c.drawRightString(col['price'], row_y, f"{unit_ex:.4f}")
-        c.drawRightString(col['gst'],   row_y, "10%")
+        c.drawRightString(col['gst'],   row_y, "10%" if gst > 0 else "—")
         c.drawRightString(col['amt'],   row_y, f"{line_ex:.2f}")
         row_y -= 6*mm
 
@@ -199,11 +204,29 @@ def generate_invoice_pdf(job, job_parts, tax_inclusive, subtotal, gst, total):
             totals_y -= 5.5*mm
 
     _total_row("Subtotal",           _fmt(subtotal)[1:])
-    _total_row(f"TOTAL  GST  10%",   _fmt(gst)[1:])
+    if gst > 0:
+        _total_row("TOTAL  GST  10%",   _fmt(gst)[1:])
     _draw_hline(c, col['price'] - 5*mm, PAGE_W - M, totals_y + 3*mm, 0.5)
     _total_row("TOTAL AUD",          _fmt(total)[1:],  bold=True)
     if amount_paid > 0:
-        _total_row("Less Amount Paid",   _fmt(amount_paid)[1:])
+        # Build descriptive label: "Paid  EFTPOS  15 May 2026"
+        paid_parts = ['Paid']
+        if paid_date:
+            try:
+                from datetime import datetime as _dt
+                pd = _dt.strptime(paid_date[:10], '%Y-%m-%d')
+                paid_parts.append(pd.strftime('%-d %b %Y'))
+            except ValueError:
+                paid_parts.append(paid_date[:10])
+        if payment_type:
+            paid_parts.append(f'— {payment_type}')
+        paid_label = '  '.join(paid_parts)
+
+        # Draw bold label starting further left to accommodate the longer text
+        _bold(c, 9)
+        c.drawString(col['price'] - 5*mm, totals_y, paid_label)
+        c.drawRightString(col['amt'], totals_y, _fmt(amount_paid)[1:])
+        totals_y -= 5.5*mm
     _draw_hline(c, col['price'] - 5*mm, PAGE_W - M, totals_y + 3*mm, 1.0)
     _total_row("AMOUNT DUE AUD",     _fmt(amount_due)[1:], bold=True)
     _draw_hline(c, col['price'] - 5*mm, PAGE_W - M, totals_y + 3*mm, 0.5)

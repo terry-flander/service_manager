@@ -411,28 +411,44 @@
     <a href="{{ url_for('parts.index') }}" class="sidebar-link {% if request.endpoint in ['parts.index','parts.new_part','parts.edit_part'] %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-box-seam"></i> Parts List
     </a>
+    {% if current_user and current_user['role'] == 'admin' %}
+    <div style="margin-top:0.5rem;">
+      <button onclick="toggleAdmin()" id="admin-toggle"
+              style="width:100%; display:flex; align-items:center; justify-content:space-between;
+                     background:none; border:none; cursor:pointer; padding:0.35rem 1.25rem;
+                     color:var(--sd-muted);
+                     font-size:0.72rem; font-weight:600; text-transform:uppercase;
+                     letter-spacing:0.08em;">
+        <span><i class="bi bi-shield-lock" style="margin-right:0.4rem;"></i>Admin</span>
+        <i class="bi bi-chevron-right" id="admin-chevron"
+           style="font-size:0.7rem; transition:transform 0.2s;"></i>
+      </button>
+      <div id="admin-submenu" style="display:none;">
+        <a href="{{ url_for('auth.users') }}" class="sidebar-link {% if request.endpoint and request.endpoint.startswith('auth.') and request.endpoint != 'auth.change_password' %}active{% endif %}" onclick="closeSidebar()" style="padding-left:2rem;">
+          <i class="bi bi-people"></i> Users
+        </a>
+        <a href="{{ url_for('email_replies.templates_index') }}" class="sidebar-link {% if request.endpoint and request.endpoint.startswith('email_replies.') %}active{% endif %}" onclick="closeSidebar()" style="padding-left:2rem;">
+          <i class="bi bi-envelope-paper"></i> Email Templates
+        </a>
+        <a href="{{ url_for('jobs.status_colors') }}" class="sidebar-link {% if request.endpoint == 'jobs.status_colors' %}active{% endif %}" onclick="closeSidebar()" style="padding-left:2rem;">
+          <i class="bi bi-palette"></i> Status Colours
+        </a>
+        <a href="{{ url_for('jobs.backup_db') }}" class="sidebar-link" onclick="closeSidebar()" style="padding-left:2rem;">
+          <i class="bi bi-download"></i> Backup DB
+        </a>
+        <a href="{{ url_for('import_customers.import_customers') }}" class="sidebar-link {% if request.endpoint == 'import_customers.import_customers' %}active{% endif %}" onclick="closeSidebar()" style="padding-left:2rem;">
+          <i class="bi bi-people"></i> Import Customers
+        </a>
+        <a href="{{ url_for('import_jobs.import_jobs') }}" class="sidebar-link {% if request.endpoint == 'import_jobs.import_jobs' %}active{% endif %}" onclick="closeSidebar()" style="padding-left:2rem;">
+          <i class="bi bi-upload"></i> Import Jobs
+        </a>
+        <a href="{{ url_for('regions.import_csv') }}" class="sidebar-link {% if request.endpoint == 'regions.import_csv' %}active{% endif %}" onclick="closeSidebar()" style="padding-left:2rem;">
+          <i class="bi bi-upload"></i> Import Regions
+        </a>
+      </div>
+    </div>
+    {% endif %}
   </div>
-  {% if current_user and current_user['role'] == 'admin' %}
-  <div class="nav-section-label" style="margin-top:0.5rem;">Admin</div>
-  <a href="{{ url_for('auth.users') }}" class="sidebar-link {% if request.endpoint and request.endpoint.startswith('auth.') and request.endpoint != 'auth.change_password' %}active{% endif %}" onclick="closeSidebar()">
-    <i class="bi bi-people"></i> Users
-  </a>
-  <a href="{{ url_for('email_replies.templates_index') }}" class="sidebar-link {% if request.endpoint and request.endpoint.startswith('email_replies.') %}active{% endif %}" onclick="closeSidebar()">
-    <i class="bi bi-envelope-paper"></i> Email Templates
-  </a>
-  <a href="{{ url_for('jobs.status_colors') }}" class="sidebar-link {% if request.endpoint == 'jobs.status_colors' %}active{% endif %}" onclick="closeSidebar()">
-    <i class="bi bi-palette"></i> Status Colours
-  </a>
-  <a href="{{ url_for('jobs.backup_db') }}" class="sidebar-link" onclick="closeSidebar()">
-    <i class="bi bi-download"></i> Backup DB
-  </a>
-  <a href="{{ url_for('import_jobs.import_jobs') }}" class="sidebar-link {% if request.endpoint == 'import_jobs.import_jobs' %}active{% endif %}" onclick="closeSidebar()">
-    <i class="bi bi-upload"></i> Import Jobs
-  </a>
-  <a href="{{ url_for('regions.import_csv') }}" class="sidebar-link {% if request.endpoint == 'regions.import_csv' %}active{% endif %}" onclick="closeSidebar()">
-    <i class="bi bi-upload"></i> Import Regions
-  </a>
-  {% endif %}
   <div style="padding:1rem 1.25rem; border-top:1px solid var(--sd-border); margin-top:auto; flex-shrink:0;">
     {% if current_user %}
     <div style="font-size:0.78rem; color:var(--sd-text); margin-bottom:0.35rem;">
@@ -511,6 +527,28 @@ function toggleSidebar() {
     document.body.style.overflow = 'hidden'; // prevent background scroll
   }
 }
+
+function toggleAdmin() {
+  const menu    = document.getElementById('admin-submenu');
+  const chevron = document.getElementById('admin-chevron');
+  if (!menu) return;
+  const isOpen = menu.style.display !== 'none';
+  menu.style.display      = isOpen ? 'none' : 'block';
+  chevron.style.transform = isOpen ? '' : 'rotate(90deg)';
+}
+
+// Auto-open admin submenu if current page is an admin page
+(function() {
+  const adminLinks = document.querySelectorAll('#admin-submenu .sidebar-link');
+  const isAdminPage = Array.from(adminLinks).some(el => el.classList.contains('active'));
+  if (isAdminPage) {
+    const menu    = document.getElementById('admin-submenu');
+    const chevron = document.getElementById('admin-chevron');
+    if (menu)    menu.style.display      = 'block';
+    if (chevron) chevron.style.transform = 'rotate(90deg)';
+  }
+})();
+
 
 function closeSidebar() {
   document.getElementById('sidebar').classList.remove('open');

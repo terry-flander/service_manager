@@ -72,15 +72,21 @@
 
         <div style="padding:0 1.5rem;">
           <div class="row g-3">
+            <!-- Hidden field — carries customer_id when launched from customer page -->
+            <input type="hidden" name="customer_id_prefill"
+                   value="{{ prefill_customer['id'] if prefill_customer else '' }}">
+
             <div class="col-md-6">
               <label class="sd-label">Name *</label>
               <input type="text" name="customer_name" id="f_name" class="sd-input"
-                     required placeholder="Full name">
+                     required placeholder="Full name"
+                     value="{{ prefill_customer['name'] if prefill_customer else '' }}">
             </div>
             <div class="col-md-6">
               <label class="sd-label">Phone</label>
               <input type="text" name="customer_phone" id="f_phone" class="sd-input"
-                     placeholder="e.g. 0412 345 678">
+                     placeholder="e.g. 0412 345 678"
+                     value="{{ prefill_customer['phone'] if prefill_customer else '' }}">
             </div>
             <div class="col-md-6" id="suburb-col">
               <label class="sd-label">Suburb</label>
@@ -88,7 +94,8 @@
                       onchange="suburbChanged(this.value)">
                 <option value="">— Select suburb —</option>
                 {% for s in suburbs_list %}
-                <option value="{{ s['name'] }}" data-region="{{ s['region_id'] }}">
+                <option value="{{ s['name'] }}" data-region="{{ s['region_id'] }}"
+                  {% if prefill_customer and prefill_customer['suburb'] == s['name'] %}selected{% endif %}>
                   {{ s['name'] }} ({{ s['region_name'] }})
                 </option>
                 {% endfor %}
@@ -97,7 +104,8 @@
             <div class="col-md-6">
               <label class="sd-label">Email</label>
               <input type="email" name="customer_email" id="f_email" class="sd-input"
-                     placeholder="customer@example.com">
+                     placeholder="customer@example.com"
+                     value="{{ prefill_customer['email'] if prefill_customer else '' }}">
             </div>
             <div class="col-12">
               <label class="sd-label">Message</label>

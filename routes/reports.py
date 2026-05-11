@@ -32,18 +32,23 @@ def _get_report_data(date_from, date_to, job_types, statuses):
 
     jt_ph = ','.join('?' * len(job_types))
     st_ph = ','.join('?' * len(statuses))
-    params = [date_from, date_to] + list(job_types) + list(statuses)
+    params = [date_from, date_to, date_from, date_to] + list(job_types) + list(statuses)
 
     with get_db() as conn:
         jobs = conn.execute(f"""
             SELECT j.id, j.reference, j.job_type, j.customer_name,
                    j.scheduled_date, j.status, j.tax_inclusive,
-                   j.amount_paid
+                   j.amount_paid, j.payment_type,
+                   coalesce(j.scheduled_date, j.paid_date) as report_date
             FROM jobs j
-            WHERE j.scheduled_date BETWEEN ? AND ?
+            WHERE (
+                (j.scheduled_date IS NOT NULL AND j.scheduled_date BETWEEN ? AND ?)
+                OR
+                (j.scheduled_date IS NULL AND j.paid_date BETWEEN ? AND ?)
+            )
               AND j.job_type IN ({jt_ph})
               AND j.status IN ({st_ph})
-            ORDER BY j.scheduled_date ASC, j.id ASC
+            ORDER BY report_date ASC, j.id ASC
         """, params).fetchall()
 
         rows = []
@@ -52,17 +57,22 @@ def _get_report_data(date_from, date_to, job_types, statuses):
                 "SELECT * FROM job_parts WHERE job_id=?",
                 (job['id'],)).fetchall()
             subtotal, gst, total = calc_totals(parts, bool(job['tax_inclusive']))
+            # Cash payments are GST-free — zero out the GST component
+            if (job['payment_type'] or '').lower() == 'cash':
+                gst      = 0.0
+                subtotal = total
             rows.append({
-                'id':           job['id'],
-                'reference':    job['reference'],
-                'job_type':     job['job_type'],
+                'id':            job['id'],
+                'reference':     job['reference'],
+                'job_type':      job['job_type'],
                 'customer_name': job['customer_name'],
-                'scheduled_date': job['scheduled_date'],
+                'scheduled_date': job['report_date'] or job['scheduled_date'] or '',
                 'status':        job['status'],
                 'gross':         total,
                 'gst':           gst,
                 'net':           subtotal,
                 'amount_paid':   float(job['amount_paid'] or 0),
+                'payment_type':  job['payment_type'] or '',
             })
     return rows
 
@@ -105,19 +115,54 @@ def _grand_totals(rows):
 
 @reports_bp.route('/reports/sales', methods=['GET', 'POST'])
 def sales():
-    today      = date.today()
+    import json as _json
+    from flask import session as _sess
+    user_id = _sess.get('user_id')
+    today          = date.today()
     first_of_month = today.replace(day=1).isoformat()
-    default_to = today.isoformat()
+    default_to     = today.isoformat()
 
-    # Default: current month, all job types
-    date_from  = request.form.get('date_from', first_of_month)
-    date_to    = request.form.get('date_to',   default_to)
-    job_types  = request.form.getlist('job_types') or ['booking', 'workshop']
-    statuses   = request.form.getlist('statuses') or ['invoiced']
+    with get_db() as conn:
+        if request.method == 'POST':
+            date_from = request.form.get('date_from', first_of_month)
+            date_to   = request.form.get('date_to',   default_to)
+            job_types = request.form.getlist('job_types') or ['booking', 'workshop']
+            statuses  = request.form.getlist('statuses') or ['invoiced', 'paid']
+            # Save to settings
+            prefs = {'date_from': date_from, 'date_to': date_to,
+                     'job_types': job_types, 'statuses': statuses}
+            conn.execute(
+                "INSERT INTO settings (key,value) VALUES (?,?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (f'report_prefs_{user_id}', _json.dumps(prefs)))
+            conn.commit()
+        else:
+            # Restore saved prefs if available
+            row = conn.execute(
+                "SELECT value FROM settings WHERE key=?",
+                (f'report_prefs_{user_id}',)).fetchone()
+            if row:
+                try:
+                    prefs     = _json.loads(row['value'])
+                    date_from = prefs.get('date_from', first_of_month)
+                    date_to   = prefs.get('date_to',   default_to)
+                    job_types = prefs.get('job_types',  ['booking', 'workshop'])
+                    statuses  = prefs.get('statuses',   ['invoiced', 'paid'])
+                except Exception:
+                    date_from = first_of_month
+                    date_to   = default_to
+                    job_types = ['booking', 'workshop']
+                    statuses  = ['invoiced', 'paid']
+            else:
+                date_from = first_of_month
+                date_to   = default_to
+                job_types = ['booking', 'workshop']
+                statuses  = ['invoiced', 'paid']
 
-    rows    = _get_report_data(date_from, date_to, job_types, statuses)
-    months  = _group_by_month(rows)
-    totals  = _grand_totals(rows)
+    ran     = bool(request.method == 'POST' or request.args.get('run'))
+    rows    = _get_report_data(date_from, date_to, job_types, statuses) if ran else []
+    months  = _group_by_month(rows) if ran else {}
+    totals  = _grand_totals(rows) if ran else {}
 
     return render_template('reports/sales.html',
                            date_from=date_from, date_to=date_to,
@@ -125,7 +170,7 @@ def sales():
                            STATUS_OPTIONS=STATUS_OPTIONS,
                            JOB_TYPE_OPTIONS=JOB_TYPE_OPTIONS,
                            months=months, rows=rows, totals=totals,
-                           ran=bool(request.method == 'POST' or request.args.get('run')))
+                           ran=ran)
 
 
 # ── CSV export ────────────────────────────────────────────────────────────────

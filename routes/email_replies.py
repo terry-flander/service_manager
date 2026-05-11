@@ -299,7 +299,11 @@ def compose_reply(job_id):
                         "SELECT * FROM job_parts WHERE job_id=? ORDER BY id",
                         (job_id,)).fetchall()
                 _tax  = bool(job['tax_inclusive'])
-                _sub, _gst, _tot = calc_totals(_jp, _tax)
+                if (job['payment_type'] or '').lower() == 'cash':
+                    _raw = round(sum(jp['quantity'] * jp['unit_cost'] for jp in _jp), 2)
+                    _sub, _gst, _tot = _raw, 0.0, _raw
+                else:
+                    _sub, _gst, _tot = calc_totals(_jp, _tax)
                 _buf  = generate_invoice_pdf(job, _jp, _tax, _sub, _gst, _tot)
                 _fname = f"INV-{job['reference'].lower()}.pdf"
                 from email_sender import send_reply_with_attachment
