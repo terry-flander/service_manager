@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block title %}Import Customers{% endblock %}
+{% block topbar_title %}Import Customers{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('customers.index') }}" class="btn-ghost">
+    <i class="bi bi-arrow-left"></i> <span>Customers</span>
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-9">
+
+    {% if name_mismatches is defined and name_mismatches %}
+    <!-- Step 3: Reconciliation report -->
+    <div class="sd-card mb-3"
+         style="border-color:rgba(245,158,11,0.4);">
+      <div class="sd-card-header" style="color:#fbbf24;">
+        <i class="bi bi-exclamation-triangle"></i>
+        Import Complete — Name Reconciliation Required
+      </div>
+      <div style="padding:0.75rem 1.25rem 0.25rem; font-size:0.85rem; color:var(--sd-muted);">
+        {{ created }} created &nbsp;·&nbsp; {{ updated }} updated.
+        The following {{ name_mismatches|length }} customer{{ 's' if name_mismatches|length != 1 }}
+        had a different name in the import file. The existing name was
+        <strong style="color:var(--sd-text);">kept</strong> — review and update manually if needed.
+      </div>
+      <div class="table-responsive-sd">
+        <table class="sd-table">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Existing Name <span style="font-weight:400;color:var(--sd-muted);">(kept)</span></th>
+              <th>Import Name <span style="font-weight:400;color:var(--sd-muted);">(not applied)</span></th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in name_mismatches %}
+            <tr>
+              <td class="mono" style="font-size:0.8rem; color:var(--sd-muted);">{{ m['email'] }}</td>
+              <td style="font-weight:600; color:var(--sd-text);">{{ m['existing_name'] }}</td>
+              <td style="color:var(--sd-muted);">{{ m['import_name'] }}</td>
+              <td>
+                <a href="{{ url_for('customers.index') }}?q={{ m['email'] | urlencode }}"
+                   class="btn-ghost" style="padding:0.2rem 0.6rem; font-size:0.75rem;">
+                  <i class="bi bi-pencil"></i> Edit
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div style="padding:0.75rem 1.25rem; display:flex; justify-content:flex-end;">
+        <a href="{{ url_for('customers.index') }}" class="btn-accent">
+          <i class="bi bi-check-lg"></i> Done
+        </a>
+      </div>
+    </div>
+
+    {% elif not preview %}
+    <!-- Step 1: Upload -->
+    <!-- Step 1: Upload -->
+    <div class="sd-card">
+      <div class="sd-card-header">Upload CSV File</div>
+      <div style="padding:1.5rem;">
+        <form method="post" enctype="multipart/form-data">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="sd-label">CSV File *</label>
+              <input type="file" name="csv_file" class="sd-input" accept=".csv" required>
+              <div style="margin-top:0.5rem; font-size:0.78rem; color:var(--sd-muted);">
+                Expected columns (any order):
+                <code style="color:var(--sd-accent);">Name</code>,
+                <code style="color:var(--sd-accent);">Email</code>,
+                <code style="color:var(--sd-accent);">Phone</code>,
+                <code style="color:var(--sd-accent);">Suburb</code>,
+                <code style="color:var(--sd-accent);">Address</code>
+                <br>Name and Email are required. Matching is on Email — existing customers are updated.
+              </div>
+            </div>
+          </div>
+          <hr class="divider">
+          <div style="display:flex; justify-content:flex-end;">
+            <button type="submit" class="btn-accent">
+              <i class="bi bi-eye"></i> Preview Import
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {% if errors %}
+    <div class="sd-card mt-3" style="border-color:rgba(248,113,113,0.35);">
+      <div class="sd-card-header" style="color:#f87171;">Parse Errors / Skipped Rows</div>
+      <div style="padding:1rem 1.25rem;">
+        {% for e in errors %}
+        <div style="font-size:0.82rem; color:var(--sd-muted); margin-bottom:0.3rem;">
+          <i class="bi bi-exclamation-triangle" style="color:#f59e0b;"></i> {{ e }}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <!-- Step 2: Preview & Confirm -->
+    <div class="sd-card mb-3">
+      <div class="sd-card-header">
+        Preview — {{ filename }}
+        <span style="font-weight:400; font-size:0.78rem; color:var(--sd-muted);">
+          {{ preview|length }} row{{ 's' if preview|length != 1 }}
+          &nbsp;·&nbsp;
+          <span style="color:#34d399;">{{ preview|selectattr('action','equalto','create')|list|length }} to create</span>
+          &nbsp;·&nbsp;
+          <span style="color:#60a5fa;">{{ preview|selectattr('action','equalto','update')|list|length }} to update</span>
+        </span>
+      </div>
+      <div class="table-responsive-sd">
+        <table class="sd-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Phone</th>
+              <th>Suburb</th>
+              <th>Address</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in preview %}
+            <tr>
+              <td>
+                {% if row['action'] == 'update' %}
+                <span class="badge-status status-scheduled" title="Existing customer will be updated">update</span>
+                {% else %}
+                <span class="badge-status status-complete" title="New customer will be created">new</span>
+                {% endif %}
+              </td>
+              <td style="font-weight:500;">
+                {{ row['name'] }}
+                {% if row['existing_name'] and row['existing_name'] != row['name'] %}
+                <span style="font-size:0.72rem; color:var(--sd-muted);">
+                  (was: {{ row['existing_name'] }})
+                </span>
+                {% endif %}
+              </td>
+              <td style="font-size:0.82rem; color:var(--sd-muted);">{{ row['email'] or '—' }}</td>
+              <td style="font-size:0.82rem;">{{ row['phone'] or '—' }}</td>
+              <td style="font-size:0.82rem;">{{ row['suburb'] or '—' }}</td>
+              <td style="font-size:0.82rem; color:var(--sd-muted);">
+                {{ row['address'][:40] if row['address'] else '—' }}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {% if errors %}
+    <div class="sd-card mb-3" style="border-color:rgba(245,158,11,0.35);">
+      <div class="sd-card-header" style="color:#fbbf24;">Skipped Rows</div>
+      <div style="padding:0.75rem 1.25rem;">
+        {% for e in errors %}
+        <div style="font-size:0.8rem; color:var(--sd-muted); margin-bottom:0.2rem;">{{ e }}</div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <form method="post">
+      <input type="hidden" name="confirm" value="1">
+      <input type="hidden" name="rows_json" value="{{ rows_json | e }}">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:0.75rem;">
+        <a href="{{ url_for('import_customers.import_customers') }}" class="btn-ghost">
+          <i class="bi bi-arrow-left"></i> Upload different file
+        </a>
+        <button type="submit" class="btn-accent">
+          <i class="bi bi-check-lg"></i>
+          Confirm Import ({{ preview|length }} customer{{ 's' if preview|length != 1 }})
+        </button>
+      </div>
+    </form>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

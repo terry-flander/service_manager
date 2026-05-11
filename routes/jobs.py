@@ -104,11 +104,11 @@ def index():
     status    = request.args.get('status', '')
     region_id = request.args.get('region_id', '')
     job_type  = request.args.get('job_type', '')
+    date_from = request.args.get('date_from', '')
+    date_to   = request.args.get('date_to', '')
     with get_db() as conn:
         query = """
             SELECT j.*, r.name as region_name,
-                   COALESCE((SELECT SUM(quantity*unit_cost)
-                             FROM job_parts WHERE job_id=j.id), 0) as total,
                    c.id as cust_id
             FROM jobs j
             JOIN regions r ON j.region_id = r.id
@@ -128,11 +128,39 @@ def index():
         if job_type:
             query += " AND j.job_type = ?"
             params.append(job_type)
+        if date_from:
+            query += " AND j.scheduled_date >= ?"
+            params.append(date_from)
+        if date_to:
+            query += " AND j.scheduled_date <= ?"
+            params.append(date_to)
         query += " ORDER BY j.scheduled_date ASC, j.scheduled_time ASC, j.id DESC"
-        jobs    = conn.execute(query, params).fetchall()
+        jobs_raw = conn.execute(query, params).fetchall()
+
+        # Fetch all parts for these jobs in one query, compute GST-correct totals
+        if jobs_raw:
+            job_ids   = [j['id'] for j in jobs_raw]
+            ph        = ','.join('?' * len(job_ids))
+            parts_map = {}
+            for p in conn.execute(
+                f"SELECT * FROM job_parts WHERE job_id IN ({ph})", job_ids
+            ).fetchall():
+                parts_map.setdefault(p['job_id'], []).append(p)
+
+        from routes.invoice import calc_totals
+        jobs = []
+        for j in jobs_raw:
+            j_parts = parts_map.get(j['id'], []) if jobs_raw else []
+            if (j['payment_type'] or '').lower() == 'cash':
+                total = round(sum(p['quantity'] * p['unit_cost'] for p in j_parts), 2)
+            else:
+                _, _, total = calc_totals(j_parts, bool(j['tax_inclusive']))
+            jobs.append((j, total))
+
         regions = conn.execute("SELECT * FROM regions ORDER BY name").fetchall()
     return render_template('jobs/index.html', jobs=jobs, regions=regions,
                            status=status, region_id=region_id, job_type=job_type,
+                           date_from=date_from, date_to=date_to,
                            TIME_LABELS=TIME_LABELS, JOB_TYPES=JOB_TYPES)
 
 
@@ -156,12 +184,18 @@ def new_job():
         cust_phone = request.form.get('customer_phone', '').strip()
 
         cust_address = request.form.get('customer_address', '').strip()
+        # If customer_id was passed from the customer page, use it directly
+        supplied_cust_id = request.form.get('customer_id_prefill', '').strip()
         import sqlite3 as _sqlite3
         for _attempt in range(5):
             with get_db() as conn:
                 ref = generate_reference(job_type, conn)
-                customer_id, stored_address = upsert_customer(
-                    conn, cust_name, cust_email, cust_phone, suburb, cust_address)
+                if supplied_cust_id and supplied_cust_id.isdigit():
+                    customer_id   = int(supplied_cust_id)
+                    stored_address = cust_address
+                else:
+                    customer_id, stored_address = upsert_customer(
+                        conn, cust_name, cust_email, cust_phone, suburb, cust_address)
                 explicit_address = request.form.get('address', '').strip()
                 job_address = explicit_address or stored_address or suburb
                 try:
@@ -216,6 +250,15 @@ def new_job():
         flash(msg + '.', 'success')
         return redirect(url_for('jobs.job_detail', job_id=job_id))
 
+    # ── GET — optionally pre-fill from a customer record ─────────────────────
+    prefill_customer = None
+    customer_id_param = request.args.get('customer_id', '').strip()
+    if customer_id_param and customer_id_param.isdigit():
+        with get_db() as conn:
+            prefill_customer = conn.execute(
+                "SELECT * FROM customers WHERE id=?",
+                (int(customer_id_param),)).fetchone()
+
     with get_db() as conn:
         suburbs_list = conn.execute("""
             SELECT s.name, s.region_id, r.name as region_name
@@ -226,7 +269,8 @@ def new_job():
                            TIME_SLOTS=TIME_SLOTS, TIME_LABELS=TIME_LABELS,
                            JOB_TYPES=JOB_TYPES, SERVICE_TYPES=SERVICE_TYPES,
                            suburbs_list=suburbs_list,
-                           today=date.today().isoformat())
+                           today=date.today().isoformat(),
+                           prefill_customer=prefill_customer)
 
 
 @jobs_bp.route('/jobs/<int:job_id>')
@@ -441,7 +485,10 @@ def add_part(job_id):
                     "UPDATE jobs SET status='in_progress' WHERE id=?", (job_id,))
             conn.commit()
     flash('Part added.', 'success')
-    return redirect(url_for('jobs.job_detail', job_id=job_id))
+    # Preserve the ?from= param so return_to still works after adding a part
+    from_param = request.args.get('from', '')
+    suffix = ('?from=' + from_param if from_param else '') + '#add-part'
+    return redirect(url_for('jobs.job_detail', job_id=job_id) + suffix)
 
 
 @jobs_bp.route('/jobs/<int:job_id>/remove-part/<int:jp_id>', methods=['POST'])
@@ -451,7 +498,9 @@ def remove_part(job_id, jp_id):
             "DELETE FROM job_parts WHERE id=? AND job_id=?", (jp_id, job_id))
         conn.commit()
     flash('Part removed.', 'success')
-    return redirect(url_for('jobs.job_detail', job_id=job_id))
+    from_param = request.args.get('from', '')
+    suffix = ('?from=' + from_param) if from_param else ''
+    return redirect(url_for('jobs.job_detail', job_id=job_id) + suffix)
 
 
 @jobs_bp.route('/jobs/<int:job_id>/delete', methods=['POST'])
@@ -492,6 +541,13 @@ def update_status(job_id):
         conn.commit()
     msg = f'Paid via {payment_type}.' if payment_type else f'Status updated to {new_status}.'
     flash(msg, 'success')
+    return_to = request.form.get('return_to', '').strip()
+    if return_to in ('calendar', 'email', 'jobs'):
+        return redirect(url_for({
+            'calendar': 'calendar.index',
+            'email':    'jobs.email_imports',
+            'jobs':     'jobs.index',
+        }[return_to]))
     return redirect(url_for('jobs.job_detail', job_id=job_id))
 
 
@@ -507,6 +563,23 @@ def email_message(import_id):
     if not imp:
         return "Message not found", 404
     return render_template('jobs/email_message.html', imp=imp)
+
+
+@jobs_bp.route('/jobs/email-replies/message/<int:reply_id>')
+def email_reply_message(reply_id):
+    with get_db() as conn:
+        reply = conn.execute("""
+            SELECT er.*,
+                   j.reference,
+                   u.name as sent_by_name
+            FROM email_replies er
+            LEFT JOIN jobs j ON j.id = er.job_id
+            LEFT JOIN users u ON u.id = er.sent_by
+            WHERE er.id = ?
+        """, (reply_id,)).fetchone()
+    if not reply:
+        return "Message not found", 404
+    return render_template('jobs/email_reply_message.html', reply=reply)
 
 
 @jobs_bp.route('/jobs/email-imports')
@@ -605,6 +678,52 @@ def poll_now():
     except Exception as e:
         flash(f'Poll error: {e}', 'danger')
     return redirect(url_for('jobs.email_imports'))
+
+
+@jobs_bp.route('/admin/poll-log')
+def poll_log():
+    """Run a poll and return the log output as plain text. Admin only."""
+    from flask import session as _sess
+    if _sess.get('user_role') != 'admin':
+        return 'Admin access required', 403
+
+    import logging, io
+    from flask import current_app, Response
+
+    # Capture all log output into a string buffer
+    log_buf = io.StringIO()
+    handler = logging.StreamHandler(log_buf)
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(logging.Formatter(
+        '%(asctime)s %(name)s %(levelname)s %(message)s'))
+
+    # Attach to root logger and email_poller specifically
+    root_logger   = logging.getLogger()
+    poller_logger = logging.getLogger('email_poller')
+
+    old_root_level   = root_logger.level
+    old_poller_level = poller_logger.level
+
+    root_logger.addHandler(handler)
+    root_logger.setLevel(logging.DEBUG)
+    poller_logger.setLevel(logging.DEBUG)
+
+    result_line = ''
+    try:
+        from email_poller import poll_once
+        n = poll_once(current_app._get_current_object(), force=True)
+        result_line = f'\n=== Poll complete: {n} new message(s) imported ===\n'
+    except Exception as e:
+        import traceback
+        result_line = f'\n=== Poll error: {e} ===\n{traceback.format_exc()}'
+    finally:
+        root_logger.removeHandler(handler)
+        root_logger.setLevel(old_root_level)
+        poller_logger.setLevel(old_poller_level)
+
+    output = log_buf.getvalue() + result_line
+    return Response(output, mimetype='text/plain')
+
 
 
 @jobs_bp.route('/settings/status-colors', methods=['GET', 'POST'])

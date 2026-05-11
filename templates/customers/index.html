@@ -13,13 +13,17 @@
   <div style="padding:0.75rem 1.25rem; display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap;">
     <form method="get" action="{{ url_for('customers.index') }}"
           style="display:flex; gap:0.5rem; flex:1; min-width:0;">
+      <!-- Carry sort through search submission -->
+      {% if sort and sort != 'name' %}
+      <input type="hidden" name="sort" value="{{ sort }}">
+      {% endif %}
       <div style="position:relative; flex:1; min-width:0;">
         <i class="bi bi-search"
            style="position:absolute; left:0.75rem; top:50%; transform:translateY(-50%);
                   color:var(--sd-muted); pointer-events:none; font-size:0.85rem;"></i>
         <input type="text" name="q" value="{{ q }}" class="sd-input"
                style="padding-left:2.25rem;"
-               placeholder="Search by name or phone…" autofocus>
+               placeholder="Search name, email or phone…" autofocus>
       </div>
       <button type="submit" class="btn-accent">Search</button>
     </form>
@@ -42,12 +46,25 @@
   <div class="table-responsive-sd"><table class="sd-table">
     <thead>
       <tr>
-        <th>Name</th>
-        <th>Email</th>
-        <th>Phone</th>
-        <th>Suburb</th>
-        <th style="text-align:center;">Jobs</th>
-        <th>Last Job</th>
+        {% set cols = [('name','Name'),('email','Email'),('phone','Phone'),('suburb','Suburb'),('jobs','Jobs'),('last_job','Last Job')] %}
+        {% for col_key, col_label in cols %}
+        {% set is_active = sort == col_key %}
+        <th {% if col_key == 'jobs' %}style="text-align:center;"{% endif %}>
+          <a href="{{ url_for('customers.index', q=q, sort=col_key) }}"
+             style="text-decoration:none; color:{{ 'var(--sd-text)' if is_active else 'var(--sd-muted)' }};
+                    display:inline-flex; align-items:center; gap:0.3rem; white-space:nowrap;">
+            {{ col_label }}
+            {% if is_active %}
+            <i class="bi bi-caret-down-fill" style="font-size:0.6rem;"></i>
+            {% else %}
+            <i class="bi bi-caret-down" style="font-size:0.6rem; opacity:0.4;"></i>
+            {% endif %}
+          </a>
+        </th>
+        {% endfor %}
+        <th></th>
+      </tr>
+    </thead>
         <th></th>
       </tr>
     </thead>

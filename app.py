@@ -6,9 +6,13 @@ from models import init_db
 
 def create_app():
     import logging
+    log_level = os.environ.get('LOG_LEVEL', 'INFO').upper()
     logging.basicConfig(
-        level=logging.INFO,
+        level=getattr(logging, log_level, logging.INFO),
         format='%(asctime)s %(name)s %(levelname)s %(message)s'
+    )
+    logging.getLogger('email_poller').setLevel(
+        getattr(logging, log_level, logging.INFO)
     )
     app = Flask(__name__)
     app.config['SECRET_KEY']          = os.environ.get('SECRET_KEY', 'dev-secret-CHANGE-in-production')
@@ -25,7 +29,8 @@ def create_app():
     from routes.regions  import regions_bp
     from routes.reports     import reports_bp
     from routes.import_jobs   import import_jobs_bp
-    from routes.email_replies import email_replies_bp
+    from routes.email_replies    import email_replies_bp
+    from routes.import_customers import import_customers_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(jobs_bp)
@@ -37,6 +42,7 @@ def create_app():
     app.register_blueprint(reports_bp)
     app.register_blueprint(import_jobs_bp)
     app.register_blueprint(email_replies_bp)
+    app.register_blueprint(import_customers_bp)
 
     # ── Global auth gate ──────────────────────────────────────────────────────
     PUBLIC_ENDPOINTS = {'auth.login', 'auth.totp_verify', 'static'}

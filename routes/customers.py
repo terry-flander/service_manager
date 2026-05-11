@@ -16,49 +16,53 @@ customers_bp = Blueprint('customers', __name__)
 def index():
     from flask import session as _sess
     user_id = _sess.get('user_id')
-    q = request.args.get('q', '').strip()
+    q    = request.args.get('q', '').strip()
+    sort = request.args.get('sort', 'name')
+    if sort not in ('name','email','phone','suburb','jobs','last_job'):
+        sort = 'name'
+    sort_col = {
+        'name':'c.name','email':'c.email','phone':'c.phone',
+        'suburb':'c.suburb','jobs':'job_count','last_job':'last_job',
+    }[sort]
 
     with get_db() as conn:
         if 'q' in request.args:
-            # Save search to settings
             conn.execute(
                 "INSERT INTO settings (key,value) VALUES (?,?) "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                 (f'customer_search_{user_id}', q))
             conn.commit()
         else:
-            # First load — restore saved search
             row = conn.execute(
                 "SELECT value FROM settings WHERE key=?",
                 (f'customer_search_{user_id}',)).fetchone()
             if row and row['value']:
                 from flask import redirect as _red
-                return _red(url_for('customers.index', q=row['value']))
+                return _red(url_for('customers.index', q=row['value'], sort=sort))
 
         if q:
             like = f'%{q}%'
-            customers = conn.execute("""
+            customers = conn.execute(f"""
                 SELECT c.*,
                        COUNT(j.id) as job_count,
                        MAX(j.scheduled_date) as last_job
                 FROM customers c
                 LEFT JOIN jobs j ON j.customer_id = c.id
-                WHERE c.name LIKE ?
-                   OR c.phone LIKE ?
+                WHERE c.name LIKE ? OR c.phone LIKE ? OR c.email LIKE ?
                 GROUP BY c.id
-                ORDER BY c.name
-            """, (like, like)).fetchall()
+                ORDER BY {sort_col}
+            """, (like, like, like)).fetchall()
         else:
-            customers = conn.execute("""
+            customers = conn.execute(f"""
                 SELECT c.*,
                        COUNT(j.id) as job_count,
                        MAX(j.scheduled_date) as last_job
                 FROM customers c
                 LEFT JOIN jobs j ON j.customer_id = c.id
                 GROUP BY c.id
-                ORDER BY c.name
+                ORDER BY {sort_col}
             """).fetchall()
-    return render_template('customers/index.html', customers=customers, q=q)
+    return render_template('customers/index.html', customers=customers, q=q, sort=sort)
 
 
 @customers_bp.route('/customers/search')

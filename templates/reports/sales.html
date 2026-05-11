@@ -58,13 +58,13 @@
       <div style="margin-left:auto; display:flex; gap:0.5rem;">
         <a href="{{ url_for('reports.sales_csv',
                    date_from=date_from, date_to=date_to,
-                   **{'job_types': job_types, 'statuses': statuses}) }}"
+                   job_types=job_types, statuses=statuses) }}"
            class="btn-ghost">
           <i class="bi bi-download"></i> CSV
         </a>
         <a href="{{ url_for('reports.sales_pdf',
                    date_from=date_from, date_to=date_to,
-                   **{'job_types': job_types, 'statuses': statuses}) }}"
+                   job_types=job_types, statuses=statuses) }}"
            class="btn-accent" target="_blank">
           <i class="bi bi-file-pdf"></i> PDF
         </a>
