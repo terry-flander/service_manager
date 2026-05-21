@@ -8,14 +8,13 @@ invoice_bp = Blueprint('invoice', __name__)
 
 def calc_totals(job_parts, tax_inclusive):
     """
-    tax_inclusive=True  → prices already include GST.
-                          GST = total / 11  (back-calculated)
-                          subtotal (ex GST) = total - GST
-    tax_inclusive=False → prices are ex-GST.
-                          GST = subtotal * 0.10
-                          total = subtotal + GST
+    tax_inclusive=True  → prices already include GST. GST = total / 11
+    tax_inclusive=False → prices are ex-GST. GST = subtotal * 0.10
+    tax_inclusive=2     → GST Exempt: treat like inclusive for pricing but gst=0
     """
     line_total = sum(jp['quantity'] * jp['unit_cost'] for jp in job_parts)
+    if tax_inclusive == 2:          # GST Exempt — raw total, no GST
+        return round(line_total, 2), 0.0, round(line_total, 2)
     if tax_inclusive:
         total    = line_total
         gst      = round(total / 11, 2)
@@ -40,12 +39,14 @@ def view_invoice(job_id):
     if not job:
         return "Job not found", 404
 
-    tax_inclusive = bool(job['tax_inclusive'])
-    if (job['payment_type'] or '').lower() == 'cash':
+    tax_raw = job['tax_inclusive'] or 0
+    gst_exempt = (tax_raw == 2)
+    if (job['payment_type'] or '').lower() == 'cash' or gst_exempt:
         raw = round(sum(jp['quantity'] * jp['unit_cost'] for jp in job_parts), 2)
         subtotal, gst, total = raw, 0.0, raw
     else:
-        subtotal, gst, total = calc_totals(job_parts, tax_inclusive)
+        subtotal, gst, total = calc_totals(job_parts, tax_raw)
+    tax_inclusive = bool(tax_raw) and not gst_exempt
 
     today    = date.today()
     due_date = today + timedelta(days=30)
@@ -53,6 +54,7 @@ def view_invoice(job_id):
     return render_template('invoice/view.html',
                            job=job, job_parts=job_parts,
                            tax_inclusive=tax_inclusive,
+                           gst_exempt=gst_exempt,
                            subtotal=subtotal, gst=gst, total=total,
                            today=today, due_date=due_date)
 
@@ -155,13 +157,14 @@ def pdf_invoice_file(job_id):
     if not job:
         return "Job not found", 404
 
-    tax_inclusive = bool(job['tax_inclusive'])
-    if (job['payment_type'] or '').lower() == 'cash':
-        # Cash: no GST — raw line total only, no back-calc or addition
+    tax_raw = job['tax_inclusive'] or 0
+    gst_exempt = (tax_raw == 2)
+    if (job['payment_type'] or '').lower() == 'cash' or gst_exempt:
         raw = round(sum(jp['quantity'] * jp['unit_cost'] for jp in job_parts), 2)
         subtotal, gst, total = raw, 0.0, raw
     else:
-        subtotal, gst, total = calc_totals(job_parts, tax_inclusive)
+        subtotal, gst, total = calc_totals(job_parts, tax_raw)
+    tax_inclusive = bool(tax_raw) and not gst_exempt
 
     from invoice_pdf import generate_invoice_pdf
     buf = generate_invoice_pdf(job, job_parts, tax_inclusive, subtotal, gst, total)

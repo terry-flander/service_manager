@@ -46,6 +46,7 @@ SERVICE_TYPES = [
 JOB_TYPES = {
     'booking':  {'label': 'Booking',  'prefix': 'FB'},
     'workshop': {'label': 'Workshop', 'prefix': 'PB'},
+    'rental':   {'label': 'Rental',   'prefix': 'RB'},
 }
 
 
@@ -73,8 +74,16 @@ def upsert_customer(conn, name, email, phone, suburb, address=''):
     email = (email or '').strip().lower()
     name  = (name  or '').strip()
     if not email:
-        existing = conn.execute(
-            "SELECT id, address FROM customers WHERE name=?", (name,)).fetchone()
+        # Try to match on name, phone, or email (any non-empty field)
+        existing = None
+        if name:
+            existing = conn.execute(
+                "SELECT id, address FROM customers WHERE LOWER(name)=LOWER(?)",
+                (name,)).fetchone()
+        if not existing and phone:
+            existing = conn.execute(
+                "SELECT id, address FROM customers WHERE phone=?",
+                (phone,)).fetchone()
         if existing:
             return existing['id'], existing['address'] or ''
         email = f"unknown_{name.lower().replace(' ','_')}@unknown.local"
@@ -101,11 +110,44 @@ def upsert_customer(conn, name, email, phone, suburb, address=''):
 
 @jobs_bp.route('/')
 def index():
+    import json as _json
+    from flask import session as _sess
+    user_id   = _sess.get('user_id')
+    PREFS_KEY = f'job_filter_{user_id}'
+
     status    = request.args.get('status', '')
     region_id = request.args.get('region_id', '')
     job_type  = request.args.get('job_type', '')
     date_from = request.args.get('date_from', '')
     date_to   = request.args.get('date_to', '')
+
+    has_params = bool(request.args)
+
+    with get_db() as conn:
+        if has_params:
+            # Save current filter selection to settings
+            prefs = {'status': status, 'region_id': region_id,
+                     'job_type': job_type, 'date_from': date_from,
+                     'date_to': date_to}
+            conn.execute(
+                "INSERT INTO settings (key,value) VALUES (?,?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (PREFS_KEY, _json.dumps(prefs)))
+            conn.commit()
+        else:
+            # No params — restore saved filters and redirect immediately
+            row = conn.execute(
+                "SELECT value FROM settings WHERE key=?",
+                (PREFS_KEY,)).fetchone()
+            if row:
+                try:
+                    prefs = _json.loads(row['value'])
+                    params = {k: v for k, v in prefs.items() if v}
+                    if params:
+                        return redirect(url_for('jobs.index', **params))
+                except Exception:
+                    pass
+
     with get_db() as conn:
         query = """
             SELECT j.*, r.name as region_name,
@@ -169,16 +211,20 @@ def new_job():
     with get_db() as conn:
         regions = conn.execute("SELECT * FROM regions ORDER BY name").fetchall()
     if request.method == 'POST':
-        region_id  = int(request.form['region_id'])
+        region_id  = int(request.form.get('region_id') or 1)
         suburb     = request.form.get('suburb', '').strip()
         job_type   = request.form.get('job_type', 'booking')
         sched_date = request.form.get('scheduled_date') or None
-        # Workshop jobs have no time slot
         sched_time = request.form.get('scheduled_time') or None
         end_time   = request.form.get('end_time') or None
-        if job_type == 'workshop':
+        end_date   = request.form.get('end_date') or None
+        # Workshop and rental jobs have no time slots
+        if job_type in ('workshop', 'rental'):
             sched_time = None
             end_time   = None
+        # Non-rental jobs have no end_date
+        if job_type != 'rental':
+            end_date = None
         cust_name  = request.form['customer_name']
         cust_email = request.form.get('customer_email', '').strip()
         cust_phone = request.form.get('customer_phone', '').strip()
@@ -199,26 +245,28 @@ def new_job():
                 explicit_address = request.form.get('address', '').strip()
                 job_address = explicit_address or stored_address or suburb
                 try:
+                    # Rental: no region/suburb/bike_desc/service_types
+                    _suburb       = '' if job_type == 'rental' else suburb
+                    _region_id    = region_id
+                    _bike_desc    = '' if job_type == 'rental' else request.form.get('bike_description', '')
+                    _svc_types    = '' if job_type == 'rental' else ', '.join(request.form.getlist('service_types'))
                     conn.execute("""
                         INSERT INTO jobs (reference, job_type, customer_id, customer_name,
                             customer_email, customer_phone, suburb, address, description,
                             bike_description, service_types, region_id, tax_inclusive,
-                            scheduled_date, scheduled_time, end_time, status, notes)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
+                            scheduled_date, scheduled_time, end_time, end_date, status, notes)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
                     """, (ref, job_type, customer_id, cust_name, cust_email, cust_phone,
-                          suburb, job_address, request.form.get('description', ''),
-                          request.form.get('bike_description', ''),
-                          ', '.join(request.form.getlist('service_types')),
-                          region_id,
+                          _suburb, job_address, request.form.get('description', ''),
+                          _bike_desc, _svc_types, _region_id,
                           1 if request.form.get('tax_inclusive', '1') == '1' else 0,
-                          sched_date, sched_time, end_time,
+                          sched_date, sched_time, end_time, end_date,
                           request.form.get('notes', '')))
                     job_id = conn.execute(
                         "SELECT id FROM jobs WHERE reference=?", (ref,)).fetchone()['id']
 
-                    # Auto-add a job_part for each selected service type
-                    # Match part by name = service type string (case-insensitive)
-                    selected_types = request.form.getlist('service_types')
+                    # Auto-add a job_part for each selected service type (booking only)
+                    selected_types = request.form.getlist('service_types') if job_type == 'booking' else []
                     for stype in selected_types:
                         part = conn.execute(
                             """SELECT id, name, part_number, unit_cost FROM parts
@@ -273,7 +321,7 @@ def new_job():
                            prefill_customer=prefill_customer)
 
 
-@jobs_bp.route('/jobs/<int:job_id>')
+@jobs_bp.route('/jobs/<int:job_id>', methods=['GET', 'POST'])
 def job_detail(job_id):
     with get_db() as conn:
         job = conn.execute("""
@@ -286,15 +334,65 @@ def job_detail(job_id):
         """, (job_id,)).fetchone()
         if not job:
             return "Job not found", 404
+        regions = conn.execute("SELECT * FROM regions ORDER BY name").fetchall()
+
+    if request.method == 'POST':
+        jt          = job['job_type']
+        description = request.form.get('description', '').strip()
+        address     = request.form.get('address', '').strip()
+        bike_desc   = request.form.get('bike_description', '').strip() if jt == 'workshop' else (job['bike_description'] or '')
+        notes       = request.form.get('notes', '').strip()
+        tax_incl    = int(request.form.get('tax_inclusive', '1') or 1)
+
+        if jt == 'booking':
+            sched_date = request.form.get('scheduled_date') or None
+            sched_time = request.form.get('scheduled_time') or None
+            end_time   = request.form.get('end_time') or None
+            end_date   = None
+            region_id  = int(request.form.get('region_id') or job['region_id'])
+        elif jt == 'workshop':
+            sched_date = request.form.get('scheduled_date') or None
+            sched_time = None
+            end_time   = None
+            end_date   = None
+            region_id  = job['region_id']
+        else:  # rental
+            sched_date = request.form.get('scheduled_date') or None
+            end_date   = request.form.get('end_date') or None
+            sched_time = None
+            end_time   = None
+            region_id  = job['region_id']
+
+        with get_db() as wconn:
+            wconn.execute("""
+                UPDATE jobs
+                SET description=?, bike_description=?, address=?,
+                    scheduled_date=?, scheduled_time=?, end_time=?, end_date=?,
+                    region_id=?, tax_inclusive=?, notes=?
+                WHERE id=?
+            """, (description, bike_desc, address,
+                  sched_date, sched_time, end_time, end_date,
+                  region_id, tax_incl, notes, job_id))
+            wconn.commit()
+
+        flash('Job updated.', 'success')
+        return_to = request.form.get('return_to', '').strip()
+        if return_to in ('calendar', 'email', 'jobs'):
+            return redirect(url_for({
+                'calendar': 'calendar.index',
+                'email':    'jobs.email_imports',
+                'jobs':     'jobs.index',
+            }[return_to]))
+        return redirect(url_for('jobs.job_detail', job_id=job_id))
+
+    with get_db() as conn:
         job_parts = conn.execute(
             "SELECT * FROM job_parts WHERE job_id=? ORDER BY id",
             (job_id,)).fetchall()
         parts = conn.execute(
             "SELECT * FROM parts WHERE active=1 ORDER BY name").fetchall()
-        # Use calc_totals so GST is included for tax-exclusive jobs
         from routes.invoice import calc_totals as _calc
         _, _, total = _calc(job_parts, bool(job['tax_inclusive']))
-        # All thread emails — inbound and outbound — chronological
         thread_emails = conn.execute("""
             SELECT 'inbound' as direction,
                    id, imported_at as sent_at, sender as from_addr,
@@ -307,13 +405,22 @@ def job_detail(job_id):
             FROM email_replies WHERE job_id=?
             ORDER BY sent_at ASC
         """, (job_id, job_id)).fetchall()
+
     return render_template('jobs/detail.html', job=job, job_parts=job_parts,
-                           parts=parts, total=total, TIME_LABELS=TIME_LABELS,
-                           JOB_TYPES=JOB_TYPES, thread_emails=thread_emails)
+                           parts=parts, total=total, regions=regions,
+                           thread_emails=thread_emails,
+                           TIME_SLOTS=TIME_SLOTS, TIME_LABELS=TIME_LABELS,
+                           JOB_TYPES=JOB_TYPES)
 
 
 @jobs_bp.route('/jobs/<int:job_id>/edit', methods=['GET', 'POST'])
 def edit_job(job_id):
+    """Kept for backwards-compat; redirects to merged detail page."""
+    return redirect(url_for('jobs.job_detail', job_id=job_id))
+
+
+@jobs_bp.route('/jobs/<int:job_id>/edit_legacy', methods=['GET', 'POST'])
+def edit_job_legacy(job_id):
     with get_db() as conn:
         job     = conn.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
         regions = conn.execute("SELECT * FROM regions ORDER BY name").fetchall()
@@ -322,15 +429,24 @@ def edit_job(job_id):
     if request.method == 'POST':
         suburb     = request.form.get('suburb', '').strip()
         address    = request.form.get('address', '').strip() or suburb
+
         cust_name  = request.form['customer_name']
         cust_email = request.form.get('customer_email', '').strip()
         cust_phone = request.form.get('customer_phone', '').strip()
         job_type   = request.form.get('job_type', job['job_type'])
         sched_time = request.form.get('scheduled_time') or None
         end_time   = request.form.get('end_time') or None
-        if job_type == 'workshop':
+        end_date   = request.form.get('end_date') or None
+        if job_type in ('workshop', 'rental'):
             sched_time = None
             end_time   = None
+        if job_type != 'rental':
+            end_date = None
+        # Rental: clear inapplicable fields
+        _suburb     = '' if job_type == 'rental' else suburb
+        _bike_desc  = '' if job_type == 'rental' else request.form.get('bike_description', '')
+        _svc_types  = '' if job_type == 'rental' else ', '.join(request.form.getlist('service_types'))
+        _region_id  = int(request.form.get('region_id') or 1)
         cust_address = request.form.get('customer_address', '').strip()
         import sqlite3 as _sqlite3
         for _attempt in range(5):
@@ -349,19 +465,16 @@ def edit_job(job_id):
                             customer_name=?, customer_email=?, customer_phone=?,
                             suburb=?, address=?, description=?, bike_description=?,
                             service_types=?, region_id=?, tax_inclusive=?,
-                            scheduled_date=?, scheduled_time=?, end_time=?,
+                            scheduled_date=?, scheduled_time=?, end_time=?, end_date=?,
                             status=?, notes=?, paid_date=?, amount_paid=?
                         WHERE id=?
                     """, (job_type, new_ref, customer_id,
                           cust_name, cust_email, cust_phone,
-                          suburb, address, request.form.get('description', ''),
-                          request.form.get('bike_description', ''),
-                          ', '.join(request.form.getlist('service_types')),
-                          int(request.form['region_id']),
+                          _suburb, address, request.form.get('description', ''),
+                          _bike_desc, _svc_types, _region_id,
                           1 if request.form.get('tax_inclusive', '1') == '1' else 0,
                           request.form.get('scheduled_date') or None,
-                          sched_time,
-                          request.form.get('end_time') or None,
+                          sched_time, end_time, end_date,
                           request.form['status'],
                           request.form.get('notes', ''),
                           request.form.get('paid_date') or None,
@@ -440,12 +553,8 @@ def add_part(job_id):
                 INSERT INTO job_parts (job_id, part_id, description, part_number, quantity, unit_cost)
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (job_id, part['id'], part['name'], part['part_number'],
-                  float(request.form.get('quantity', 1)), part['unit_cost']))
-            status = conn.execute(
-                "SELECT status FROM jobs WHERE id=?", (job_id,)).fetchone()['status']
-            if status in ('pending', 'scheduled'):
-                conn.execute(
-                    "UPDATE jobs SET status='in_progress' WHERE id=?", (job_id,))
+                  float(request.form.get('quantity', 1)),
+                  float(request.form.get('unit_cost') or part['unit_cost'])))
             conn.commit()
     else:
         description = request.form.get('description', '').strip()
@@ -478,11 +587,6 @@ def add_part(job_id):
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (job_id, master_part_id, description, part_number, quantity, unit_cost))
 
-            status = conn.execute(
-                "SELECT status FROM jobs WHERE id=?", (job_id,)).fetchone()['status']
-            if status in ('pending', 'scheduled'):
-                conn.execute(
-                    "UPDATE jobs SET status='in_progress' WHERE id=?", (job_id,))
             conn.commit()
     flash('Part added.', 'success')
     # Preserve the ?from= param so return_to still works after adding a part
@@ -524,20 +628,20 @@ def update_status(job_id):
     payment_type = request.form.get('payment_type', '').strip()
     new_status   = request.form['status']
     paid_date    = request.form.get('paid_date') or None
-    amount_paid  = request.form.get('amount_paid', '').strip()
-    amount_paid  = float(amount_paid) if amount_paid else None
+    amount_paid    = request.form.get('amount_paid', '').strip()
+    amount_paid    = float(amount_paid) if amount_paid else None
+    invoice_number = request.form.get('invoice_number', '').strip() or None
 
     # Payment type set — server only forces status=paid
-    # Date and amount are handled by the JS quickPay on the client side
-    # and arrive pre-filled in the form; just save what was submitted
     if payment_type:
         new_status = 'paid'
 
     with get_db() as conn:
         conn.execute(
             "UPDATE jobs SET status=?, paid_date=?, amount_paid=?, "
-            "payment_type=? WHERE id=?",
-            (new_status, paid_date, amount_paid, payment_type or None, job_id))
+            "payment_type=?, invoice_number=? WHERE id=?",
+            (new_status, paid_date, amount_paid, payment_type or None,
+             invoice_number, job_id))
         conn.commit()
     msg = f'Paid via {payment_type}.' if payment_type else f'Status updated to {new_status}.'
     flash(msg, 'success')
@@ -774,6 +878,53 @@ def clear_email_search():
                          (f'email_search_{user_id}',))
             conn.commit()
     return redirect(url_for('jobs.email_imports'))
+
+
+@jobs_bp.route('/jobs/<int:job_id>/change-type', methods=['POST'])
+def change_type(job_id):
+    from flask import jsonify
+    data     = request.get_json()
+    new_type = data.get('job_type', '').strip()
+    if new_type not in JOB_TYPES:
+        return jsonify({'ok': False, 'error': 'Invalid job type'}), 400
+
+    import sqlite3 as _sqlite3
+    for _attempt in range(5):
+        with get_db() as conn:
+            job = conn.execute(
+                "SELECT job_type, reference FROM jobs WHERE id=?",
+                (job_id,)).fetchone()
+            if not job:
+                return jsonify({'ok': False, 'error': 'Job not found'}), 404
+            if job['job_type'] == new_type:
+                return jsonify({'ok': True, 'job_id': job_id,
+                                'reference': job['reference']})
+            new_ref = generate_reference(new_type, conn)
+            try:
+                conn.execute(
+                    "UPDATE jobs SET job_type=?, reference=? WHERE id=?",
+                    (new_type, new_ref, job_id))
+                conn.commit()
+                return jsonify({'ok': True, 'job_id': job_id,
+                                'reference': new_ref})
+            except _sqlite3.IntegrityError as e:
+                if 'reference' in str(e) and _attempt < 4:
+                    conn.rollback()
+                    continue
+                return jsonify({'ok': False, 'error': str(e)}), 500
+    return jsonify({'ok': False, 'error': 'Could not generate reference'}), 500
+
+
+@jobs_bp.route('/jobs/clear-filters', methods=['POST'])
+def clear_job_filters():
+    from flask import session as _sess
+    user_id = _sess.get('user_id')
+    if user_id:
+        with get_db() as conn:
+            conn.execute("DELETE FROM settings WHERE key=?",
+                         (f'job_filter_{user_id}',))
+            conn.commit()
+    return redirect(url_for('jobs.index'))
 
 
 @jobs_bp.route('/admin/backup-db')

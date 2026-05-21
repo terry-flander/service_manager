@@ -48,7 +48,9 @@
              value="{{ date_to }}">
     </div>
     <button class="btn-accent" onclick="applyFilters()"><i class="bi bi-funnel"></i> Apply</button>
-    <a href="{{ url_for('jobs.index') }}" class="btn-ghost" id="clear-filters">Clear</a>
+    <form method="post" action="{{ url_for('jobs.clear_job_filters') }}" style="display:inline;">
+      <button type="submit" class="btn-ghost">Clear</button>
+    </form>
   </div>
 </div>
 
@@ -66,6 +68,7 @@
         <th>Scheduled</th>
         <th>Status</th>
         <th>Total</th>
+        <th>Paid</th>
         <th></th>
       </tr>
     </thead>
@@ -91,10 +94,13 @@
         <td class="mono" style="font-size:0.85rem;">
           {% if total %}${{ '%.2f'|format(total) }}{% else %}<span style="color:var(--sd-muted)">—</span>{% endif %}
         </td>
+        <td class="mono" style="font-size:0.85rem;">
+          {% if job['amount_paid'] %}<span style="color:#34d399;">${{ '%.2f'|format(job['amount_paid']) }}</span>{% else %}<span style="color:var(--sd-muted)">—</span>{% endif %}
+        </td>
         <td><a href="{{ url_for('jobs.job_detail', job_id=job['id']) + '?from=jobs' }}" class="btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.8rem;">View</a></td>
       </tr>
       {% else %}
-      <tr><td colspan="7" style="text-align:center; color: var(--sd-muted); padding: 2rem;">No jobs found.</td></tr>
+      <tr><td colspan="8" style="text-align:center; color: var(--sd-muted); padding: 2rem;">No jobs found.</td></tr>
       {% endfor %}
     </tbody>
   </table></div>
@@ -103,37 +109,6 @@
 
 {% block scripts %}
 <script>
-const FILTER_KEY = 'jobs_filters';
-
-// Restore saved selections if no query params present
-(function () {
-  const hasParams = window.location.search.length > 1;
-  if (hasParams) {
-    const p = new URLSearchParams(window.location.search);
-    const saved = {
-      status:   p.get('status')    || '',
-      region:   p.get('region_id') || '',
-      jobType:  p.get('job_type')  || '',
-      dateFrom: p.get('date_from') || '',
-      dateTo:   p.get('date_to')   || '',
-    };
-    try { localStorage.setItem(FILTER_KEY, JSON.stringify(saved)); } catch(e) {}
-  } else {
-    try {
-      const saved = JSON.parse(localStorage.getItem(FILTER_KEY) || '{}');
-      const params = new URLSearchParams();
-      if (saved.status)   params.set('status',    saved.status);
-      if (saved.region)   params.set('region_id', saved.region);
-      if (saved.jobType)  params.set('job_type',  saved.jobType);
-      if (saved.dateFrom) params.set('date_from', saved.dateFrom);
-      if (saved.dateTo)   params.set('date_to',   saved.dateTo);
-      if (params.toString()) {
-        window.location = '?' + params.toString();
-      }
-    } catch(e) {}
-  }
-})();
-
 function applyFilters() {
   const status   = document.getElementById('filter-status').value;
   const region   = document.getElementById('filter-region').value;
@@ -146,17 +121,7 @@ function applyFilters() {
   if (jobType)  params.set('job_type',  jobType);
   if (dateFrom) params.set('date_from', dateFrom);
   if (dateTo)   params.set('date_to',   dateTo);
-  try {
-    localStorage.setItem(FILTER_KEY, JSON.stringify({
-      status, region, jobType, dateFrom, dateTo
-    }));
-  } catch(e) {}
   window.location = '?' + params.toString();
 }
-
-document.getElementById('clear-filters')
-  ?.addEventListener('click', function() {
-    try { localStorage.removeItem(FILTER_KEY); } catch(e) {}
-  });
 </script>
 {% endblock %}

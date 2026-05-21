@@ -67,18 +67,21 @@ def index():
 
 @customers_bp.route('/customers/search')
 def search():
-    """JSON endpoint for live name search used by job forms."""
+    """JSON endpoint for live search used by job forms — matches name, phone or address."""
     q = request.args.get('q', '').strip()
     if len(q) < 2:
         return jsonify([])
+    like = f'%{q}%'
     with get_db() as conn:
         rows = conn.execute("""
             SELECT id, name, email, phone, suburb, address
             FROM customers
-            WHERE name LIKE ?
+            WHERE name    LIKE ?
+               OR phone   LIKE ?
+               OR address LIKE ?
             ORDER BY name
             LIMIT 10
-        """, (f'%{q}%',)).fetchall()
+        """, (like, like, like)).fetchall()
     return jsonify([dict(r) for r in rows])
 
 

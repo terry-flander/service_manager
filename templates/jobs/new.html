@@ -11,21 +11,18 @@
     <div class="sd-card">
       <form method="post">
 
-      <!-- Job type selector — INSIDE form so it submits correctly -->
-      <div style="padding:1rem 1.5rem; border-bottom:1px solid var(--sd-border);
-                  display:flex; align-items:center; gap:1.5rem;">
-        <span class="sd-label" style="margin:0; white-space:nowrap;">Job Type</span>
-        {% for key, info in JOB_TYPES.items() %}
-        <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;
-                      font-size:0.875rem; color:var(--sd-text);">
-          <input type="radio" name="job_type" value="{{ key }}"
-                 {% if key == 'workshop' %}checked{% endif %}
-                 onchange="updateJobType(this.value)"
-                 style="accent-color:var(--sd-accent); width:15px; height:15px;">
-          {{ info.label }}
-          <span style="font-size:0.75rem; color:var(--sd-muted);">({{ info.prefix }}-NNNN)</span>
-        </label>
-        {% endfor %}
+      <!-- Job type — set by the type picker modal, submitted as hidden field -->
+      <input type="hidden" name="job_type" id="job-type-hidden" value="">
+      <div style="padding:0.75rem 1.5rem; border-bottom:1px solid var(--sd-border);
+                  display:flex; align-items:center; gap:1rem;">
+        <span class="sd-label" style="margin:0;">Job Type</span>
+        <span id="job-type-display"
+              style="font-weight:600; font-size:0.95rem; color:var(--sd-accent);">—</span>
+        <button type="button" class="btn-ghost"
+                style="margin-left:auto; font-size:0.78rem; padding:0.25rem 0.6rem;"
+                onclick="openTypeModal()">
+          <i class="bi bi-pencil"></i> Change
+        </button>
       </div>
 
       <div class="sd-card-header">
@@ -88,7 +85,7 @@
                      placeholder="e.g. 0412 345 678"
                      value="{{ prefill_customer['phone'] if prefill_customer else '' }}">
             </div>
-            <div class="col-md-6" id="suburb-col">
+            <div class="col-md-6" id="suburb-col" data-rental-hide="1">
               <label class="sd-label">Suburb</label>
               <select name="suburb" id="f_suburb" class="sd-input"
                       onchange="suburbChanged(this.value)">
@@ -112,7 +109,7 @@
               <textarea name="description" class="sd-input" rows="3"
                         placeholder="Customer's message from the website form…"></textarea>
             </div>
-            <div class="col-12">
+            <div class="col-12" id="bike-desc-col">
               <label class="sd-label">Bike Description</label>
               <input type="text" name="bike_description" class="sd-input"
                      placeholder="e.g. 2022 Trek Domane, Giant eBike…">
@@ -139,10 +136,17 @@
               </select>
             </div>
             <div class="col-md-3" id="date-col">
-              <label class="sd-label">Service Date</label>
+              <label class="sd-label" id="start-date-label">Service Date</label>
               <select name="scheduled_date" id="date-select" class="sd-input">
                 <option value="">— Select region first —</option>
               </select>
+              <!-- Workshop + Rental use a plain date input instead -->
+              <input type="date" name="scheduled_date" id="nonbooking-date"
+                     class="sd-input" style="display:none;" disabled>
+            </div>
+            <div class="col-md-3" id="rental-end-date-col" style="display:none;">
+              <label class="sd-label">End Date</label>
+              <input type="date" name="end_date" id="rental-end-date" class="sd-input">
             </div>
             <div class="col-md-2" id="time-slot-col">
               <label class="sd-label">Start Time</label>
@@ -207,10 +211,81 @@
     </div>
   </div>
 </div>
+
+<!-- ── Job Type Picker Modal ───────────────────────────────────────────────── -->
+<div id="type-modal-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55);
+            z-index:8000; display:flex; align-items:center; justify-content:center;">
+  <div style="background:var(--sd-slate); border:1px solid var(--sd-border);
+              border-radius:10px; padding:1.75rem; width:min(420px,90vw);
+              box-shadow:0 12px 40px rgba(0,0,0,0.4);">
+    <div style="font-size:1.05rem; font-weight:700; margin-bottom:1.25rem;
+                color:var(--sd-text);">Select Job Type</div>
+    <div style="display:flex; flex-direction:column; gap:0.75rem;">
+      {% for key, info in JOB_TYPES.items() %}
+      <button type="button"
+              onclick="selectType('{{ key }}', '{{ info.label }}', '{{ info.prefix }}')"
+              style="text-align:left; background:var(--sd-navy);
+                     border:1px solid var(--sd-border); border-radius:8px;
+                     padding:0.85rem 1.1rem; cursor:pointer; color:var(--sd-text);
+                     display:flex; align-items:center; gap:0.85rem;
+                     transition:border-color 0.15s;"
+              onmouseover="this.style.borderColor='var(--sd-accent)'"
+              onmouseout="this.style.borderColor='var(--sd-border)'">
+        <i class="bi bi-{% if key == 'booking' %}calendar-check{% elif key == 'workshop' %}tools{% else %}bicycle{% endif %}"
+           style="font-size:1.3rem; color:var(--sd-accent); flex-shrink:0;"></i>
+        <span>
+          <strong>{{ info.label }}</strong>
+          <span style="display:block; font-size:0.78rem; color:var(--sd-muted);
+                       margin-top:0.1rem;">
+            Reference {{ info.prefix }}-NNNN
+          </span>
+        </span>
+      </button>
+      {% endfor %}
+    </div>
+    <div style="display:flex; justify-content:flex-end; margin-top:1rem;">
+      <a href="{{ url_for('jobs.index') }}" class="btn-ghost">Cancel</a>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
+const TYPE_MODAL = document.getElementById('type-modal-overlay');
+
+function openTypeModal() {
+  TYPE_MODAL.style.display = 'flex';
+}
+
+function selectType(key, label, prefix) {
+  document.getElementById('job-type-hidden').value = key;
+  document.getElementById('job-type-display').textContent =
+    label + ' (' + prefix + '-NNNN)';
+  TYPE_MODAL.style.display = 'none';
+  updateJobType(key);
+}
+
+// Close modal if clicking the overlay background
+TYPE_MODAL.addEventListener('click', function(e) {
+  if (e.target === TYPE_MODAL) TYPE_MODAL.style.display = 'none';
+});
+
+// Open modal immediately on page load — type is required
+window.addEventListener('DOMContentLoaded', function() {
+  const preType = {{ (request.args.get('type', '') or '')|tojson }};
+  if (preType && ['booking','workshop','rental'].includes(preType)) {
+    selectType(preType,
+      {'booking':'Booking','workshop':'Workshop','rental':'Rental'}[preType],
+      {'booking':'FB','workshop':'PB','rental':'RB'}[preType]);
+  } else {
+    TYPE_MODAL.style.display = 'flex';
+  }
+});
+
+// ── Auto-set end time to start + 1 hour ─────────────────────────────────────
 let searchTimer = null;
 
 document.getElementById('cust-search').addEventListener('keydown', function(e) {
@@ -331,7 +406,7 @@ document.addEventListener('click', function(e) {
     hideResults();
 });
 
-// Suburb → region auto-select
+// ── Suburb → region auto-select ───────────────────────────────────────────────
 const suburbRegionMap = {
   {% for s in suburbs_list %}
   "{{ s['name'] }}": {{ s['region_id'] }},
@@ -342,61 +417,34 @@ function suburbChanged(suburb) {
   const regionId = suburbRegionMap[suburb];
   if (regionId) {
     const sel = document.getElementById('region-select');
-    sel.value = regionId;
-    regionChanged(regionId);
+    if (sel) sel.value = regionId;
   }
 }
 
 function regionChanged(regionId) {
   const dateSel = document.getElementById('date-select');
-  if (!regionId) {
-    dateSel.innerHTML = '<option value="">— Select region first —</option>';
-    return;
-  }
+  if (!dateSel || !regionId) return;
+  const current = dateSel.value;
   dateSel.innerHTML = '<option value="">Loading…</option>';
   fetch('/regions/' + regionId + '/open-dates')
     .then(r => r.json())
     .then(dates => {
       if (!dates.length) {
-        dateSel.innerHTML = '<option value="">No open dates for this region</option>';
+        dateSel.innerHTML = '<option value="">No open dates — add via Calendar</option>';
         return;
       }
-      dateSel.innerHTML = '<option value="">— Select date —</option>' +
-        dates.map(d => `<option value="${d}">${d}</option>`).join('');
+      let opts = '<option value="">— Select date —</option>';
+      dates.forEach(d => {
+        const sel = d === current;
+        opts += '<option value="' + d + '"' + (sel ? ' selected' : '') + '>' + d + '</option>';
+      });
+      dateSel.innerHTML = opts;
+      if (current && !dates.includes(current)) {
+        dateSel.innerHTML += '<option value="' + current + '" selected>' + current + ' (current)</option>';
+      }
     });
 }
 
-function updateJobType(type) {
-  const timeCol     = document.getElementById('time-slot-col');
-  const endTimeCol  = document.getElementById('end-time-col');
-  const regionCol   = document.getElementById('region-col');
-  const regionSel   = document.getElementById('region-select');
-  const dateCol     = document.getElementById('date-col');
-  const suburbCol   = document.getElementById('suburb-col');
-  const addrCol     = document.getElementById('address-col');
-  const svcCol      = document.getElementById('service-types-col');
-  const isWorkshop  = type === 'workshop';
-
-  const bookingOnly = [timeCol, endTimeCol, regionCol, dateCol,
-                       suburbCol, addrCol, svcCol];
-  bookingOnly.forEach(function(el) {
-    if (el) el.style.display = isWorkshop ? 'none' : '';
-  });
-
-  if (isWorkshop) {
-    if (timeCol) timeCol.querySelector('select').value = '';
-    regionSel.removeAttribute('required');
-    if (!regionSel.value) regionSel.selectedIndex = 1;
-  } else {
-    regionSel.setAttribute('required', '');
-  }
-}
-
-// Run on page load to reflect defaulted job type
-document.addEventListener('DOMContentLoaded', function() {
-  const checked = document.querySelector('input[name="job_type"]:checked');
-  if (checked) updateJobType(checked.value);
-});
 
 // ── Auto-set end time to start + 1 hour ─────────────────────────────────────
 (function () {

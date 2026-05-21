@@ -2,7 +2,7 @@
 {% block title %}{{ job['reference'] }}{% endblock %}
 {% block topbar_title %}{{ job['reference'] }} — {{ job['customer_name'] }}{% endblock %}
 {% block topbar_actions %}
-  <a href="{{ url_for('jobs.edit_job', job_id=job['id']) }}" class="btn-ghost"><i class="bi bi-pencil"></i> Edit</a>
+  <button type="button" class="btn-ghost" onclick="openTypeModal()"><i class="bi bi-arrow-left-right"></i> Type</button>
   <a href="{{ url_for('invoice.shop_ticket', job_id=job['id']) }}" class="btn-ghost" target="_blank"><i class="bi bi-printer"></i> Print Ticket</a>
   <a href="{{ url_for('invoice.pdf_invoice', job_id=job['id']) }}" class="btn-ghost" target="_blank"><i class="bi bi-file-pdf"></i> Preview Invoice</a>
   <a href="{{ url_for('email_replies.compose_reply', job_id=job['id']) }}" class="btn-ghost"><i class="bi bi-reply"></i> <span>Reply</span></a>
@@ -48,175 +48,232 @@
   <!-- Left column -->
   <div class="col-lg-5">
 
-    <!-- Customer card (website form fields) -->
-    <div class="sd-card mb-3">
-      <div class="sd-card-header">
-        <span>Customer</span>
-        <span style="font-size:0.7rem; color:var(--sd-muted);"><i class="bi bi-globe2"></i> theflyingbike.com.au</span>
-      </div>
-      <div style="padding:1.25rem;">
-        <table style="width:100%; font-size:0.875rem; border-collapse:collapse;">
-          <tr style="border-bottom:1px solid var(--sd-border);">
-            <td style="color:var(--sd-muted); padding:0.45rem 0; width:30%; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em;">Name</td>
-            <td style="padding:0.45rem 0 0.45rem 1rem;">
-              {% if job['cust_id'] %}
-              <a href="{{ url_for('customers.edit_customer', customer_id=job['cust_id']) }}"
-                 style="color:var(--sd-accent); text-decoration:none;">
-                {{ job['customer_name'] }}&nbsp;<i class="bi bi-box-arrow-up-right" style="font-size:0.7rem;"></i>
-              </a>
-              {% else %}
-              {{ job['customer_name'] }}
-              {% endif %}
-            </td>
-          </tr>
-          {% for label, value in [
-            ('Phone',  job['customer_phone'] or '—'),
-          ] + ([] if is_workshop else [('Suburb', job['suburb'] or '—')]) + [
-            ('Email',  job['customer_email'] or '—'),
-          ] %}
-          <tr style="border-bottom:1px solid var(--sd-border);">
-            <td style="color:var(--sd-muted); padding:0.45rem 0; width:30%; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em;">{{ label }}</td>
-            <td style="padding:0.45rem 0 0.45rem 1rem;">{{ value }}</td>
-          </tr>
-          {% endfor %}
-        </table>
-        {% if job['description'] %}
-        <div style="margin-top:1rem;">
-          <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--sd-muted); margin-bottom:0.4rem;">Message</div>
-          <div style="font-size:0.875rem; color:var(--sd-text); background:rgba(0,0,0,0.15); border-radius:6px; padding:0.75rem; border-left:3px solid var(--sd-accent);">{{ job['description'] }}</div>
-        </div>
-        {% endif %}
-        {% if job['bike_description'] %}
-        <div style="margin-top:0.75rem;">
-          <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--sd-muted); margin-bottom:0.4rem;">Bike</div>
-          <div style="font-size:0.875rem; color:var(--sd-text);">{{ job['bike_description'] }}</div>
-        </div>
-        {% endif %}
-      </div>
-    </div>
+    <!-- ── Save form wraps editable cards ──────────────────────────────── -->
+    <form method="post" id="save-form"
+          action="{{ url_for('jobs.job_detail', job_id=job['id']) }}">
 
-    <!-- Scheduling card -->
-    <div class="sd-card mb-3">
-      <div class="sd-card-header">
-        Scheduling
-        <span class="badge-status {% if job['job_type'] == 'workshop' %}status-in_progress{% else %}status-scheduled{% endif %}"
-              style="font-size:0.7rem;">
-          {{ JOB_TYPES.get(job['job_type'], {}).get('label', job['job_type']) }}
-        </span>
-      </div>
-      <div style="padding:1.25rem;">
-        <table style="width:100%; font-size:0.875rem; border-collapse:collapse;">
-          {% if job['scheduled_date'] and job['scheduled_time'] %}
-            {% set sched_display = job['scheduled_date']|fmt_date ~ ' at ' ~ TIME_LABELS.get(job['scheduled_time'], job['scheduled_time']) %}
-            {% if job['end_time'] %}
-              {% set sched_display = sched_display ~ ' – ' ~ TIME_LABELS.get(job['end_time'], job['end_time']) %}
-            {% endif %}
-          {% elif job['scheduled_date'] %}
-            {% set sched_display = job['scheduled_date']|fmt_date %}
-          {% else %}
-            {% set sched_display = '—' %}
-          {% endif %}
-          {% set sched_rows = [
-            ('Reference',     job['reference']),
-            ('Region',        job['region_name']),
-          ] + ([] if is_workshop else [
-            ('Scheduled',     sched_display),
-            ('Service Types', job['service_types'] or '—'),
-          ]) + [
-            ('Tax',           'Inclusive (GST back-calc)' if job['tax_inclusive'] else 'Exclusive (GST added on top)'),
-          ] %}
-          {% for label, value in sched_rows %}
-          <tr style="border-bottom:1px solid var(--sd-border);">
-            <td style="color:var(--sd-muted); padding:0.45rem 0; width:30%; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em;">{{ label }}</td>
-            <td style="padding:0.45rem 0 0.45rem 1rem; {% if label == 'Reference' %}font-family:'IBM Plex Mono',monospace;{% endif %}">{{ value }}</td>
-          </tr>
-          {% endfor %}
-          {% if not is_workshop %}
-          <tr>
-            <td style="color:var(--sd-muted); padding:0.45rem 0; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; vertical-align:top;">Address</td>
-            <td style="padding:0.45rem 0 0.45rem 1rem;">
-              {% if job['address'] %}
-              <div style="display:flex; align-items:flex-start; gap:0.6rem; flex-wrap:wrap;">
-                <span style="flex:1; min-width:0;">{{ job['address'] }}</span>
-                <a href="https://maps.google.com/?q={{ job['address'] | urlencode }}"
-                   target="_blank" rel="noopener"
-                   class="btn-ghost"
-                   style="padding:0.2rem 0.55rem; font-size:0.75rem; white-space:nowrap; flex-shrink:0;">
-                  <i class="bi bi-map"></i> Maps
+
+      <!-- Customer card — read-only -->
+      <div class="sd-card mb-3">
+        <div class="sd-card-header">
+          <span>Customer</span>
+          <span style="font-size:0.7rem; color:var(--sd-muted);"><i class="bi bi-globe2"></i> theflyingbike.com.au</span>
+        </div>
+        <div style="padding:1.25rem;">
+          <table style="width:100%; font-size:0.875rem; border-collapse:collapse;">
+            <tr style="border-bottom:1px solid var(--sd-border);">
+              <td style="color:var(--sd-muted); padding:0.45rem 0; width:30%; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em;">Name</td>
+              <td style="padding:0.45rem 0 0.45rem 1rem;">
+                {% if job['cust_id'] %}
+                <a href="{{ url_for('customers.edit_customer', customer_id=job['cust_id']) }}"
+                   style="color:var(--sd-accent); text-decoration:none;">
+                  {{ job['customer_name'] }}&nbsp;<i class="bi bi-box-arrow-up-right" style="font-size:0.7rem;"></i>
                 </a>
-              </div>
-              {% else %}
-              <span style="color:var(--sd-muted);">—</span>
-              {% endif %}
-            </td>
-          </tr>
+                {% else %}
+                {{ job['customer_name'] }}
+                {% endif %}
+              </td>
+            </tr>
+            {% for label, value in [
+              ('Phone', job['customer_phone'] or '—'),
+            ] + ([] if is_workshop else [('Suburb', job['suburb'] or '—')]) + [
+              ('Email', job['customer_email'] or '—'),
+            ] %}
+            <tr style="border-bottom:1px solid var(--sd-border);">
+              <td style="color:var(--sd-muted); padding:0.45rem 0; width:30%; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em;">{{ label }}</td>
+              <td style="padding:0.45rem 0 0.45rem 1rem;">{{ value }}</td>
+            </tr>
+            {% endfor %}
+          </table>
+          {% if job['description'] %}
+          <div style="margin-top:1rem;">
+            <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--sd-muted); margin-bottom:0.4rem;">Message</div>
+            <div style="font-size:0.875rem; color:var(--sd-text); background:rgba(0,0,0,0.15); border-radius:6px; padding:0.75rem; border-left:3px solid var(--sd-accent);">{{ job['description'] }}</div>
+          </div>
           {% endif %}
-        </table>
+          {% if job['bike_description'] and not is_workshop %}
+          <div style="margin-top:0.75rem;">
+            <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--sd-muted); margin-bottom:0.4rem;">Bike</div>
+            <div style="font-size:0.875rem; color:var(--sd-text);">{{ job['bike_description'] }}</div>
+          </div>
+          {% endif %}
+        </div>
       </div>
-    </div>
 
-    <!-- Status card -->
-    <div class="sd-card">
-      <div class="sd-card-header">Status &amp; Payment</div>
-      <form method="post" action="{{ url_for('jobs.update_status', job_id=job['id']) }}">
-        <input type="hidden" name="return_to" id="return-to-field" value="">
-        <div style="padding:1rem 1.25rem; display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
-          <span class="badge-status status-{{ job['status'] }}" style="flex-shrink:0;">
-            {{ job['status']|replace('_',' ') }}
+      <!-- Editable: Description + Address + Scheduling + Notes -->
+      <div class="sd-card mb-3">
+        <div class="sd-card-header">
+          Details
+          <span class="badge-status {% if job['job_type'] == 'workshop' %}status-in_progress{% else %}status-scheduled{% endif %}"
+                style="font-size:0.7rem;">
+            {{ JOB_TYPES.get(job['job_type'], {}).get('label', job['job_type']) }}
           </span>
-          <select name="status" class="sd-input" style="flex:1; min-width:120px;">
-            {% for s in ['pending','scheduled','in_progress','complete','invoiced','paid','void'] %}
-            <option value="{{ s }}" {% if job['status'] == s %}selected{% endif %}>
-              {{ s|replace('_',' ')|title }}
-            </option>
-            {% endfor %}
-          </select>
         </div>
-        <!-- Payment type shortcut -->
-        <!-- Hidden field — only populated by JS when user actively clicks a method -->
-        <input type="hidden" name="payment_type" id="payment-type-hidden" value="">
-        <div style="padding:0 1.25rem 0.6rem; border-top:1px solid var(--sd-border);">
-          <div class="sd-label" style="margin-bottom:0.5rem;">Quick Pay</div>
-          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;" id="quick-pay-radios">
-            {% for pt in ['EFTPOS','Cash','Transfer'] %}
-            <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;
-                          font-size:0.875rem; color:var(--sd-text);">
-              <input type="radio" name="_payment_display" value="{{ pt }}"
-                     {% if job['payment_type'] == pt %}checked{% endif %}
-                     style="accent-color:var(--sd-accent); width:14px; height:14px;">
-              {{ pt }}
-            </label>
-            {% endfor %}
-          </div>
-        </div>
-        <div style="padding:0 1.25rem 0.75rem; display:flex; gap:0.75rem; flex-wrap:wrap; align-items:flex-end;">
-          <div style="flex:1; min-width:130px;">
-            <label class="sd-label">Paid Date</label>
-            <input type="date" name="paid_date" class="sd-input"
-                   value="{{ job['paid_date'] or '' }}">
-          </div>
-          <div style="flex:1; min-width:120px;">
-            <label class="sd-label">Amount Paid ($)</label>
-            <input type="number" name="amount_paid" class="sd-input"
-                   step="0.01" min="0"
-                   value="{{ '%.2f'|format(job['amount_paid']) if job['amount_paid'] else '' }}"
-                   placeholder="0.00">
-          </div>
-          <button type="submit" class="btn-ghost" style="white-space:nowrap; padding:0.45rem 1rem;">
-            <i class="bi bi-check-lg"></i> Update
+        <div style="padding:1.25rem;">
+          <div class="row g-3">
+
+            <!-- Description -->
+            <div class="col-12">
+              <label class="sd-label">Description</label>
+              <textarea name="description" class="sd-input" rows="2"
+                        style="resize:vertical;">{{ job['description'] or '' }}</textarea>
+            </div>
+
+            <!-- Bike Description — workshop only -->
+            {% if is_workshop %}
+            <div class="col-12">
+              <label class="sd-label">Bike Description</label>
+              <input type="text" name="bike_description" class="sd-input"
+                     value="{{ job['bike_description'] or '' }}"
+                     placeholder="e.g. 2022 Trek Domane…">
+            </div>
+            {% endif %}
+
+            <!-- Address — booking + rental -->
+            {% if not is_workshop %}
+            <div class="col-12">
+              <label class="sd-label">Address</label>
+              <div style="display:flex; gap:0.5rem; align-items:center;">
+                <input type="text" name="address" id="address-input" class="sd-input"
+                       data-address-autocomplete
+                       value="{{ job['address'] or '' }}"
+                       placeholder="Start typing an address…"
+                       autocomplete="off"
+                       style="flex:1;">
+                {% if job['address'] %}
+                <a href="https://maps.google.com/?q={{ job['address']|urlencode }}"
+                   id="maps-link" target="_blank" rel="noopener" class="btn-ghost"
+                   style="padding:0.35rem 0.6rem; font-size:0.75rem; flex-shrink:0;"
+                   title="Open in Google Maps">
+                  <i class="bi bi-map"></i>
+                </a>
+                {% endif %}
+              </div>
+            </div>
+            {% endif %}
+
+            <!-- Scheduling — booking: region + date select + times -->
+            {% if job['job_type'] == 'booking' %}
+            <div class="col-12">
+              <label class="sd-label">Region</label>
+              <select name="region_id" id="region-select" class="sd-input"
+                      onchange="regionChanged(this.value)">
+                {% for r in regions %}
+                <option value="{{ r['id'] }}"
+                  {% if r['id'] == job['region_id'] %}selected{% endif %}>
+                  {{ r['name'] }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-5">
+              <label class="sd-label">Service Date</label>
+              <select name="scheduled_date" id="date-select" class="sd-input">
+                {% if job['scheduled_date'] %}
+                <option value="{{ job['scheduled_date'] }}" selected>
+                  {{ job['scheduled_date']|fmt_date('dmy') }}
+                </option>
+                {% else %}
+                <option value="">— Select date —</option>
+                {% endif %}
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="sd-label">Start Time</label>
+              <select name="scheduled_time" id="start-time" class="sd-input">
+                <option value="">— None —</option>
+                {% for slot in TIME_SLOTS %}
+                <option value="{{ slot }}"
+                  {% if job['scheduled_time'] == slot %}selected{% endif %}>
+                  {{ TIME_LABELS[slot] }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="sd-label">End Time</label>
+              <select name="end_time" id="end-time" class="sd-input">
+                <option value="">— None —</option>
+                {% for slot in TIME_SLOTS %}
+                <option value="{{ slot }}"
+                  {% if job['end_time'] == slot %}selected{% endif %}>
+                  {{ TIME_LABELS[slot] }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <!-- Scheduling — workshop: plain date -->
+            {% elif is_workshop %}
+            <div class="col-md-6">
+              <label class="sd-label">Scheduled Date</label>
+              <input type="date" name="scheduled_date" class="sd-input"
+                     value="{{ job['scheduled_date'] or '' }}">
+            </div>
+
+            <!-- Scheduling — rental: start + end date -->
+            {% elif job['job_type'] == 'rental' %}
+            <div class="col-md-6">
+              <label class="sd-label">Start Date</label>
+              <input type="date" name="scheduled_date" class="sd-input"
+                     value="{{ job['scheduled_date'] or '' }}">
+            </div>
+            <div class="col-md-6">
+              <label class="sd-label">End Date</label>
+              <input type="date" name="end_date" class="sd-input"
+                     value="{{ job['end_date'] or '' }}">
+            </div>
+            {% endif %}
+
+            <!-- Tax Treatment -->
+            <div class="col-md-6">
+              <label class="sd-label">Tax Treatment</label>
+              <select name="tax_inclusive" class="sd-input">
+                <option value="1" {% if job['tax_inclusive'] == 1 %}selected{% endif %}>
+                  Tax Inclusive (GST back-calc)
+                </option>
+                <option value="0" {% if job['tax_inclusive'] == 0 %}selected{% endif %}>
+                  Tax Exclusive (GST added on top)
+                </option>
+                <option value="2" {% if job['tax_inclusive'] == 2 %}selected{% endif %}>
+                  GST Exempt (nil GST)
+                </option>
+              </select>
+            </div>
+
+            <!-- Internal Notes -->
+            <div class="col-12">
+              <label class="sd-label">Internal Notes</label>
+              <textarea name="notes" class="sd-input" rows="2"
+                        style="resize:vertical;">{{ job['notes'] or '' }}</textarea>
+            </div>
+
+          </div><!-- /.row -->
+        </div><!-- /padding -->
+
+        <!-- Delete + Save footer -->
+        <div style="padding:0.75rem 1.25rem; border-top:1px solid var(--sd-border);
+                    display:flex; align-items:center; gap:0.75rem;">
+          <button type="button" class="btn-ghost"
+                  style="color:#f87171; border-color:rgba(248,113,113,0.35);"
+                  onclick="confirmDelete()">
+            <i class="bi bi-trash3"></i> Delete
+          </button>
+          <div style="flex:1;"></div>
+          <button type="submit" class="btn-accent">
+            <i class="bi bi-check-lg"></i> Save
           </button>
         </div>
-      </form>
-      {% if job['notes'] %}
-      <div style="padding:0 1.25rem 1rem; font-size:0.85rem; color:var(--sd-muted);
-                  border-top:1px solid var(--sd-border);">
-        <i class="bi bi-sticky"></i> {{ job['notes'] }}
       </div>
-      {% endif %}
-    </div>
 
+    </form><!-- /.save-form -->
 
-  </div>
+    <!-- Delete form — outside save form, submit by JS -->
+    <form id="delete-form" method="post"
+          action="{{ url_for('jobs.delete_job', job_id=job['id']) }}"
+          style="display:none;"></form>
+
+  </div><!-- /col-lg-5 -->
 
   <!-- Right column: Parts -->
   <div class="col-lg-7">
@@ -266,7 +323,7 @@
               ${{ '%.2f'|format(jp['quantity'] * jp['unit_cost']) }}
             </td>
             <td>
-              <form method="post" action="{{ url_for('jobs.remove_part', job_id=job['id'], jp_id=jp['id']) }}{% if request.args.get('from') %}?from={{ request.args.get('from') }}{% endif %}" onsubmit="return confirm('Remove this part?')">
+              <form method="post" action="{{ url_for('jobs.remove_part', job_id=job['id'], jp_id=jp['id']) }}{% if request.args.get('from') %}?from={{ request.args.get('from') }}{% endif %}">
                 <button type="submit" class="btn-danger"><i class="bi bi-trash3"></i></button>
               </form>
             </td>
@@ -325,81 +382,200 @@
         </form>
       </div>
     </div>
+
+
+
+
+    <!-- Status & Payment card — separate POST -->
+    <div class="sd-card">
+      <div class="sd-card-header">Status &amp; Payment</div>
+      <form method="post" action="{{ url_for('jobs.update_status', job_id=job['id']) }}">
+        <input type="hidden" name="return_to" id="return-to-field" value="">
+        <div style="padding:1rem 1.25rem; display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+          <span class="badge-status status-{{ job['status'] }}" style="flex-shrink:0;">
+            {{ job['status']|replace('_',' ') }}
+          </span>
+          <select name="status" class="sd-input" style="flex:1; min-width:120px;">
+            {% for s in ['pending','scheduled','in_progress','complete','invoiced','paid','void'] %}
+            <option value="{{ s }}" {% if job['status'] == s %}selected{% endif %}>
+              {{ s|replace('_',' ')|title }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <input type="hidden" name="payment_type" id="payment-type-hidden" value="">
+        <div style="padding:0.5rem 1.25rem; border-top:1px solid var(--sd-border);">
+          <label class="sd-label" style="margin-bottom:0.35rem;">Invoice Number</label>
+          <input type="text" name="invoice_number" class="sd-input"
+                 value="{{ job['invoice_number'] or '' }}"
+                 placeholder="e.g. INV-0042"
+                 style="max-width:200px;">
+        </div>
+        <div style="padding:0 1.25rem 0.6rem; border-top:1px solid var(--sd-border);">
+          <div class="sd-label" style="margin-bottom:0.5rem;">Quick Pay</div>
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;" id="quick-pay-radios">
+            {% for pt in ['EFTPOS','Cash','Transfer'] %}
+            <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;
+                          font-size:0.875rem; color:var(--sd-text);">
+              <input type="radio" name="_payment_display" value="{{ pt }}"
+                     {% if job['payment_type'] == pt %}checked{% endif %}
+                     style="accent-color:var(--sd-accent); width:14px; height:14px;">
+              {{ pt }}
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+        <div style="padding:0 1.25rem 0.75rem; display:flex; gap:0.75rem; flex-wrap:wrap; align-items:flex-end;">
+          <div style="flex:1; min-width:130px;">
+            <label class="sd-label">Paid Date</label>
+            <input type="date" name="paid_date" class="sd-input"
+                   value="{{ job['paid_date'] or '' }}">
+          </div>
+          <div style="flex:1; min-width:120px;">
+            <label class="sd-label">Amount Paid ($)</label>
+            <input type="number" name="amount_paid" class="sd-input"
+                   step="0.01" min="0"
+                   value="{{ '%.2f'|format(job['amount_paid']) if job['amount_paid'] else '' }}"
+                   placeholder="0.00">
+          </div>
+          <button type="submit" class="btn-ghost" style="white-space:nowrap; padding:0.45rem 1rem;">
+            <i class="bi bi-check-lg"></i> Update
+          </button>
+        </div>
+      </form>
+    </div>
+
+
   </div>
 
-    <!-- Email Thread -->
-    {% if thread_emails %}
-    <div class="col-12" style="margin-top:0.5rem;">
-      <div class="sd-card">
-        <div class="sd-card-header">
-          Email Thread
-          <span style="font-size:0.78rem; font-weight:400; color:var(--sd-muted);">
-            {{ thread_emails|length }} message{{ 's' if thread_emails|length != 1 }}
-          </span>
-        </div>
-        {% for em in thread_emails %}
-        <div style="padding:0.875rem 1.25rem;
-                    {% if not loop.last %}border-bottom:1px solid var(--sd-border);{% endif %}
-                    {% if em['direction'] == 'outbound' %}background:rgba(249,115,22,0.04);{% endif %}
-                    {% if em['body'] %}cursor:pointer;{% endif %}"
-             {% if em['body'] and em['direction'] == 'inbound' %}onclick="openEmailPopup('{{ url_for('jobs.email_message', import_id=em['id']) }}')"{% elif em['body'] and em['direction'] == 'outbound' %}onclick="openEmailPopup('{{ url_for('jobs.email_reply_message', reply_id=em['id']) }}')"{% endif %}>
-          <div style="display:flex; align-items:center; justify-content:space-between;
-                      gap:0.75rem; flex-wrap:wrap; margin-bottom:0.4rem;">
-            <div style="display:flex; align-items:center; gap:0.6rem;">
-              <i class="bi bi-{{ 'reply-fill' if em['direction'] == 'outbound' else 'envelope-open' }}"
-                 style="color:{{ 'var(--sd-accent)' if em['direction'] == 'outbound' else 'var(--sd-muted)' }};
-                        font-size:0.9rem;"></i>
-              <span style="font-size:0.82rem; font-weight:500;">
-                {% if em['direction'] == 'outbound' %}
-                  <span style="color:var(--sd-accent);">Sent</span> to {{ em['from_addr'] }}
-                {% else %}
-                  <span class="badge-status
-                    {% if em['status'] == 'ok' %}status-complete
-                    {% elif em['status'] == 'thread' %}status-scheduled
-                    {% else %}status-invoiced{% endif %}"
-                    style="font-size:0.65rem; margin-right:0.3rem;">
-                    {{ 'New Booking' if em['status'] == 'ok' else 'Reply' }}
+
+  <!-- Email Thread — full width below all columns -->
+  <div class="col-12" style="margin-top:0.25rem;">
+    <!-- Email Thread — collapsed by default -->
+        {% if thread_emails %}
+        <div class="sd-card" style="margin-top:0.75rem;">
+          <div class="sd-card-header" onclick="toggleThread()"
+               style="cursor:pointer; user-select:none;">
+            <span>
+              <i class="bi bi-envelope" style="margin-right:0.4rem; color:var(--sd-muted);"></i>
+              Email Thread
+              <span style="font-size:0.78rem; font-weight:400; color:var(--sd-muted);">
+                {{ thread_emails|length }} message{{ 's' if thread_emails|length != 1 }}
+              </span>
+            </span>
+            <i class="bi bi-chevron-down" id="thread-chevron"
+               style="font-size:0.75rem; color:var(--sd-muted); transition:transform 0.2s;"></i>
+          </div>
+          <div id="thread-body" style="display:none;">
+            {% for em in thread_emails %}
+            <div style="padding:0.875rem 1.25rem;
+                        {% if not loop.last %}border-bottom:1px solid var(--sd-border);{% endif %}
+                        {% if em['direction'] == 'outbound' %}background:rgba(249,115,22,0.04);{% endif %}
+                        {% if em['body'] %}cursor:pointer;{% endif %}"
+                 {% if em['body'] and em['direction'] == 'inbound' %}onclick="openEmailPopup('{{ url_for('jobs.email_message', import_id=em['id']) }}')"{% elif em['body'] and em['direction'] == 'outbound' %}onclick="openEmailPopup('{{ url_for('jobs.email_reply_message', reply_id=em['id']) }}')"{% endif %}>
+              <div style="display:flex; align-items:center; justify-content:space-between;
+                          gap:0.75rem; flex-wrap:wrap; margin-bottom:0.4rem;">
+                <div style="display:flex; align-items:center; gap:0.6rem;">
+                  <i class="bi bi-{{ 'reply-fill' if em['direction'] == 'outbound' else 'envelope-open' }}"
+                     style="color:{{ 'var(--sd-accent)' if em['direction'] == 'outbound' else 'var(--sd-muted)' }};
+                            font-size:0.9rem;"></i>
+                  <span style="font-size:0.82rem; font-weight:500;">
+                    {% if em['direction'] == 'outbound' %}
+                      <span style="color:var(--sd-accent);">Sent</span> to {{ em['from_addr'] }}
+                    {% else %}
+                      <span class="badge-status
+                        {% if em['status'] == 'ok' %}status-complete
+                        {% elif em['status'] == 'thread' %}status-scheduled
+                        {% else %}status-invoiced{% endif %}"
+                        style="font-size:0.65rem; margin-right:0.3rem;">
+                        {{ 'New Booking' if em['status'] == 'ok' else 'Reply' }}
+                      </span>
+                      from {{ em['from_addr'] }}
+                    {% endif %}
                   </span>
-                  from {{ em['from_addr'] }}
-                {% endif %}
-              </span>
-            </div>
-            <div style="display:flex; align-items:center; gap:0.75rem;">
-              <span class="mono" style="font-size:0.75rem; color:var(--sd-muted);">
-                {{ em['sent_at'][:16] }}
-              </span>
-              {% if em['body'] and em['direction'] == 'inbound' %}
-              <button onclick="event.stopPropagation(); openEmailPopup('{{ url_for('jobs.email_message', import_id=em['id']) }}')"
-                      class="btn-ghost" style="padding:0.15rem 0.5rem; font-size:0.75rem;">
-                <i class="bi bi-envelope-open"></i> View
-              </button>
-              {% elif em['body'] and em['direction'] == 'outbound' %}
-              <button onclick="event.stopPropagation(); openEmailPopup('{{ url_for('jobs.email_reply_message', reply_id=em['id']) }}')"
-                      class="btn-ghost" style="padding:0.15rem 0.5rem; font-size:0.75rem;">
-                <i class="bi bi-envelope-open"></i> View
-              </button>
+                </div>
+                <div style="display:flex; align-items:center; gap:0.75rem;">
+                  <span class="mono" style="font-size:0.75rem; color:var(--sd-muted);">
+                    {{ em['sent_at'][:16] }}
+                  </span>
+                  {% if em['body'] and em['direction'] == 'inbound' %}
+                  <button onclick="event.stopPropagation(); openEmailPopup('{{ url_for('jobs.email_message', import_id=em['id']) }}')"
+                          class="btn-ghost" style="padding:0.15rem 0.5rem; font-size:0.75rem;">
+                    <i class="bi bi-envelope-open"></i> View
+                  </button>
+                  {% elif em['body'] and em['direction'] == 'outbound' %}
+                  <button onclick="event.stopPropagation(); openEmailPopup('{{ url_for('jobs.email_reply_message', reply_id=em['id']) }}')"
+                          class="btn-ghost" style="padding:0.15rem 0.5rem; font-size:0.75rem;">
+                    <i class="bi bi-envelope-open"></i> View
+                  </button>
+                  {% endif %}
+                </div>
+              </div>
+              <div style="font-size:0.82rem; color:var(--sd-muted); margin-left:1.6rem;">
+                {{ em['subject'] or '(no subject)' }}
+              </div>
+              {% if em['body'] %}
+              <div style="margin-top:0.4rem; margin-left:1.6rem; font-size:0.8rem;
+                          color:var(--sd-muted); white-space:pre-wrap; max-height:3.5rem;
+                          overflow:hidden; position:relative;">{{ em['body'][:200] }}{% if em['body']|length > 200 %}…{% endif %}</div>
               {% endif %}
             </div>
-          </div>
-          <div style="font-size:0.82rem; color:var(--sd-muted); margin-left:1.6rem;">
-            {{ em['subject'] or '(no subject)' }}
-          </div>
-          {% if em['body'] %}
-          <div style="margin-top:0.4rem; margin-left:1.6rem; font-size:0.8rem;
-                      color:var(--sd-muted); white-space:pre-wrap; max-height:3.5rem;
-                      overflow:hidden; position:relative;">{{ em['body'][:200] }}{% if em['body']|length > 200 %}…{% endif %}</div>
-          {% endif %}
-        </div>
-        {% endfor %}
-      </div>
-    </div>
-    {% endif %}
-
-
+            {% endfor %}
+          </div><!-- /thread-body -->
+        </div><!-- /email thread card -->
+        {% endif %}
+  </div>
 </div>
 {% endblock %}
 
+
 {% block scripts %}
+<!-- ── Change Job Type Modal ──────────────────────────────────────────────── -->
+<div id="type-modal-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55);
+            z-index:8000; align-items:center; justify-content:center;">
+  <div style="background:var(--sd-slate); border:1px solid var(--sd-border);
+              border-radius:10px; padding:1.75rem; width:min(420px,92vw);
+              box-shadow:0 12px 40px rgba(0,0,0,0.4);">
+    <div style="font-size:1.05rem; font-weight:700; margin-bottom:0.4rem;
+                color:var(--sd-text);">Change Job Type</div>
+    <div style="font-size:0.8rem; color:var(--sd-muted); margin-bottom:1.25rem;">
+      Current:
+      <strong style="color:var(--sd-accent);">
+        {{ JOB_TYPES[job['job_type']].label if job['job_type'] in JOB_TYPES else job['job_type']|title }}
+      </strong>
+      ({{ job['reference'] }})
+    </div>
+    <div style="display:flex; flex-direction:column; gap:0.75rem;">
+      {% for key, info in JOB_TYPES.items() %}
+      <button type="button"
+              onclick="selectNewType('{{ key }}')"
+              style="text-align:left;
+                     background:{% if job['job_type'] == key %}rgba(249,115,22,0.1){% else %}var(--sd-navy){% endif %};
+                     border:1px solid {% if job['job_type'] == key %}var(--sd-accent){% else %}var(--sd-border){% endif %};
+                     border-radius:8px; padding:0.85rem 1.1rem; cursor:pointer;
+                     color:var(--sd-text); display:flex; align-items:center; gap:0.85rem;">
+        <i class="bi bi-{% if key == 'booking' %}calendar-check{% elif key == 'workshop' %}tools{% else %}bicycle{% endif %}"
+           style="font-size:1.3rem; color:var(--sd-accent); flex-shrink:0;"></i>
+        <span>
+          <strong>{{ info.label }}</strong>
+          <span style="display:block; font-size:0.78rem; color:var(--sd-muted); margin-top:0.1rem;">
+            Reference {{ info.prefix }}-NNNN
+          </span>
+        </span>
+        {% if job['job_type'] == key %}
+        <i class="bi bi-check-circle-fill"
+           style="margin-left:auto; color:var(--sd-accent); font-size:1.1rem;"></i>
+        {% endif %}
+      </button>
+      {% endfor %}
+    </div>
+    <div style="display:flex; justify-content:flex-end; margin-top:1.25rem;">
+      <button type="button" class="btn-ghost" onclick="closeTypeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- Part search dropdown — position:fixed keeps it above all clipping ancestors -->
 <div id="part-dropdown"
      style="display:none; position:fixed;
@@ -408,6 +584,122 @@
             z-index:9000; max-height:260px; overflow-y:auto; min-width:280px;">
 </div>
 <script>
+
+// ── Email thread toggle ────────────────────────────────────────────────────────
+function toggleThread() {
+  const body    = document.getElementById('thread-body');
+  const chevron = document.getElementById('thread-chevron');
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display      = open ? 'none' : 'block';
+  chevron.style.transform = open ? ''      : 'rotate(180deg)';
+}
+
+
+// ── Auto-set end time to start + 1 hour when start changes ──────────────────
+(function () {
+  const TIME_SLOTS = {{ TIME_SLOTS | tojson }};
+  const startSel = document.getElementById('start-time');
+  const endSel   = document.getElementById('end-time');
+  if (!startSel || !endSel) return;
+  startSel.addEventListener('change', function () {
+    const idx = TIME_SLOTS.indexOf(startSel.value);
+    if (idx === -1) return;
+    endSel.value = TIME_SLOTS[Math.min(idx + 2, TIME_SLOTS.length - 1)];
+  });
+})();
+
+
+// ── Delete confirmation ────────────────────────────────────────────────────────
+function confirmDelete() {
+  const ref = {{ job['reference']|tojson }};
+  if (confirm('Delete job ' + ref + '? This cannot be undone.')) {
+    document.getElementById('delete-form').submit();
+  }
+}
+
+// ── Region changed — reload open dates ────────────────────────────────────────
+function regionChanged(regionId) {
+  const dateSel = document.getElementById('date-select');
+  if (!dateSel || !regionId) return;
+  const current = dateSel.value;
+
+  function fmtDate(iso) {
+    if (!iso) return iso;
+    const [y, m, d] = iso.split('-');
+    return d + '/' + m + '/' + y;
+  }
+
+  dateSel.innerHTML = '<option value="">Loading…</option>';
+  fetch('/regions/' + regionId + '/open-dates')
+    .then(r => r.json())
+    .then(dates => {
+      if (!dates.length) {
+        dateSel.innerHTML = '<option value="">No open dates for this region</option>';
+        {% if job['scheduled_date'] %}
+        dateSel.innerHTML += `<option value="{{ job['scheduled_date'] }}" selected>${fmtDate('{{ job["scheduled_date"] }}')} (current)</option>`;
+        {% endif %}
+        return;
+      }
+      let opts = '<option value="">— Select date —</option>';
+      let found = false;
+      dates.forEach(d => {
+        const sel = (d === current || d === '{{ job["scheduled_date"] or "" }}');
+        if (sel) found = true;
+        opts += `<option value="${d}" ${sel ? 'selected' : ''}>${fmtDate(d)}</option>`;
+      });
+      {% if job['scheduled_date'] %}
+      if (!found) {
+        opts += `<option value="{{ job['scheduled_date'] }}" selected>${fmtDate('{{ job["scheduled_date"] }}')} (current)</option>`;
+      }
+      {% endif %}
+      dateSel.innerHTML = opts;
+    });
+}
+
+// Load open dates on page load for booking jobs
+document.addEventListener('DOMContentLoaded', function() {
+  {% if job['job_type'] == 'booking' %}
+  const rid = document.getElementById('region-select')?.value;
+  if (rid) regionChanged(rid);
+  {% endif %}
+});
+
+
+
+// ── Change Job Type Modal ─────────────────────────────────────────────────────
+(function() {
+  const overlay = document.getElementById('type-modal-overlay');
+
+  window.openTypeModal  = function() { overlay.style.display = 'flex'; };
+  window.closeTypeModal = function() { overlay.style.display = 'none'; };
+
+  overlay.addEventListener('click', function(e) {
+    if (e.target === overlay) overlay.style.display = 'none';
+  });
+
+  window.selectNewType = function(key) {
+    const currentType = {{ job['job_type']|tojson }};
+    if (key === currentType) { overlay.style.display = 'none'; return; }
+    fetch('{{ url_for("jobs.change_type", job_id=job["id"]) }}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_type: key }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.ok) {
+        window.location.href = '/jobs/' + data.job_id +
+          (window.location.search || '');
+      } else {
+        alert('Error: ' + (data.error || 'unknown'));
+      }
+    })
+    .catch(function(e) { alert('Network error: ' + e); });
+  };
+})();
+
+
 (function () {
   const searchInput = document.getElementById('part-search');  // merged search + description
   const dropdown    = document.getElementById('part-dropdown');
