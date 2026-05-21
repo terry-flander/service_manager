@@ -469,3 +469,42 @@ def all_suburbs():
             ORDER BY s.name
         """).fetchall()
     return jsonify([dict(s) for s in suburbs])
+
+
+@regions_bp.route('/regions/add-date', methods=['POST'])
+def add_region_date():
+    """Add a region_date from the calendar UI. Payload: {region_id, date}"""
+    from flask import jsonify
+    data      = request.get_json() or {}
+    region_id = data.get('region_id')
+    date      = (data.get('date') or '').strip()
+    if not region_id or not date:
+        return jsonify({'ok': False, 'error': 'region_id and date required'}), 400
+    with get_db() as conn:
+        exists = conn.execute(
+            "SELECT id FROM region_dates WHERE region_id=? AND date=?",
+            (region_id, date)).fetchone()
+        if exists:
+            return jsonify({'ok': True, 'created': False, 'id': exists['id']})
+        conn.execute(
+            "INSERT INTO region_dates (region_id, date, status) VALUES (?, ?, 'open')",
+            (region_id, date))
+        conn.commit()
+        new_id = conn.execute(
+            "SELECT id FROM region_dates WHERE region_id=? AND date=?",
+            (region_id, date)).fetchone()['id']
+    return jsonify({'ok': True, 'created': True, 'id': new_id})
+
+
+@regions_bp.route('/regions/delete-date/<int:date_id>', methods=['POST'])
+def delete_region_date(date_id):
+    """Delete a region_date by its id."""
+    from flask import jsonify
+    with get_db() as conn:
+        rd = conn.execute(
+            "SELECT id FROM region_dates WHERE id=?", (date_id,)).fetchone()
+        if not rd:
+            return jsonify({'ok': False, 'error': 'Not found'}), 404
+        conn.execute("DELETE FROM region_dates WHERE id=?", (date_id,))
+        conn.commit()
+    return jsonify({'ok': True})

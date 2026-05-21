@@ -73,6 +73,8 @@ def create_app():
                 value = datetime.strptime(value[:10], '%Y-%m-%d').date()
             except ValueError:
                 return value
+        if fmt == 'dmy':
+            return value.strftime('%d/%m/%Y')
         if fmt == 'short':
             return value.strftime('%a %-d %b %Y')
         return value.strftime('%A %-d %B %Y')

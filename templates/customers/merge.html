@@ -60,11 +60,8 @@
           <!-- Search box (shown until target is selected) -->
           <div id="target-search-section">
             <label class="sd-label">Search for target customer</label>
-            <div style="position:relative;">
-              <input type="text" id="target-search" class="sd-input" autocomplete="off"
-                     placeholder="Type name to search…">
-              <div id="target-results"></div>
-            </div>
+            <input type="text" id="target-search" class="sd-input" autocomplete="off"
+                   placeholder="Type name to search…">
           </div>
 
           <!-- Selected target display -->
@@ -210,16 +207,40 @@
 {% endblock %}
 
 {% block scripts %}
+<!-- Dropdown rendered at body level to escape sd-card overflow:hidden -->
+<div id="target-results"
+     style="display:none; position:fixed; z-index:9000;
+            background:var(--sd-slate); border:1px solid var(--sd-border);
+            border-radius:6px; box-shadow:0 6px 20px rgba(0,0,0,0.35);
+            max-height:260px; overflow-y:auto; min-width:260px;">
+</div>
+
 <script>
 const SOURCE_ID = {{ source['id'] }};
 let targetData  = null;
 let searchTimer;
 
-document.getElementById('target-search').addEventListener('input', function () {
+const searchInput  = document.getElementById('target-search');
+const resultsBox   = document.getElementById('target-results');
+
+function positionDropdown() {
+  const rect = searchInput.getBoundingClientRect();
+  resultsBox.style.left  = rect.left + 'px';
+  resultsBox.style.top   = (rect.bottom + 2) + 'px';
+  resultsBox.style.width = rect.width + 'px';
+}
+
+searchInput.addEventListener('input', function () {
   clearTimeout(searchTimer);
   const q = this.value.trim();
   if (q.length < 2) { clearResults(); return; }
   searchTimer = setTimeout(() => fetchTargets(q), 250);
+});
+
+document.addEventListener('click', function (e) {
+  if (!searchInput.contains(e.target) && !resultsBox.contains(e.target)) {
+    clearResults();
+  }
 });
 
 function fetchTargets(q) {
@@ -229,36 +250,29 @@ function fetchTargets(q) {
 }
 
 function renderResults(results) {
-  const box = document.getElementById('target-results');
-  if (!results.length) { box.innerHTML = ''; return; }
-  box.innerHTML =
-    '<div style="position:absolute; z-index:100; width:100%; ' +
-    'background:var(--sd-surface); border:1px solid var(--sd-border); ' +
-    'border-radius:0.5rem; box-shadow:0 4px 16px rgba(0,0,0,0.18); ' +
-    'max-height:240px; overflow-y:auto; margin-top:0.25rem;">' +
-    results.map(c =>
-      `<div class="cust-result" data-id="${c.id}"
-            data-name="${esc(c.name)}" data-email="${esc(c.email)}"
-            data-phone="${esc(c.phone||'')}" data-address="${esc(c.address||'')}"
-            data-suburb="${esc(c.suburb||'')}"
-            style="padding:0.6rem 1rem; cursor:pointer;
-                   border-bottom:1px solid var(--sd-border);">
-         <div style="font-weight:500; font-size:0.88rem;">${esc(c.name)}</div>
-         <div style="font-size:0.76rem; color:var(--sd-muted);">
-           ${esc(c.email)}${c.phone ? ' · ' + esc(c.phone) : ''}</div>
-       </div>`
-    ).join('') + '</div>';
+  resultsBox.innerHTML = '';
+  if (!results.length) { resultsBox.style.display = 'none'; return; }
 
-  box.querySelectorAll('.cust-result').forEach(el => {
-    el.addEventListener('mouseenter', () => el.style.background = 'var(--sd-hover)');
-    el.addEventListener('mouseleave', () => el.style.background = '');
-    el.addEventListener('click', () => selectTarget(el.dataset));
+  results.forEach(c => {
+    const item = document.createElement('div');
+    item.style.cssText = 'padding:0.6rem 1rem; cursor:pointer; border-bottom:1px solid var(--sd-border);';
+    item.innerHTML =
+      `<div style="font-weight:500; font-size:0.88rem;">${esc(c.name)}</div>` +
+      `<div style="font-size:0.76rem; color:var(--sd-muted);">${esc(c.email)}${c.phone ? ' · ' + esc(c.phone) : ''}</div>`;
+    item.addEventListener('mouseenter', () => item.style.background = 'var(--sd-surface2)');
+    item.addEventListener('mouseleave', () => item.style.background = '');
+    item.addEventListener('mousedown',  (e) => { e.preventDefault(); selectTarget(c); });
+    resultsBox.appendChild(item);
   });
+
+  positionDropdown();
+  resultsBox.style.display = 'block';
 }
 
 function selectTarget(data) {
   targetData = data;
   document.getElementById('target-id-input').value = data.id;
+  clearResults();
 
   // Switch panels
   document.getElementById('target-search-section').style.display = 'none';
@@ -274,17 +288,12 @@ function selectTarget(data) {
     (data.suburb ? `<div><span style="color:var(--sd-muted);width:4.5rem;display:inline-block;">
        Suburb</span>${data.suburb}</div>` : '');
 
-  // Fill comparison column header
   document.getElementById('th-target').textContent = data.name;
-
-  // Fill comparison value cells
   document.getElementById('disp-email').textContent   = data.email   || '(none)';
   document.getElementById('disp-phone').textContent   = data.phone   || '(none)';
-  const addrText = (data.address || '(none)') +
-    (data.suburb ? '\n' + data.suburb : '');
+  const addrText = (data.address || '(none)') + (data.suburb ? '\n' + data.suburb : '');
   document.getElementById('disp-address').textContent = addrText;
 
-  // Reset radios to "target" (the kept record)
   setKeep('email',   'target');
   setKeep('phone',   'target');
   setKeep('address', 'target');
@@ -293,9 +302,7 @@ function selectTarget(data) {
   document.querySelector('input[name="keep_address_r"][value="target"]').checked = true;
 
   document.getElementById('comparison-section').style.display = 'block';
-  document.getElementById('comparison-section').scrollIntoView(
-    { behavior: 'smooth', block: 'start' }
-  );
+  document.getElementById('comparison-section').scrollIntoView({ behavior:'smooth', block:'start' });
 }
 
 function clearTarget() {
@@ -309,7 +316,8 @@ function clearTarget() {
 }
 
 function clearResults() {
-  document.getElementById('target-results').innerHTML = '';
+  resultsBox.innerHTML     = '';
+  resultsBox.style.display = 'none';
 }
 
 function setKeep(field, value) {

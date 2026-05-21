@@ -1,13 +1,11 @@
 from models import get_db
 with get_db() as conn:
-    try: conn.execute('ALTER TABLE email_imports ADD COLUMN read INTEGER DEFAULT 1')
+    try: conn.execute('ALTER TABLE jobs ADD COLUMN bike_description TEXT')
     except: pass
-    try: conn.execute('ALTER TABLE email_imports ADD COLUMN received_at TEXT')
+    try: conn.execute('ALTER TABLE jobs ADD COLUMN end_date TEXT')
     except: pass
-    # Mark all existing imports as read so inbox starts clean
-    try: conn.execute('UPDATE email_imports SET read=0 WHERE read IS NULL')
+    try: conn.execute('ALTER TABLE jobs ADD COLUMN invoice_number TEXT')
     except: pass
-    try: conn.commit()
-    except: pass
+conn.commit() 
 print('Done')
     

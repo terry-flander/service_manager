@@ -29,8 +29,11 @@ def index():
     user_id = session.get('user_id')
     with get_db() as conn:
         cal_view, cal_date = _get_cal_prefs(conn, user_id)
+        regions = conn.execute(
+            "SELECT id, name FROM regions ORDER BY name").fetchall()
     return render_template('calendar/index.html',
-                           cal_view=cal_view, cal_date=cal_date)
+                           cal_view=cal_view, cal_date=cal_date,
+                           regions=regions)
 
 
 
@@ -86,18 +89,21 @@ def events():
 
         jobs = conn.execute("""
             SELECT j.id, j.reference, j.customer_name, j.customer_phone,
-                   j.scheduled_date, j.scheduled_time, j.end_time,
-                   j.status, j.address, j.suburb, r.name as region_name
+                   j.scheduled_date, j.scheduled_time, j.end_time, j.end_date,
+                   j.job_type, j.status, j.address, j.suburb, r.name as region_name
             FROM jobs j JOIN regions r ON j.region_id = r.id
-            WHERE j.scheduled_date IS NOT NULL
-            AND j.job_type = 'booking'
-            AND j.status != 'void'
+            WHERE j.status != 'void'
+            AND (
+                (j.job_type = 'booking' AND j.scheduled_date IS NOT NULL)
+                OR
+                (j.job_type = 'rental'  AND j.scheduled_date IS NOT NULL)
+            )
         """).fetchall()
 
     # Fetch region_dates — displayed as canary yellow all-day background events
     with get_db() as conn:
         region_dates = conn.execute("""
-            SELECT rd.date, rd.status, r.id as region_id, r.name as region_name
+            SELECT rd.id, rd.date, rd.status, r.id as region_id, r.name as region_name
             FROM region_dates rd
             JOIN regions r ON rd.region_id = r.id
             ORDER BY rd.date
@@ -117,39 +123,68 @@ def events():
             'color':     CANARY,
             'textColor': '#1a1a1a',
             'extendedProps': {
-                'type':   'region_date',
-                'status': rd['status'],
-                'region': rd['region_name'],
+                'type':          'region_date',
+                'region_date_id': rd['id'],
+                'region_id':     rd['region_id'],
+                'region':        rd['region_name'],
+                'status':        rd['status'],
             }
         })
     for job in jobs:
-        # Build ISO 8601 start — include time if set, date-only otherwise
-        if job['scheduled_time']:
-            start   = f"{job['scheduled_date']}T{job['scheduled_time']}:00"
-            all_day = False
-            end     = f"{job['scheduled_date']}T{job['end_time']}:00" if job['end_time'] else None
-        else:
-            start   = job['scheduled_date']
-            all_day = True
-            end     = None
-
+        color    = status_colors.get(job['status'], '#3b82f6')
         location = job['address'] or job['suburb'] or ''
-        result.append({
-            'id':      job['id'],
-            'title':   f"{job['reference']} — {job['customer_name']}",
-            'start':   start,
-            'allDay':  all_day,
-            'color':   status_colors.get(job['status'], '#3b82f6'),
-            'end':     end,
-            'url':     f"/jobs/{job['id']}?from=calendar",
-            'extendedProps': {
-                'region':  job['region_name'],
-                'status':  job['status'],
-                'address': location,
-                'phone':   job['customer_phone'] or '',
-                'time':    job['scheduled_time'] or '',
-            }
-        })
+
+        if job['job_type'] == 'rental':
+            # Rental: two all-day markers — start date and end date
+            label = f"{job['reference']} — {job['customer_name']}"
+            for marker_date, suffix in [
+                (job['scheduled_date'], 'Start'),
+                (job['end_date'],       'End'),
+            ]:
+                if not marker_date:
+                    continue
+                result.append({
+                    'id':     f"rental|{job['id']}|{suffix.lower()}",
+                    'title':  f"{label} ({suffix})",
+                    'start':  marker_date,
+                    'allDay': True,
+                    'color':  color,
+                    'url':    f"/jobs/{job['id']}?from=calendar",
+                    'extendedProps': {
+                        'type':    'rental',
+                        'status':  job['status'],
+                        'address': location,
+                        'phone':   job['customer_phone'] or '',
+                        'marker':  suffix,
+                    }
+                })
+        else:
+            # Booking: existing timed/all-day logic
+            if job['scheduled_time']:
+                start   = f"{job['scheduled_date']}T{job['scheduled_time']}:00"
+                all_day = False
+                end     = f"{job['scheduled_date']}T{job['end_time']}:00" if job['end_time'] else None
+            else:
+                start   = job['scheduled_date']
+                all_day = True
+                end     = None
+
+            result.append({
+                'id':      job['id'],
+                'title':   f"{job['reference']} — {job['customer_name']}",
+                'start':   start,
+                'allDay':  all_day,
+                'color':   color,
+                'end':     end,
+                'url':     f"/jobs/{job['id']}?from=calendar",
+                'extendedProps': {
+                    'region':  job['region_name'],
+                    'status':  job['status'],
+                    'address': location,
+                    'phone':   job['customer_phone'] or '',
+                    'time':    job['scheduled_time'] or '',
+                }
+            })
 
     # Custom calendar events
     with get_db() as conn:

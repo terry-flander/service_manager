@@ -16,21 +16,17 @@
                value="{{ job['customer_id'] or '' }}">
         <input type="hidden" name="customer_address" id="customer_address_field" value="">
 
-      <!-- Job type selector — INSIDE form so it submits correctly -->
-      <div style="padding:1rem 1.5rem; border-bottom:1px solid var(--sd-border);
-                  display:flex; align-items:center; gap:1.5rem;">
-        <span class="sd-label" style="margin:0; white-space:nowrap;">Job Type</span>
-        {% for key, info in JOB_TYPES.items() %}
-        <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;
-                      font-size:0.875rem; color:var(--sd-text);">
-          <input type="radio" name="job_type" value="{{ key }}"
-                 {% if job['job_type'] == key %}checked{% endif %}
-                 onchange="updateJobType(this.value)"
-                 style="accent-color:var(--sd-accent); width:15px; height:15px;">
-          {{ info.label }}
-          <span style="font-size:0.75rem; color:var(--sd-muted);">({{ info.prefix }}-NNNN)</span>
-        </label>
-        {% endfor %}
+      <!-- Job type — read-only in edit; change via detail page dialog -->
+      <input type="hidden" name="job_type" value="{{ job['job_type'] }}">
+      <div style="padding:0.75rem 1.5rem; border-bottom:1px solid var(--sd-border);
+                  display:flex; align-items:center; gap:1rem;">
+        <span class="sd-label" style="margin:0;">Job Type</span>
+        <span style="font-weight:600; font-size:0.95rem; color:var(--sd-accent);">
+          {{ JOB_TYPES[job['job_type']].label if job['job_type'] in JOB_TYPES else job['job_type']|title }}
+          <span style="font-size:0.78rem; color:var(--sd-muted);">
+            ({{ job['reference'] }})
+          </span>
+        </span>
       </div>
 
       <!-- Customer section header -->
@@ -95,7 +91,7 @@
                      value="{{ job['customer_phone'] or '' }}">
             </div>
             <div class="col-md-6" id="suburb-col"
-                 {% if job['job_type'] == 'workshop' %}style="display:none;"{% endif %}>
+                 {% if job['job_type'] in ('workshop', 'rental') %}style="display:none;"{% endif %}>
               <label class="sd-label">Suburb</label>
               <select name="suburb" id="f_suburb" class="sd-input"
                       onchange="suburbChanged(this.value)">
@@ -124,7 +120,8 @@
               <label class="sd-label">Message / Description</label>
               <textarea name="description" class="sd-input" rows="3">{{ job['description'] or '' }}</textarea>
             </div>
-            <div class="col-12">
+            <div class="col-12" id="bike-desc-col"
+                 {% if job['job_type'] == 'rental' %}style="display:none;"{% endif %}>
               <label class="sd-label">Bike Description</label>
               <input type="text" name="bike_description" class="sd-input"
                      value="{{ job['bike_description'] or '' }}"
@@ -143,7 +140,7 @@
           </div>
           <div class="row g-3">
             <div class="col-md-6" id="region-col"
-                 {% if job['job_type'] == 'workshop' %}style="display:none;"{% endif %}>
+                 {% if job['job_type'] in ('workshop', 'rental') %}style="display:none;"{% endif %}>
               <label class="sd-label">Region *</label>
               <select name="region_id" id="region-select" class="sd-input"
                       {% if job['job_type'] != 'workshop' %}required{% endif %}>
@@ -158,7 +155,7 @@
 
             {% set sched_locked = job['status'] in ('complete', 'invoiced') %}
             <div class="col-md-3" id="date-col"
-                 {% if job['job_type'] == 'workshop' %}style="display:none;"{% endif %}>
+                 {% if job['job_type'] in ('workshop', 'rental') %}style="display:none;"{% endif %}>
               <label class="sd-label">
                 Service Date
                 {% if sched_locked %}
@@ -184,8 +181,32 @@
               </select>
               {% endif %}
             </div>
+            <!-- Workshop: plain editable date input (any date, no region constraint) -->
+            <div class="col-md-3" id="workshop-date-col"
+                 {% if job['job_type'] != 'workshop' %}style="display:none;"{% endif %}>
+              <label class="sd-label">Scheduled Date</label>
+              <input type="date" name="scheduled_date" id="workshop-date"
+                     class="sd-input"
+                     {% if job['job_type'] != 'workshop' %}disabled{% endif %}
+                     value="{{ job['scheduled_date'] or '' }}">
+            </div>
+            <!-- Rental: plain date inputs instead of region-driven select -->
+            <div class="col-md-3" id="rental-date-col"
+                 {% if job['job_type'] != 'rental' %}style="display:none;"{% endif %}>
+              <label class="sd-label">Start Date</label>
+              <input type="date" name="scheduled_date" id="rental-start-date"
+                     class="sd-input" {% if job['job_type'] != 'rental' %}disabled{% endif %}
+                     value="{{ job['scheduled_date'] or '' }}">
+            </div>
+            <div class="col-md-3" id="rental-end-date-col"
+                 {% if job['job_type'] != 'rental' %}style="display:none;"{% endif %}>
+              <label class="sd-label">End Date</label>
+              <input type="date" name="end_date" id="rental-end-date"
+                     class="sd-input" {% if job['job_type'] != 'rental' %}disabled{% endif %}
+                     value="{{ job['end_date'] or '' }}">
+            </div>
             <div class="col-md-2" id="time-slot-col"
-                 {% if job['job_type'] == 'workshop' %}style="display:none;"{% endif %}>
+                 {% if job['job_type'] in ('workshop', 'rental') %}style="display:none;"{% endif %}>
               <label class="sd-label">Start Time</label>
               <select name="scheduled_time" id="start-time" class="sd-input"
                       {% if sched_locked %}disabled{% endif %}>
@@ -203,7 +224,7 @@
               {% endif %}
             </div>
             <div class="col-md-2" id="end-time-col"
-                 {% if job['job_type'] == 'workshop' %}style="display:none;"{% endif %}>
+                 {% if job['job_type'] in ('workshop', 'rental') %}style="display:none;"{% endif %}>
               <label class="sd-label">End Time</label>
               <select name="end_time" id="end-time" class="sd-input"
                       {% if sched_locked %}disabled{% endif %}>
@@ -233,7 +254,7 @@
             {% endif %}
 
             <div class="col-12" id="address-col"
-                 {% if job['job_type'] == 'workshop' %}style="display:none;"{% endif %}>
+                 {% if job['job_type'] in ('workshop', 'rental') %}style="display:none;"{% endif %}>
               <label class="sd-label">Full Site Address</label>
               <input type="text" name="address" id="address-input" class="sd-input"
                      data-address-autocomplete
@@ -276,7 +297,7 @@
               </select>
             </div>
             <div class="col-12" id="service-types-col"
-                 {% if job['job_type'] == 'workshop' %}style="display:none;"{% endif %}>
+                 {% if job['job_type'] in ('workshop', 'rental') %}style="display:none;"{% endif %}>
               <label class="sd-label">Service Types</label>
               <div style="display:flex; flex-wrap:wrap; gap:0.5rem 1.25rem; padding-top:0.25rem;">
                 {% for st in SERVICE_TYPES %}
@@ -470,22 +491,49 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function updateJobType(type) {
-  const timeCol    = document.getElementById('time-slot-col');
-  const endTimeCol = document.getElementById('end-time-col');
-  const regionCol  = document.getElementById('region-col');
-  const regionSel  = document.getElementById('region-select');
-  const dateCol    = document.getElementById('date-col');
-  const suburbCol  = document.getElementById('suburb-col');
-  const addrCol    = document.getElementById('address-col');
-  const svcCol     = document.getElementById('service-types-col');
+  const timeCol        = document.getElementById('time-slot-col');
+  const endTimeCol     = document.getElementById('end-time-col');
+  const regionCol      = document.getElementById('region-col');
+  const regionSel      = document.getElementById('region-select');
+  const dateCol        = document.getElementById('date-col');
+  const dateSel        = document.getElementById('date-select');
+  const workshopDateCol = document.getElementById('workshop-date-col');
+  const workshopDate   = document.getElementById('workshop-date');
+  const rentalDateCol  = document.getElementById('rental-date-col');
+  const rentalEndCol   = document.getElementById('rental-end-date-col');
+  const rentalStartDt  = document.getElementById('rental-start-date');
+  const rentalEndDt    = document.getElementById('rental-end-date');
+  const suburbCol      = document.getElementById('suburb-col');
+  const addrCol        = document.getElementById('address-col');
+  const svcCol         = document.getElementById('service-types-col');
+  const bikeCol        = document.getElementById('bike-desc-col');
+
+  const isBooking  = type === 'booking';
   const isWorkshop = type === 'workshop';
+  const isRental   = type === 'rental';
 
-  [timeCol, endTimeCol, regionCol, dateCol, suburbCol, addrCol, svcCol]
-    .forEach(function(el) { if (el) el.style.display = isWorkshop ? 'none' : ''; });
+  // Region + suburb + time: booking only
+  [regionCol, suburbCol, timeCol, endTimeCol].forEach(function(el) {
+    if (el) el.style.display = isBooking ? '' : 'none';
+  });
 
-  if (isWorkshop) {
-    const tSel = timeCol && timeCol.querySelector('select');
-    if (tSel && !tSel.disabled) tSel.value = '';
+  // Address + service types + bike: hide for workshop and rental
+  [addrCol, svcCol, bikeCol].forEach(function(el) {
+    if (el) el.style.display = (isWorkshop || isRental) ? 'none' : '';
+  });
+
+  // Date col: booking = region-driven select, workshop = plain date, rental = rental date inputs
+  if (dateCol)         dateCol.style.display         = isBooking  ? '' : 'none';
+  if (workshopDateCol) workshopDateCol.style.display  = isWorkshop ? '' : 'none';
+  if (rentalDateCol)   rentalDateCol.style.display    = isRental   ? '' : 'none';
+  if (rentalEndCol)    rentalEndCol.style.display     = isRental   ? '' : 'none';
+
+  if (dateSel)      dateSel.disabled      = !isBooking;
+  if (workshopDate) workshopDate.disabled = !isWorkshop;
+  if (rentalStartDt) rentalStartDt.disabled = !isRental;
+  if (rentalEndDt)   rentalEndDt.disabled   = !isRental;
+
+  if (!isBooking) {
     regionSel.removeAttribute('required');
   } else {
     regionSel.setAttribute('required', '');

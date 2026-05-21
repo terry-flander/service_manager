@@ -19,6 +19,7 @@ STATUS_OPTIONS = [
 JOB_TYPE_OPTIONS = [
     ('booking',  'Booking (FB-)'),
     ('workshop', 'Workshop (PB-)'),
+    ('rental',   'Rental (RB-)'),
 ]
 
 
@@ -56,11 +57,14 @@ def _get_report_data(date_from, date_to, job_types, statuses):
             parts = conn.execute(
                 "SELECT * FROM job_parts WHERE job_id=?",
                 (job['id'],)).fetchall()
-            subtotal, gst, total = calc_totals(parts, bool(job['tax_inclusive']))
-            # Cash payments are GST-free — zero out the GST component
-            if (job['payment_type'] or '').lower() == 'cash':
-                gst      = 0.0
-                subtotal = total
+            tax_raw = job['tax_inclusive'] or 0
+            is_cash = (job['payment_type'] or '').lower() == 'cash'
+            is_exempt = (tax_raw == 2)
+            if is_cash or is_exempt:
+                raw = round(sum(p['quantity'] * p['unit_cost'] for p in parts), 2)
+                subtotal, gst, total = raw, 0.0, raw
+            else:
+                subtotal, gst, total = calc_totals(parts, tax_raw)
             rows.append({
                 'id':            job['id'],
                 'reference':     job['reference'],

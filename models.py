@@ -99,6 +99,8 @@ def init_db():
                 scheduled_date TEXT,
                 scheduled_time TEXT,
                 end_time       TEXT,
+                end_date       TEXT,
+                invoice_number TEXT,
                 status         TEXT DEFAULT 'pending',
                 created_at     TEXT DEFAULT (datetime('now')),
                 notes          TEXT,

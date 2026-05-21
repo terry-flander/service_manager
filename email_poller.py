@@ -144,63 +144,23 @@ def _decode_header(h):
 
 
 def _get_text_body(msg):
-    """
-    Extract plain text from an email message.
-    Handles multipart/mixed (attachments), multipart/alternative
-    (text+html), nested multipart structures, and None payloads.
-    """
     body = ''
-
     if msg.is_multipart():
-        # Walk all parts — prefer text/plain, fall back to text/html
-        plain_parts = []
-        html_parts  = []
-
         for part in msg.walk():
             ct   = part.get_content_type()
-            disp = str(part.get('Content-Disposition', '')).lower()
-
-            # Skip attachments explicitly
-            if 'attachment' in disp:
-                continue
-
-            # Skip multipart containers — walk() gives us the leaves
-            if part.get_content_maintype() == 'multipart':
-                continue
-
-            if ct == 'text/plain':
-                try:
-                    payload = part.get_payload(decode=True)
-                    if payload:
-                        charset = part.get_content_charset() or 'utf-8'
-                        plain_parts.append(
-                            payload.decode(charset, errors='replace'))
-                except Exception:
-                    pass
-
-            elif ct == 'text/html':
-                try:
-                    payload = part.get_payload(decode=True)
-                    if payload:
-                        charset = part.get_content_charset() or 'utf-8'
-                        raw = payload.decode(charset, errors='replace')
-                        text = re.sub(r'<[^>]+>', ' ', raw)
-                        text = re.sub(r'\s+', ' ', text).strip()
-                        html_parts.append(text)
-                except Exception:
-                    pass
-
-        body = '\n'.join(plain_parts) if plain_parts else '\n'.join(html_parts)
-
+            disp = str(part.get('Content-Disposition', ''))
+            if ct == 'text/plain' and 'attachment' not in disp:
+                charset = part.get_content_charset() or 'utf-8'
+                body += part.get_payload(decode=True).decode(charset, errors='replace')
+                break
+            elif ct == 'text/html' and not body and 'attachment' not in disp:
+                charset = part.get_content_charset() or 'utf-8'
+                raw = part.get_payload(decode=True).decode(charset, errors='replace')
+                body = re.sub(r'<[^>]+>', ' ', raw)
+                body = re.sub(r'\s+', ' ', body).strip()
     else:
-        try:
-            payload = msg.get_payload(decode=True)
-            if payload:
-                charset = msg.get_content_charset() or 'utf-8'
-                body = payload.decode(charset, errors='replace')
-        except Exception:
-            body = ''
-
+        charset = msg.get_content_charset() or 'utf-8'
+        body = msg.get_payload(decode=True).decode(charset, errors='replace')
     return body.strip()
 
 
@@ -346,62 +306,41 @@ def _find_job_for_thread(conn, in_reply_to, references, from_email):
     Return the job_id of the first imported email in this thread, or None.
 
     Strategy (in order):
-      1. Match In-Reply-To against a known message_id in email_imports or email_replies
-      2. Match any References header ID against email_imports or email_replies
-      3. Match from_email against jobs.customer_email (most recent open job)
-      4. Match from_email against customers.email (most recent open job via customer record)
+      1. Match In-Reply-To against a known message_id in email_imports
+      2. Match any References header ID against email_imports
+      3. Match from_email against a job's customer_email (most recent job)
     """
-    # Check In-Reply-To — search both imports and replies
+    # Check In-Reply-To
     if in_reply_to:
-        mid = in_reply_to.strip()
         row = conn.execute(
             "SELECT job_id FROM email_imports WHERE message_id=? AND job_id IS NOT NULL",
-            (mid,)).fetchone()
-        if row: return row['job_id']
-        row = conn.execute(
-            "SELECT job_id FROM email_replies WHERE message_id=? AND job_id IS NOT NULL",
-            (mid,)).fetchone()
-        if row: return row['job_id']
+            (in_reply_to.strip(),)).fetchone()
+        if row:
+            return row['job_id']
 
-    # Check References
+    # Check References (space-separated list of message IDs)
     if references:
         for ref_id in references.split():
             ref_id = ref_id.strip()
-            if not ref_id:
-                continue
-            row = conn.execute(
-                "SELECT job_id FROM email_imports "
-                "WHERE message_id=? AND job_id IS NOT NULL", (ref_id,)).fetchone()
-            if row: return row['job_id']
-            row = conn.execute(
-                "SELECT job_id FROM email_replies "
-                "WHERE message_id=? AND job_id IS NOT NULL", (ref_id,)).fetchone()
-            if row: return row['job_id']
+            if ref_id:
+                row = conn.execute(
+                    "SELECT job_id FROM email_imports "
+                    "WHERE message_id=? AND job_id IS NOT NULL",
+                    (ref_id,)).fetchone()
+                if row:
+                    return row['job_id']
 
-    if not from_email or 'import.local' in from_email:
-        return None
-
-    # Strategy 3: match jobs.customer_email directly (jobs created from email import
-    # may not have a customer record)
-    row = conn.execute("""
-        SELECT id FROM jobs
-        WHERE LOWER(customer_email) = LOWER(?)
-          AND status IN ('pending', 'scheduled', 'in_progress')
-        ORDER BY id DESC LIMIT 1
-    """, (from_email,)).fetchone()
-    if row:
-        return row['id']
-
-    # Strategy 4: match via customers table
-    row = conn.execute("""
-        SELECT j.id FROM jobs j
-        JOIN customers c ON c.id = j.customer_id
-        WHERE LOWER(c.email) = LOWER(?)
-          AND j.status IN ('pending', 'scheduled', 'in_progress')
-        ORDER BY j.id DESC LIMIT 1
-    """, (from_email,)).fetchone()
-    if row:
-        return row['id']
+    # Fall back: customer email match — return most recent pending job
+    if from_email and 'import.local' not in from_email:
+        row = conn.execute("""
+            SELECT j.id FROM jobs j
+            JOIN customers c ON c.id = j.customer_id
+            WHERE LOWER(c.email) = LOWER(?)
+              AND j.status IN ('pending', 'scheduled', 'in_progress')
+            ORDER BY j.id DESC LIMIT 1
+        """, (from_email,)).fetchone()
+        if row:
+            return row['id']
 
     return None
 
@@ -488,7 +427,7 @@ def _create_job(conn, parsed, message_id, thread_id=None, in_reply_to=None):
 
 def _poll_inbox_replies(imap, app):
     """
-    Search INBOX for unread messages and attempt to match each
+    Search INBOX for all unread messages and attempt to match each
     to an existing job thread via headers or subject.
     Only marks as read and logs if a job match is found.
     Returns count of messages processed.
@@ -498,7 +437,7 @@ def _poll_inbox_replies(imap, app):
         log.warning("Could not select INBOX for reply scanning")
         return 0
 
-    # Try UNSEEN first; fall back to recent messages if inbox appears empty
+    # Fetch ALL unread — let thread-matching logic decide what belongs to us
     status, data = imap.search(None, 'UNSEEN')
     if status != 'OK':
         log.warning("INBOX: UNSEEN search failed")
@@ -508,16 +447,15 @@ def _poll_inbox_replies(imap, app):
     log.info(f"INBOX: {len(ids)} UNSEEN message(s)")
 
     if not ids:
-        # Gmail sometimes marks messages read when fetched by another client.
-        # Fall back to messages received in the last 7 days that we haven't
-        # already imported.
+        # Gmail marks messages read when opened elsewhere.
+        # Fall back to SINCE 2 days — _already_imported() skips anything seen before.
         from datetime import datetime, timedelta
-        since = (datetime.now() - timedelta(days=7)).strftime('%d-%b-%Y')
+        since = (datetime.now() - timedelta(days=2)).strftime('%d-%b-%Y')
         status2, data2 = imap.search(None, f'SINCE {since}')
         if status2 == 'OK' and data2[0]:
             ids = data2[0].split()
             log.info(f"INBOX: UNSEEN=0, falling back to SINCE {since} "
-                     f"({len(ids)} message(s) to check for new imports)")
+                     f"({len(ids)} message(s) to check)")
         else:
             log.info("INBOX: no messages to check")
             return 0
@@ -525,92 +463,68 @@ def _poll_inbox_replies(imap, app):
     processed = 0
 
     for num in ids:
-        try:
-            status, msg_data = imap.fetch(num, '(RFC822)')
-            if status != 'OK':
-                log.warning(f"INBOX: fetch failed for msg {num}")
-                continue
-            msg = email.message_from_bytes(msg_data[0][1])
-
-            message_id  = (msg.get('Message-ID') or '').strip() or \
-                          f"{msg.get('Date','')}_{msg.get('From','')}"
-            in_reply_to = (msg.get('In-Reply-To') or '').strip()
-            references  = (msg.get('References')  or '').strip()
-            received_at = _parse_received_date(msg)
-            subject     = _decode_header(msg.get('Subject', ''))
-            from_raw    = _decode_header(msg.get('From', ''))
-            from_name, from_email = parseaddr(from_raw)
-            from_email  = from_email.strip().lower()
-
-            log.debug(f"INBOX: checking msg from={from_email!r} "
-                      f"subject={subject!r} in_reply_to={in_reply_to!r}")
-
-            with app.app_context():
-                from models import get_db
-                with get_db() as db_conn:
-                    if _already_imported(db_conn, message_id):
-                        log.debug(f"INBOX: already imported {message_id[:40]}")
-                        continue
-
-                    body      = _get_text_body(msg)
-                    thread_id = in_reply_to or message_id
-
-                    # Strategy 1: thread headers (In-Reply-To / References)
-                    existing_job_id = _find_job_for_thread(
-                        db_conn, in_reply_to, references, from_email)
-
-                    if existing_job_id:
-                        log.debug(f"INBOX: thread header match -> job_id={existing_job_id}")
-
-                    # Strategy 2: strip Re:/Fwd:/FW:/RE: prefixes, match bare subject
-                    if not existing_job_id and subject:
-                        base_subj = subject.strip()
-                        # Strip all Re:/RE:/Fwd:/FW: prefixes (Outlook uses RE: and FW:)
-                        changed = True
-                        while changed:
-                            changed = False
-                            for prefix in ('re:', 'fwd:', 'fw:', 're :', 'aw:'):
-                                if base_subj.lower().startswith(prefix):
-                                    base_subj = base_subj[len(prefix):].strip()
-                                    changed = True
-                        log.debug(f"INBOX: trying subject match on '{base_subj[:60]}'")
-                        if base_subj:
-                            # Match against original booking subjects, stripping their prefixes too
-                            row = db_conn.execute("""
-                                SELECT ei.job_id FROM email_imports ei
-                                WHERE ei.job_id IS NOT NULL
-                                  AND ei.status = 'ok'
-                                  AND LOWER(TRIM(
-                                      REPLACE(REPLACE(REPLACE(REPLACE(
-                                          ei.subject,
-                                          'Re: ',''), 'Fwd: ',''),
-                                          'FW: ',''),  'RE: ','')))
-                                      = LOWER(?)
-                                ORDER BY ei.imported_at DESC LIMIT 1
-                            """, (base_subj,)).fetchone()
-                            if row:
-                                existing_job_id = row['job_id']
-                                log.info(f"INBOX: subject match '{base_subj[:40]}' "
-                                         f"-> job_id={existing_job_id}")
-                            else:
-                                log.debug(f"INBOX: no subject match for '{base_subj[:60]}'")
-
-                    if existing_job_id:
-                        _log_thread_email(
-                            db_conn, message_id, thread_id, in_reply_to,
-                            subject, from_email, body, existing_job_id, received_at)
-                        processed += 1
-                        log.info(f"INBOX reply logged for job {existing_job_id} "
-                                 f"from {from_email}")
-                        # Mark read only when matched — leave others unread
-                        imap.store(num, '+FLAGS', '\\Seen')
-                    else:
-                        log.debug(f"INBOX: no job match for '{subject[:40]}' "
-                                  f"from {from_email} — leaving unread")
-
-        except Exception as e:
-            log.error(f"INBOX: error processing message {num}: {e}", exc_info=True)
+        status, msg_data = imap.fetch(num, '(RFC822)')
+        if status != 'OK':
             continue
+        msg = email.message_from_bytes(msg_data[0][1])
+
+        message_id  = (msg.get('Message-ID') or '').strip() or \
+                      f"{msg.get('Date','')}_{msg.get('From','')}"
+        in_reply_to = (msg.get('In-Reply-To') or '').strip()
+        references  = (msg.get('References')  or '').strip()
+        received_at = _parse_received_date(msg)
+        subject     = _decode_header(msg.get('Subject', ''))
+        from_raw    = _decode_header(msg.get('From', ''))
+        from_name, from_email = parseaddr(from_raw)
+        from_email  = from_email.strip().lower()
+
+        with app.app_context():
+            from models import get_db
+            with get_db() as db_conn:
+                if _already_imported(db_conn, message_id):
+                    log.debug(f"INBOX: already imported {message_id[:40]}")
+                    continue
+
+                body      = _get_text_body(msg)
+                thread_id = in_reply_to or message_id
+
+                # Strategy 1: thread headers (In-Reply-To / References)
+                existing_job_id = _find_job_for_thread(
+                    db_conn, in_reply_to, references, from_email)
+
+                # Strategy 2: strip Re:/Fwd: prefixes, match bare subject
+                if not existing_job_id and subject:
+                    base_subj = subject
+                    for prefix in ('re:', 'fwd:', 'fw:'):
+                        while base_subj.lower().startswith(prefix):
+                            base_subj = base_subj[len(prefix):].strip()
+                    if base_subj:
+                        row = db_conn.execute("""
+                            SELECT ei.job_id FROM email_imports ei
+                            WHERE ei.job_id IS NOT NULL
+                              AND ei.status = 'ok'
+                              AND LOWER(TRIM(REPLACE(REPLACE(REPLACE(
+                                  ei.subject,'Re: ',''),'Fwd: ',''),'FW: ','')))
+                                  = LOWER(?)
+                            ORDER BY ei.imported_at DESC LIMIT 1
+                        """, (base_subj,)).fetchone()
+                        if row:
+                            existing_job_id = row['job_id']
+                            log.info(f"INBOX: subject match '{base_subj[:40]}' "
+                                     f"-> job_id={existing_job_id}")
+
+                if existing_job_id:
+                    _log_thread_email(
+                        db_conn, message_id, thread_id, in_reply_to,
+                        subject, from_email, body, existing_job_id, received_at)
+                    processed += 1
+                    log.info(f"INBOX reply logged for job {existing_job_id} "
+                             f"from {from_email}")
+                    # Mark read only when matched — leave others unread
+                    imap.store(num, '+FLAGS', '\\Seen')
+                else:
+                    log.debug(f"INBOX: no job match for '{subject[:40]}' "
+                              f"from {from_email} — leaving unread")
 
     return processed
 
@@ -651,12 +565,11 @@ def poll_once(app, force=False):
             return 0
 
         status, data = imap.search(None, 'UNSEEN')
-        if status != 'OK':
-            log.warning(f"Search failed on label '{label}'")
-            ids = []
-        else:
-            ids = data[0].split() if data[0] else []
+        if status != 'OK' or not data[0]:
+            imap.logout()
+            return 0
 
+        ids = data[0].split()
         log.info(f"IMAP connected as {user}, label='{label}'")
         log.info(f"Found {len(ids)} unread message(s) in '{label}'")
 

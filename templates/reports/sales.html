@@ -167,39 +167,43 @@
   </div>
   {% endfor %}
 
-  <!-- Grand total -->
+  <!-- Grand total — table matching report column structure -->
   <div class="sd-card">
-    <div style="padding:1rem 1.25rem; display:flex; justify-content:space-between;
-                align-items:center;">
-      <div style="font-size:0.95rem; font-weight:700; color:var(--sd-text);">
-        Grand Total
-        <span style="font-size:0.78rem; font-weight:400; color:var(--sd-muted);
-                      margin-left:0.5rem;">
-          {{ totals['count'] }} job{{ 's' if totals['count'] != 1 }}
-          &nbsp;·&nbsp; {{ date_from }} to {{ date_to }}
-        </span>
-      </div>
-      <div style="display:flex; gap:2.5rem; font-family:'IBM Plex Mono',monospace;">
-        <div style="text-align:right;">
-          <div class="sd-label" style="margin-bottom:0.2rem;">Gross (inc GST)</div>
-          <div style="font-size:1.1rem; font-weight:700; color:var(--sd-accent);">
+    <div class="table-responsive-sd"><table class="sd-table">
+      <thead>
+        <tr>
+          <th colspan="4" style="color:var(--sd-text); font-size:0.95rem;">
+            Grand Total
+            <span style="font-size:0.78rem; font-weight:400; color:var(--sd-muted); margin-left:0.5rem;">
+              {{ totals['count'] }} job{{ 's' if totals['count'] != 1 }}
+              &nbsp;·&nbsp; {{ date_from }} to {{ date_to }}
+            </span>
+          </th>
+          <th style="text-align:right; color:var(--sd-muted); font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em;">Gross (inc GST)</th>
+          <th style="text-align:right; color:var(--sd-muted); font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em;">GST</th>
+          <th style="text-align:right; color:var(--sd-muted); font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em;">Net (ex GST)</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="background:var(--sd-surface2);">
+          <td colspan="4" style="padding:0.75rem 1rem;"></td>
+          <td class="mono" style="text-align:right; font-size:1.05rem; font-weight:700;
+                                   color:var(--sd-accent); padding:0.75rem 1rem;">
             ${{ '%.2f'|format(totals['gross']) }}
-          </div>
-        </div>
-        <div style="text-align:right;">
-          <div class="sd-label" style="margin-bottom:0.2rem;">GST</div>
-          <div style="font-size:1.1rem; font-weight:600; color:var(--sd-muted);">
+          </td>
+          <td class="mono" style="text-align:right; font-size:1.05rem; font-weight:600;
+                                   color:var(--sd-muted); padding:0.75rem 1rem;">
             ${{ '%.2f'|format(totals['gst']) }}
-          </div>
-        </div>
-        <div style="text-align:right;">
-          <div class="sd-label" style="margin-bottom:0.2rem;">Net (ex GST)</div>
-          <div style="font-size:1.1rem; font-weight:700;">
+          </td>
+          <td class="mono" style="text-align:right; font-size:1.05rem; font-weight:700;
+                                   padding:0.75rem 1rem;">
             ${{ '%.2f'|format(totals['net']) }}
-          </div>
-        </div>
-      </div>
-    </div>
+          </td>
+          <td style="padding:0.75rem 1rem;"></td>
+        </tr>
+      </tbody>
+    </table></div>
   </div>
 
   {% endif %}

@@ -109,7 +109,8 @@
   <div class="legend-item"><div class="legend-dot" style="background:#6366f1;"></div> Event</div>
   <div class="legend-item" style="margin-left:auto; color:var(--sd-muted); font-size:0.72rem;">
     <i class="bi bi-arrows-move"></i> Drag to reschedule &nbsp;·&nbsp;
-    <i class="bi bi-plus-circle"></i> Click date to add event
+    <i class="bi bi-plus-circle"></i> Click all-day area to add region date &nbsp;·&nbsp;
+    <i class="bi bi-calendar-x"></i> Click region date to delete
   </div>
 </div>
 
@@ -134,6 +135,65 @@
     <a id="popup-link" href="#" class="btn-accent" style="font-size:0.78rem; padding:0.3rem 0.75rem;">
       View Job
     </a>
+  </div>
+</div>
+
+<!-- ── Add Region Date dialog ─────────────────────────────────────────────── -->
+<div id="add-region-date-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55);
+            z-index:2000; align-items:center; justify-content:center;">
+  <div style="background:var(--sd-surface); border:1px solid var(--sd-border);
+              border-radius:10px; padding:1.75rem; width:min(380px,92vw);
+              box-shadow:0 12px 40px rgba(0,0,0,0.4);">
+    <div style="font-size:1rem; font-weight:700; margin-bottom:1.25rem; color:var(--sd-text);">
+      <i class="bi bi-calendar-plus" style="color:var(--sd-accent); margin-right:0.5rem;"></i>
+      Add Region Date
+    </div>
+    <div class="row g-3">
+      <div class="col-12">
+        <label class="sd-label">Date</label>
+        <input type="date" id="ard-date" class="sd-input">
+      </div>
+      <div class="col-12">
+        <label class="sd-label">Region *</label>
+        <select id="ard-region" class="sd-input">
+          <option value="">— Select region —</option>
+          {% for r in regions %}
+          <option value="{{ r['id'] }}">{{ r['name'] }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div style="display:flex; gap:0.6rem; justify-content:flex-end; margin-top:1.25rem;">
+      <button type="button" class="btn-ghost" onclick="closeAddRegionDate()">Cancel</button>
+      <button type="button" class="btn-accent" onclick="saveAddRegionDate()">
+        <i class="bi bi-check-lg"></i> Add Date
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Delete Region Date dialog ─────────────────────────────────────────── -->
+<div id="del-region-date-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55);
+            z-index:2000; align-items:center; justify-content:center;">
+  <div style="background:var(--sd-surface); border:1px solid var(--sd-border);
+              border-radius:10px; padding:1.75rem; width:min(360px,92vw);
+              box-shadow:0 12px 40px rgba(0,0,0,0.4);">
+    <div style="font-size:1rem; font-weight:700; margin-bottom:0.5rem; color:var(--sd-text);">
+      <i class="bi bi-calendar-x" style="color:#f87171; margin-right:0.5rem;"></i>
+      Delete Region Date
+    </div>
+    <div id="drd-info"
+         style="font-size:0.875rem; color:var(--sd-muted); margin-bottom:1.25rem;"></div>
+    <div style="display:flex; gap:0.6rem; justify-content:flex-end;">
+      <button type="button" class="btn-ghost" onclick="closeDelRegionDate()">Cancel</button>
+      <button type="button" class="btn-ghost"
+              style="color:#f87171; border-color:rgba(248,113,113,0.35);"
+              onclick="confirmDelRegionDate()">
+        <i class="bi bi-trash3"></i> Delete
+      </button>
+    </div>
   </div>
 </div>
 
@@ -230,6 +290,7 @@ document.addEventListener('DOMContentLoaded', function() {
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { toast.className = ''; }, 3000);
   }
+  window.showToast = showToast;
 
   // ── Modal helpers ──────────────────────────────────────────────────────────
   function openModal(title, dateStr, startTime, endTime, isNew) {
@@ -442,20 +503,25 @@ document.addEventListener('DOMContentLoaded', function() {
 
     events: '/calendar/events',
 
-    // ── Click on empty date/slot → open new event modal ────────────────────
+    // ── Click on empty date/slot ───────────────────────────────────────────
     dateClick: function(info) {
-      // Don't open if clicking on an existing event
       jobPopup.style.display = 'none';
       const dateStr = info.dateStr.slice(0, 10);
-      const timeStr = info.allDay ? '' : info.dateStr.slice(11, 16);
-      // Default end = start + 1 hour
-      let endStr = '';
-      if (timeStr) {
-        const [h, m] = timeStr.split(':').map(Number);
-        const endH = String(Math.min(h + 1, 23)).padStart(2, '0');
-        endStr = `${endH}:${m.toString().padStart(2,'0')}`;
+
+      if (info.allDay) {
+        // All-day area click → Add Region Date dialog
+        openAddRegionDate(dateStr);
+      } else {
+        // Timed slot click → existing event modal
+        const timeStr = info.dateStr.slice(11, 16);
+        let endStr = '';
+        if (timeStr) {
+          const [h, m] = timeStr.split(':').map(Number);
+          const endH = String(Math.min(h + 1, 23)).padStart(2, '0');
+          endStr = `${endH}:${m.toString().padStart(2,'0')}`;
+        }
+        openModal('New Event', dateStr, timeStr, endStr, true);
       }
-      openModal('New Event', dateStr, timeStr, endStr, true);
     },
 
     // ── Click on event ─────────────────────────────────────────────────────
@@ -464,7 +530,10 @@ document.addEventListener('DOMContentLoaded', function() {
       const p = info.event.extendedProps;
       jobPopup.style.display = 'none';
 
-      if (p.type === 'region_date') return;
+      if (p.type === 'region_date') {
+        openDelRegionDate(p.region_date_id, p.region, info.event.startStr.slice(0,10));
+        return;
+      }
 
       if (p.type === 'cal_event') {
         // Open edit modal for custom events
@@ -576,6 +645,7 @@ document.addEventListener('DOMContentLoaded', function() {
   };
 
   const calendar = new FullCalendar.Calendar(calendarEl, calOpts);
+  window.calendar = calendar;
   calendar.render();
 
   // Close job popup on outside click
@@ -585,5 +655,80 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 });
+
+  // ── Add Region Date dialog ─────────────────────────────────────────────────
+  let _ardCalendar = null; // reference to calendar instance for refresh
+
+  window.openAddRegionDate = function(dateStr) {
+    document.getElementById('ard-date').value   = dateStr || '';
+    document.getElementById('ard-region').value = '';
+    const overlay = document.getElementById('add-region-date-overlay');
+    overlay.style.display = 'flex';
+    document.getElementById('ard-region').focus();
+  };
+
+  window.closeAddRegionDate = function() {
+    document.getElementById('add-region-date-overlay').style.display = 'none';
+  };
+
+  window.saveAddRegionDate = function() {
+    const regionId = document.getElementById('ard-region').value;
+    const date     = document.getElementById('ard-date').value;
+    if (!regionId) { showToast('Please select a region.', 'error'); return; }
+    if (!date)     { showToast('Please select a date.',   'error'); return; }
+
+    fetch('/regions/add-date', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ region_id: parseInt(regionId), date }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) { showToast(data.error || 'Error', 'error'); return; }
+      closeAddRegionDate();
+      calendar.refetchEvents();
+      showToast(data.created ? 'Region date added.' : 'Already exists.', 'success');
+    })
+    .catch(() => showToast('Network error', 'error'));
+  };
+
+  // Close on overlay click
+  document.getElementById('add-region-date-overlay').addEventListener('click', function(e) {
+    if (e.target === this) closeAddRegionDate();
+  });
+
+  // ── Delete Region Date dialog ──────────────────────────────────────────────
+  let _delRegionDateId = null;
+
+  window.openDelRegionDate = function(rdId, regionName, dateStr) {
+    _delRegionDateId = rdId;
+    document.getElementById('drd-info').textContent =
+      'Delete "' + regionName + '" on ' + dateStr + '?';
+    const overlay = document.getElementById('del-region-date-overlay');
+    overlay.style.display = 'flex';
+  };
+
+  window.closeDelRegionDate = function() {
+    document.getElementById('del-region-date-overlay').style.display = 'none';
+    _delRegionDateId = null;
+  };
+
+  window.confirmDelRegionDate = function() {
+    if (!_delRegionDateId) return;
+    fetch('/regions/delete-date/' + _delRegionDateId, { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) { showToast(data.error || 'Error deleting', 'error'); return; }
+      closeDelRegionDate();
+      calendar.refetchEvents();
+      showToast('Region date deleted.', 'success');
+    })
+    .catch(() => showToast('Network error', 'error'));
+  };
+
+  document.getElementById('del-region-date-overlay').addEventListener('click', function(e) {
+    if (e.target === this) closeDelRegionDate();
+  });
+
 </script>
 {% endblock %}
