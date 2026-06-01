@@ -87,7 +87,7 @@
       </span>
     </div>
     <div style="padding:1.5rem;">
-      <form method="post">
+      <form method="post" data-busy id="send-form">
         <input type="hidden" name="template_id" value="{{ template_id or '' }}">
 
         <div class="row g-3">
@@ -140,7 +140,8 @@
              class="btn-ghost">
             <i class="bi bi-arrow-left"></i> Back
           </a>
-          <button type="submit" name="send" value="1" class="btn-accent">
+          <input type="hidden" id="hidden-send" name="send" value="1">
+          <button type="submit" class="btn-accent">
             <i class="bi bi-send"></i> Send Email
           </button>
         </div>

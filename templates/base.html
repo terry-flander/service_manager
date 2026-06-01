@@ -345,7 +345,9 @@
       .row.g-3 > .col-lg-4,
       .row.g-3 > .col-lg-5,
       .row.g-3 > .col-lg-7,
-      .row.g-3 > .col-lg-8 { width: 100%; }
+      .row.g-3 > .col-lg-8,
+      .row.g-3 > .col-md-5,
+      .row.g-3 > .col-md-7 { width: 100%; }
     }
 
     /* ── Topbar actions wrap on small screens ── */
@@ -383,6 +385,9 @@
     <a href="{{ url_for('jobs.new_job') }}" class="sidebar-link {% if request.endpoint == 'jobs.new_job' %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-plus-circle"></i> New Job
     </a>
+    <a href="{{ url_for('jobs.new_sale') }}" class="sidebar-link {% if request.endpoint == 'jobs.new_sale' %}active{% endif %}" onclick="closeSidebar()">
+      <i class="bi bi-cash-coin"></i> Cash Sale
+    </a>
     <a href="{{ url_for('calendar.index') }}" class="sidebar-link {% if request.endpoint == 'calendar.index' %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-calendar3"></i> Calendar
     </a>
@@ -404,8 +409,11 @@
       <i class="bi bi-pin-map"></i> Suburbs
     </a>
     <div class="nav-section-label" style="margin-top:0.5rem;">Reports</div>
-    <a href="{{ url_for('reports.sales') }}" class="sidebar-link {% if request.endpoint and request.endpoint.startswith('reports.') %}active{% endif %}" onclick="closeSidebar()">
+    <a href="{{ url_for('reports.sales') }}" class="sidebar-link {% if request.endpoint == 'reports.sales' %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-bar-chart-line"></i> Sales Report
+    </a>
+    <a href="{{ url_for('reports.parts_usage') }}" class="sidebar-link {% if request.endpoint == 'reports.parts_usage' %}active{% endif %}" onclick="closeSidebar()">
+      <i class="bi bi-tools"></i> Parts Usage
     </a>
     <div class="nav-section-label" style="margin-top:0.5rem;">Inventory</div>
     <a href="{{ url_for('parts.index') }}" class="sidebar-link {% if request.endpoint in ['parts.index','parts.new_part','parts.edit_part'] %}active{% endif %}" onclick="closeSidebar()">
@@ -626,5 +634,26 @@ document.getElementById('email-modal').addEventListener('close', function() {
 </script>
 
 {% block scripts %}{% endblock %}
+<!-- Busy cursor for slow form submissions -->
+<script>
+(function() {
+  document.addEventListener('submit', function(e) {
+    const form = e.target;
+    if (form.dataset.busy !== undefined) {
+      document.body.style.cursor = 'wait';
+      // Style buttons as busy without disabling (disabled drops name/value from POST)
+      form.querySelectorAll('[type=submit]').forEach(function(btn) {
+        btn.style.cursor  = 'wait';
+        btn.style.opacity = '0.65';
+        btn.style.pointerEvents = 'none';
+      });
+    }
+  });
+  // Reset cursor when page becomes visible again (back nav / reload)
+  window.addEventListener('pageshow', function() {
+    document.body.style.cursor = '';
+  });
+})();
+</script>
 </body>
 </html>

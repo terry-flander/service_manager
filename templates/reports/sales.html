@@ -24,6 +24,7 @@
         <label class="sd-label">Job Type</label>
         <div style="display:flex; gap:1rem; padding-top:0.25rem;">
           {% for key, label in JOB_TYPE_OPTIONS %}
+          {% if label %}
           <label style="display:flex; align-items:center; gap:0.4rem;
                          font-size:0.875rem; color:var(--sd-text); cursor:pointer;">
             <input type="checkbox" name="job_types" value="{{ key }}"
@@ -31,40 +32,41 @@
                    style="accent-color:var(--sd-accent); width:14px; height:14px;">
             {{ label }}
           </label>
+          {% endif %}
           {% endfor %}
         </div>
       </div>
 
-      <div>
-        <label class="sd-label">Status</label>
-        <div style="display:flex; gap:0.75rem; flex-wrap:wrap; padding-top:0.25rem;">
-          {% for key, label in STATUS_OPTIONS %}
-          <label style="display:flex; align-items:center; gap:0.4rem;
-                         font-size:0.875rem; color:var(--sd-text); cursor:pointer;">
-            <input type="checkbox" name="statuses" value="{{ key }}"
-                   {% if key in statuses %}checked{% endif %}
-                   style="accent-color:var(--sd-accent); width:14px; height:14px;">
-            {{ label }}
-          </label>
-          {% endfor %}
-        </div>
-      </div>
+      <label style="display:flex; align-items:center; gap:0.4rem;
+                     font-size:0.875rem; color:var(--sd-text); cursor:pointer;">
+        <input type="checkbox" name="show_daily"
+               {% if show_daily %}checked{% endif %}
+               style="accent-color:var(--sd-accent); width:14px; height:14px;">
+        Daily subtotals
+      </label>
 
       <button type="submit" class="btn-accent">
         <i class="bi bi-bar-chart"></i> Run Report
       </button>
+      <span style="font-size:0.78rem; color:var(--sd-muted); align-self:center;">
+        {% if show_cash %}
+          <i class="bi bi-cash-coin" style="color:var(--sd-accent);"></i> Cash payments included
+        {% else %}
+          Cash payments excluded
+        {% endif %}
+      </span>
 
       {% if ran and rows %}
       <div style="margin-left:auto; display:flex; gap:0.5rem;">
         <a href="{{ url_for('reports.sales_csv',
                    date_from=date_from, date_to=date_to,
-                   job_types=job_types, statuses=statuses) }}"
+                   job_types=job_types) }}"
            class="btn-ghost">
           <i class="bi bi-download"></i> CSV
         </a>
         <a href="{{ url_for('reports.sales_pdf',
                    date_from=date_from, date_to=date_to,
-                   job_types=job_types, statuses=statuses) }}"
+                   job_types=job_types) }}"
            class="btn-accent" target="_blank">
           <i class="bi bi-file-pdf"></i> PDF
         </a>
@@ -85,7 +87,7 @@
   {% else %}
 
   <!-- Report table -->
-  {% for month_label, month_rows, sub in months %}
+  {% for month_label, day_groups, sub in months %}
   <div class="sd-card mb-3">
 
     <!-- Month header -->
@@ -96,28 +98,33 @@
         {{ month_label }}
       </span>
       <span style="font-size:0.78rem; color:var(--sd-muted);">
-        {{ month_rows|length }} job{{ 's' if month_rows|length != 1 }}
+        {{ day_groups|sum(attribute='2.count') }} job{{ 's' if day_groups|sum(attribute='2.count') != 1 }}
       </span>
     </div>
 
     <div class="table-responsive-sd"><table class="sd-table">
       <thead>
         <tr>
-          <th>Date</th>
+          <th>Scheduled</th>
+          <th>Date Paid</th>
           <th>Reference</th>
           <th>Type</th>
           <th>Customer</th>
           <th style="text-align:right;">Gross (inc GST)</th>
           <th style="text-align:right;">GST</th>
           <th style="text-align:right;">Net (ex GST)</th>
+          <th>Payment</th>
           <th>Status</th>
         </tr>
       </thead>
       <tbody>
-        {% for row in month_rows %}
-        <tr>
+        {% for day_label, day_rows, day_sub in day_groups %}
+        {% for row in day_rows %}        <tr>
           <td class="mono" style="font-size:0.82rem; white-space:nowrap;">
-            {{ row['scheduled_date']|fmt_date('short') if row['scheduled_date'] else '—' }}
+            {{ row['scheduled_date']|fmt_date('dmy') if row['scheduled_date'] else '—' }}
+          </td>
+          <td class="mono" style="font-size:0.82rem; white-space:nowrap;">
+            {% if row['status'] == 'paid' and row['paid_date'] %}{{ row['paid_date']|fmt_date('dmy') }}{% else %}—{% endif %}
           </td>
           <td>
             <a href="{{ url_for('jobs.job_detail', job_id=row['id']) }}"
@@ -126,7 +133,7 @@
             </a>
           </td>
           <td style="font-size:0.82rem;">
-            <span class="badge-status {{ 'status-scheduled' if row['job_type']=='booking' else 'status-in_progress' }}">
+            <span class="badge-status {{ 'status-scheduled' if row['job_type']=='booking' else 'status-in_progress' if row['job_type']=='workshop' else 'status-complete' }}">
               {{ row['job_type']|title }}
             </span>
           </td>
@@ -136,6 +143,7 @@
             ${{ '%.2f'|format(row['gst']) }}
           </td>
           <td class="mono" style="text-align:right;">${{ '%.2f'|format(row['net']) }}</td>
+          <td style="font-size:0.82rem;">{{ row['payment_type'] or '—' }}</td>
           <td>
             <span class="badge-status status-{{ row['status'] }}">
               {{ row['status']|replace('_',' ') }}
@@ -143,10 +151,32 @@
           </td>
         </tr>
         {% endfor %}
+        <!-- Daily subtotal row — optional -->
+        {% if show_daily %}
+        <tr style="background:rgba(0,0,0,0.06); border-top:1px solid var(--sd-border);">
+          <td colspan="5" style="padding:0.45rem 1rem; font-size:0.75rem;
+                                  font-weight:600; color:var(--sd-muted);">
+            {{ day_label }}
+            <span style="font-weight:400;">&nbsp;·&nbsp;{{ day_sub['count'] }} item{{ 's' if day_sub['count'] != 1 }}</span>
+          </td>
+          <td class="mono" style="text-align:right; font-weight:600; padding:0.45rem 1rem; font-size:0.82rem;">
+            ${{ '%.2f'|format(day_sub['gross']) }}
+          </td>
+          <td class="mono" style="text-align:right; font-weight:500; padding:0.45rem 1rem; font-size:0.82rem; color:var(--sd-muted);">
+            ${{ '%.2f'|format(day_sub['gst']) }}
+          </td>
+          <td class="mono" style="text-align:right; font-weight:600; padding:0.45rem 1rem; font-size:0.82rem;">
+            ${{ '%.2f'|format(day_sub['net']) }}
+          </td>
+          <td style="padding:0.45rem 1rem;"></td>
+          <td style="padding:0.45rem 1rem;"></td>
+        </tr>
+        {% endif %}
+        {% endfor %}
       </tbody>
       <tfoot>
         <tr style="background:var(--sd-surface2); border-top:2px solid var(--sd-border);">
-          <td colspan="4" style="padding:0.6rem 1rem; font-size:0.8rem;
+          <td colspan="5" style="padding:0.6rem 1rem; font-size:0.8rem;
                                   font-weight:600; color:var(--sd-muted);">
             Subtotal — {{ month_label }}
           </td>
@@ -161,6 +191,7 @@
             ${{ '%.2f'|format(sub['net']) }}
           </td>
           <td style="padding:0.6rem 1rem;"></td>
+          <td style="padding:0.6rem 1rem;"></td>
         </tr>
       </tfoot>
     </table></div>
@@ -172,7 +203,7 @@
     <div class="table-responsive-sd"><table class="sd-table">
       <thead>
         <tr>
-          <th colspan="4" style="color:var(--sd-text); font-size:0.95rem;">
+          <th colspan="5" style="color:var(--sd-text); font-size:0.95rem;">
             Grand Total
             <span style="font-size:0.78rem; font-weight:400; color:var(--sd-muted); margin-left:0.5rem;">
               {{ totals['count'] }} job{{ 's' if totals['count'] != 1 }}
@@ -187,7 +218,7 @@
       </thead>
       <tbody>
         <tr style="background:var(--sd-surface2);">
-          <td colspan="4" style="padding:0.75rem 1rem;"></td>
+          <td colspan="5" style="padding:0.75rem 1rem;"></td>
           <td class="mono" style="text-align:right; font-size:1.05rem; font-weight:700;
                                    color:var(--sd-accent); padding:0.75rem 1rem;">
             ${{ '%.2f'|format(totals['gross']) }}
@@ -209,4 +240,4 @@
   {% endif %}
 {% endif %}
 
-{% endblock %}
+{% endblock %}ase.html" %}

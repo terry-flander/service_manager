@@ -69,11 +69,32 @@
                 <input type="checkbox" name="reset_2fa"
                        style="width:15px; height:15px; accent-color:var(--sd-accent);">
                 <span class="sd-label" style="margin:0; color:#f87171;">
-                  Reset 2FA — user must re-enrol on next login
+                  Reset 2FA — sets require re-enrolment on next login
+                </span>
+              </label>
+            </div>
+            {% else %}
+            <div class="col-12">
+              <label style="display:flex; align-items:center; gap:.5rem; cursor:pointer;">
+                <input type="checkbox" name="require_2fa"
+                       {% if user['require_2fa'] %}checked{% endif %}
+                       style="width:15px; height:15px; accent-color:var(--sd-accent);">
+                <span class="sd-label" style="margin:0;">
+                  Require 2FA — prompt user to configure on next login
                 </span>
               </label>
             </div>
             {% endif %}
+            <div class="col-12">
+              <label style="display:flex; align-items:center; gap:.5rem; cursor:pointer;">
+                <input type="checkbox" name="show_cash_payments"
+                       {% if user['show_cash_payments'] %}checked{% endif %}
+                       style="width:15px; height:15px; accent-color:var(--sd-accent);">
+                <span class="sd-label" style="margin:0;">
+                  Show cash payments in Sales Report
+                </span>
+              </label>
+            </div>
 
             {% else %}
             <div class="col-12">

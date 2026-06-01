@@ -38,7 +38,9 @@ def init_db():
                 role          TEXT NOT NULL DEFAULT 'mechanic',
                 totp_secret   TEXT,
                 totp_enabled  INTEGER NOT NULL DEFAULT 0,
-                must_change_pw INTEGER NOT NULL DEFAULT 1,
+                require_2fa         INTEGER NOT NULL DEFAULT 0,
+                show_cash_payments  INTEGER NOT NULL DEFAULT 0,
+                must_change_pw      INTEGER NOT NULL DEFAULT 1,
                 active        INTEGER NOT NULL DEFAULT 1,
                 theme         TEXT NOT NULL DEFAULT 'dark',
                 created_at    TEXT DEFAULT (datetime('now'))

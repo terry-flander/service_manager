@@ -99,6 +99,20 @@ def _seed_regions(conn):
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
+def _seed_cash_sales_customer(conn):
+    """Ensure the locked Cash Sales customer record exists."""
+    existing = conn.execute(
+        "SELECT id FROM customers WHERE email='cash.sales@flyingbike.internal'"
+    ).fetchone()
+    if not existing:
+        conn.execute("""
+            INSERT INTO customers (name, email, phone, suburb, address)
+            VALUES ('Cash Sales', 'cash.sales@flyingbike.internal', '', '', '')
+        """)
+        conn.commit()
+        print("  Cash Sales customer created")
+
+
 def seed_data():
     with get_db() as conn:
         parts_count = conn.execute("SELECT COUNT(*) FROM parts").fetchone()[0]
@@ -107,4 +121,5 @@ def seed_data():
         else:
             print(f'  Parts already present ({parts_count}) — skipping CSV load')
         _seed_regions(conn)
+        _seed_cash_sales_customer(conn)
         conn.commit()

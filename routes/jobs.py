@@ -47,6 +47,7 @@ JOB_TYPES = {
     'booking':  {'label': 'Booking',  'prefix': 'FB'},
     'workshop': {'label': 'Workshop', 'prefix': 'PB'},
     'rental':   {'label': 'Rental',   'prefix': 'RB'},
+    'sale':     {'label': 'Sale',     'prefix': 'CS'},
 }
 
 
@@ -108,6 +109,75 @@ def upsert_customer(conn, name, email, phone, suburb, address=''):
                (address or '').strip()
 
 
+@jobs_bp.route('/jobs/new-sale', methods=['GET', 'POST'])
+def new_sale():
+    """Create a new cash sale (CS- prefix) — minimal form, lands on detail."""
+    from datetime import date as _date
+    if request.method == 'POST':
+        sale_date    = request.form.get('sale_date') or _date.today().isoformat()
+        payment_type = request.form.get('payment_type', '').strip()
+        notes        = request.form.get('notes', '').strip()
+        if not payment_type:
+            flash('Payment type is required.', 'danger')
+            return render_template('jobs/new_sale.html',
+                                   today=_date.today().isoformat())
+
+        with get_db() as conn:
+            # Get or create Cash Sales customer
+            cust = conn.execute(
+                "SELECT id FROM customers WHERE email='cash.sales@flyingbike.internal'"
+            ).fetchone()
+            if not cust:
+                conn.execute("""
+                    INSERT INTO customers (name, email, phone, suburb, address)
+                    VALUES ('Cash Sales','cash.sales@flyingbike.internal','','','')
+                """)
+                conn.commit()
+                cust = conn.execute(
+                    "SELECT id FROM customers WHERE email='cash.sales@flyingbike.internal'"
+                ).fetchone()
+            cust_id = cust['id']
+
+            ref = generate_reference('sale', conn)
+            conn.execute("""
+                INSERT INTO jobs (reference, job_type, customer_id, customer_name,
+                    customer_email, customer_phone, suburb, address, description,
+                    region_id, tax_inclusive, scheduled_date, status,
+                    payment_type, paid_date, notes)
+                VALUES (?, 'sale', ?, 'Cash Sales',
+                    'cash.sales@flyingbike.internal', '', '', '', '',
+                    1, 1, ?, 'paid', ?, ?, ?)
+            """, (ref, cust_id, sale_date, payment_type, sale_date, notes))
+            conn.commit()
+            job_id = conn.execute(
+                "SELECT id FROM jobs WHERE reference=?", (ref,)).fetchone()['id']
+
+        flash(f'Sale {ref} created. Add parts below.', 'success')
+        return redirect(url_for('jobs.job_detail', job_id=job_id))
+
+    from datetime import date as _date
+    return render_template('jobs/new_sale.html',
+                           today=_date.today().isoformat())
+
+
+def _recalc_sale_total(conn, job_id):
+    """After adding/removing parts on a sale job, update amount_paid to parts total."""
+    job = conn.execute(
+        "SELECT job_type, payment_type, scheduled_date FROM jobs WHERE id=?",
+        (job_id,)).fetchone()
+    if not job or job['job_type'] != 'sale':
+        return
+    parts = conn.execute(
+        "SELECT quantity, unit_cost FROM job_parts WHERE job_id=?",
+        (job_id,)).fetchall()
+    total = round(sum(p['quantity'] * p['unit_cost'] for p in parts), 2)
+    conn.execute(
+        "UPDATE jobs SET amount_paid=?, paid_date=coalesce(paid_date, scheduled_date) "
+        "WHERE id=?",
+        (total, job_id))
+    conn.commit()
+
+
 @jobs_bp.route('/')
 def index():
     import json as _json
@@ -120,6 +190,19 @@ def index():
     job_type  = request.args.get('job_type', '')
     date_from = request.args.get('date_from', '')
     date_to   = request.args.get('date_to', '')
+    sort      = request.args.get('sort', 'date')
+
+    SORT_MAP = {
+        'ref':      'j.reference',
+        'customer': 'j.customer_name',
+        'region':   'r.name',
+        'date':     'j.scheduled_date ASC, j.scheduled_time',
+        'status':   'j.status',
+        'total':    'total_sort',   # handled post-query
+        'paid':     'j.amount_paid',
+    }
+    if sort not in SORT_MAP:
+        sort = 'date'
 
     has_params = bool(request.args)
 
@@ -128,7 +211,7 @@ def index():
             # Save current filter selection to settings
             prefs = {'status': status, 'region_id': region_id,
                      'job_type': job_type, 'date_from': date_from,
-                     'date_to': date_to}
+                     'date_to': date_to, 'sort': sort}
             conn.execute(
                 "INSERT INTO settings (key,value) VALUES (?,?) "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
@@ -176,7 +259,12 @@ def index():
         if date_to:
             query += " AND j.scheduled_date <= ?"
             params.append(date_to)
-        query += " ORDER BY j.scheduled_date ASC, j.scheduled_time ASC, j.id DESC"
+        # ORDER BY — total/paid sort applied post-query on the tuples list
+        if sort in ('total', 'paid'):
+            query += " ORDER BY j.scheduled_date ASC, j.id DESC"
+        else:
+            order_col = SORT_MAP[sort]
+            query += f" ORDER BY {order_col} ASC, j.id DESC"
         jobs_raw = conn.execute(query, params).fetchall()
 
         # Fetch all parts for these jobs in one query, compute GST-correct totals
@@ -199,10 +287,16 @@ def index():
                 _, _, total = calc_totals(j_parts, bool(j['tax_inclusive']))
             jobs.append((j, total))
 
+        # Post-query sort for computed columns
+        if sort == 'total':
+            jobs.sort(key=lambda x: x[1] or 0, reverse=True)
+        elif sort == 'paid':
+            jobs.sort(key=lambda x: x[0]['amount_paid'] or 0, reverse=True)
+
         regions = conn.execute("SELECT * FROM regions ORDER BY name").fetchall()
     return render_template('jobs/index.html', jobs=jobs, regions=regions,
                            status=status, region_id=region_id, job_type=job_type,
-                           date_from=date_from, date_to=date_to,
+                           date_from=date_from, date_to=date_to, sort=sort,
                            TIME_LABELS=TIME_LABELS, JOB_TYPES=JOB_TYPES)
 
 
@@ -343,6 +437,16 @@ def job_detail(job_id):
         bike_desc   = request.form.get('bike_description', '').strip() if jt == 'workshop' else (job['bike_description'] or '')
         notes       = request.form.get('notes', '').strip()
         tax_incl    = int(request.form.get('tax_inclusive', '1') or 1)
+        # Status & Payment (merged from separate update_status form)
+        new_status     = request.form.get('status', job['status'])
+        invoice_number = request.form.get('invoice_number', '').strip() or None
+        paid_date      = request.form.get('paid_date', '').strip() or None
+        amount_paid_s  = request.form.get('amount_paid', '').strip()
+        amount_paid    = float(amount_paid_s) if amount_paid_s else None
+        # payment_type: prefer hidden field set by Quick Pay JS, fall back to radio
+        payment_type   = (request.form.get('payment_type', '').strip()
+                          or request.form.get('_payment_display', '').strip()
+                          or None)
 
         if jt == 'booking':
             sched_date = request.form.get('scheduled_date') or None
@@ -368,12 +472,23 @@ def job_detail(job_id):
                 UPDATE jobs
                 SET description=?, bike_description=?, address=?,
                     scheduled_date=?, scheduled_time=?, end_time=?, end_date=?,
-                    region_id=?, tax_inclusive=?, notes=?
+                    region_id=?, tax_inclusive=?, notes=?,
+                    status=?, invoice_number=?,
+                    paid_date=?, amount_paid=?, payment_type=?
                 WHERE id=?
             """, (description, bike_desc, address,
                   sched_date, sched_time, end_time, end_date,
-                  region_id, tax_incl, notes, job_id))
+                  region_id, tax_incl, notes,
+                  new_status, invoice_number,
+                  paid_date, amount_paid, payment_type,
+                  job_id))
+            if jt == 'sale':
+                wconn.execute(
+                    "UPDATE jobs SET paid_date=coalesce(paid_date, scheduled_date) WHERE id=?",
+                    (job_id,))
             wconn.commit()
+            if jt == 'sale':
+                _recalc_sale_total(wconn, job_id)
 
         flash('Job updated.', 'success')
         return_to = request.form.get('return_to', '').strip()
@@ -556,6 +671,7 @@ def add_part(job_id):
                   float(request.form.get('quantity', 1)),
                   float(request.form.get('unit_cost') or part['unit_cost'])))
             conn.commit()
+            _recalc_sale_total(conn, job_id)
     else:
         description = request.form.get('description', '').strip()
         part_number = request.form.get('part_number', '').strip()
@@ -588,6 +704,7 @@ def add_part(job_id):
             """, (job_id, master_part_id, description, part_number, quantity, unit_cost))
 
             conn.commit()
+            _recalc_sale_total(conn, job_id)
     flash('Part added.', 'success')
     # Preserve the ?from= param so return_to still works after adding a part
     from_param = request.args.get('from', '')
@@ -601,6 +718,7 @@ def remove_part(job_id, jp_id):
         conn.execute(
             "DELETE FROM job_parts WHERE id=? AND job_id=?", (jp_id, job_id))
         conn.commit()
+        _recalc_sale_total(conn, job_id)
     flash('Part removed.', 'success')
     from_param = request.args.get('from', '')
     suffix = ('?from=' + from_param) if from_param else ''
@@ -688,39 +806,80 @@ def email_reply_message(reply_id):
 
 @jobs_bp.route('/jobs/email-imports')
 def email_imports():
+    import json as _json
     from flask import session as _sess
-    user_id = _sess.get('user_id')
-    q = request.args.get('q', '').strip()
+    user_id   = _sess.get('user_id')
+    PREFS_KEY = f'email_filter_{user_id}'
 
-    # Save/restore search per user in settings
+    q          = request.args.get('q',          '').strip()
+    filter_    = request.args.get('filter',     'all')
+    date_from  = request.args.get('date_from',  '')
+    date_to    = request.args.get('date_to',    '')
+
+    if filter_ not in ('all', 'unread', 'no_reply'):
+        filter_ = 'all'
+
+    has_params = bool(request.args)
+
     with get_db() as conn:
-        if q:
+        if has_params:
+            prefs = {'q': q, 'filter': filter_,
+                     'date_from': date_from, 'date_to': date_to}
             conn.execute(
                 "INSERT INTO settings (key,value) VALUES (?,?) "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                (f'email_search_{user_id}', q))
+                (PREFS_KEY, _json.dumps(prefs)))
             conn.commit()
-        elif 'q' not in request.args and user_id:
-            # First load with no param — restore saved search
+        else:
             row = conn.execute(
                 "SELECT value FROM settings WHERE key=?",
-                (f'email_search_{user_id}',)).fetchone()
-            if row and row['value']:
-                from flask import redirect as _red
-                return _red(url_for('jobs.email_imports', q=row['value']))
+                (PREFS_KEY,)).fetchone()
+            if row:
+                try:
+                    prefs     = _json.loads(row['value'])
+                    q         = prefs.get('q',         '')
+                    filter_   = prefs.get('filter',    'all')
+                    date_from = prefs.get('date_from', '')
+                    date_to   = prefs.get('date_to',   '')
+                    params = {'filter': filter_}
+                    if q:         params['q']         = q
+                    if date_from: params['date_from'] = date_from
+                    if date_to:   params['date_to']   = date_to
+                    return redirect(url_for('jobs.email_imports', **params))
+                except Exception:
+                    pass
 
-        # Build query with optional search filter
-        params = []
-        where  = ''
+        # Build query
+        wheres, params = [], []
+
         if q:
-            where  = "AND (LOWER(ei.subject) LIKE LOWER(?) OR LOWER(ei.sender) LIKE LOWER(?))"
-            params = [f'%{q}%', f'%{q}%']
+            wheres.append("(LOWER(ei.subject) LIKE LOWER(?) "
+                          "OR LOWER(ei.sender) LIKE LOWER(?))")
+            params += [f'%{q}%', f'%{q}%']
+
+        if filter_ == 'unread':
+            wheres.append("(ei.read = 1 OR ei.read IS NULL)")
+        elif filter_ == 'no_reply':
+            wheres.append("ei.job_id IS NOT NULL")
+            wheres.append("""NOT EXISTS (
+                SELECT 1 FROM email_replies er WHERE er.job_id = ei.job_id
+            )""")
+            wheres.append("ei.status = 'ok'")
+
+        if date_from:
+            wheres.append("coalesce(ei.received_at, ei.imported_at) >= ?")
+            params.append(date_from)
+        if date_to:
+            wheres.append("coalesce(ei.received_at, ei.imported_at) < ?")
+            params.append(date_to + 'T23:59:59')
+
+        where_sql = ('WHERE ' + ' AND '.join(wheres)) if wheres else ''
 
         imports = conn.execute(f"""
             SELECT ei.*, j.reference
             FROM email_imports ei
             LEFT JOIN jobs j ON j.id = ei.job_id
-            WHERE 1=1 {where}
+            {where_sql}
             ORDER BY coalesce(ei.received_at, ei.imported_at) DESC
             LIMIT 500
         """, params).fetchall()
@@ -734,7 +893,21 @@ def email_imports():
     poll_minutes = int(os.environ.get('GMAIL_POLL_MINUTES', '5'))
     return render_template('jobs/email_imports.html',
                            imports=imports, polling_on=polling_on,
-                           poll_minutes=poll_minutes, q=q)
+                           poll_minutes=poll_minutes,
+                           q=q, filter=filter_,
+                           date_from=date_from, date_to=date_to)
+
+
+@jobs_bp.route('/jobs/email-imports/clear-filters', methods=['POST'])
+def clear_email_filters():
+    from flask import session as _sess
+    user_id = _sess.get('user_id')
+    if user_id:
+        with get_db() as conn:
+            conn.execute("DELETE FROM settings WHERE key=?",
+                         (f'email_filter_{user_id}',))
+            conn.commit()
+    return redirect(url_for('jobs.email_imports'))
 
 
 @jobs_bp.route('/jobs/email-imports/<int:import_id>/mark-read', methods=['POST'])

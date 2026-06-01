@@ -61,6 +61,7 @@ def view_invoice(job_id):
 
 @invoice_bp.route('/jobs/<int:job_id>/invoice/xero-csv')
 def xero_csv(job_id):
+    import re as _re
     with get_db() as conn:
         job = conn.execute("""
             SELECT j.*, r.name as region_name
@@ -72,54 +73,86 @@ def xero_csv(job_id):
     if not job:
         return "Job not found", 404
 
-    tax_inclusive = bool(job['tax_inclusive'])
-    invoice_num   = f"INV-{job['reference']}"
-    due_date      = (date.today() + timedelta(days=30)).strftime('%d/%m/%Y')
+    tax_raw   = job['tax_inclusive'] or 0
+    gst_exempt = (tax_raw == 2)
+    if (job['payment_type'] or '').lower() == 'cash' or gst_exempt:
+        tax_type             = 'GST Free Income'
+        amounts_are_inclusive = 'false'
+    elif tax_raw:
+        tax_type             = 'GST on Income'
+        amounts_are_inclusive = 'true'
+    else:
+        tax_type             = 'GST on Income'
+        amounts_are_inclusive = 'false'
 
-    # Xero tax type strings
-    # Tax Inclusive → "GST on Income" with amounts as-is (Xero handles inclusive tax)
-    # Tax Exclusive → "GST on Income" with Xero set to exclusive
-    tax_type   = 'GST on Income'
-    amounts_are_inclusive = 'true' if tax_inclusive else 'false'
+    invoice_num = job['invoice_number'] or f"INV-{job['reference']}"
+    due_date    = (date.today() + timedelta(days=7)).strftime('%d/%m/%Y')
+
+    # Address fields
+    address   = job['address'] or ''
+    suburb    = job['suburb']  or ''
+    # Extract 4-digit postcode from address if present
+    pc_match  = _re.search(r'\b(\d{4})\b', address)
+    postcode  = pc_match.group(1) if pc_match else ''
 
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
-        'ContactName', 'EmailAddress', 'POAddressLine1', 'DueDate',
-        'InventoryItemCode', 'Description', 'Quantity', 'UnitAmount',
-        'Discount', 'AccountCode', 'TaxType', 'TaxAmount',
+        'ContactName', 'EmailAddress', 'POAddressLine1',
+        'POCity', 'PORegion', 'POPostalCode',
+        'DueDate', 'InventoryItemCode', 'Description',
+        'Quantity', 'UnitAmount', 'Discount',
+        'AccountCode', 'TaxType', 'TaxAmount',
         'TrackingName1', 'TrackingOption1', 'Currency',
-        'InvoiceNumber', 'Reference', 'AmountsAreInclusive'
+        'InvoiceNumber', 'Reference', 'AmountsAreInclusive',
     ])
+
+    # Fields repeated on every row per Xero multi-line invoice spec
+    contact_name  = job['customer_name']    or ''
+    email_addr    = job['customer_email']   or ''
+    po_addr       = address
+    po_city       = suburb
+    po_region     = 'Victoria'
+    po_postcode   = postcode
 
     lines = job_parts if job_parts else [None]
     for i, jp in enumerate(lines):
         first = (i == 0)
         if jp:
             writer.writerow([
-                job['customer_name']    if first else '',
-                (job['customer_email'] or '') if first else '',
-                job['address']          if first else '',
-                due_date                if first else '',
+                contact_name, email_addr, po_addr,
+                po_city, po_region, po_postcode,
+                due_date if first else '',
                 jp['part_number'] or '',
                 jp['description'],
                 jp['quantity'],
                 f"{jp['unit_cost']:.2f}",
-                '', '200', tax_type, '',
+                '', '240', tax_type, '',
                 '', '', 'AUD',
-                invoice_num if first else '',
+                invoice_num,
                 job['reference'] if first else '',
                 amounts_are_inclusive if first else '',
             ])
         else:
             writer.writerow([
-                job['customer_name'], job['customer_email'] or '',
-                job['address'], due_date, '',
+                contact_name, email_addr, po_addr,
+                po_city, po_region, po_postcode,
+                due_date, '',
                 job['description'] or 'Service call',
-                1, '0.00', '', '200', tax_type, '',
+                1, '0.00', '',
+                '240', tax_type, '',
                 '', '', 'AUD',
                 invoice_num, job['reference'], amounts_are_inclusive,
             ])
+
+    with get_db() as conn:
+        conn.execute("UPDATE jobs SET status='invoiced' WHERE id=?", (job_id,))
+        conn.commit()
+
+    response = make_response(output.getvalue())
+    response.headers['Content-Disposition'] = f'attachment; filename={invoice_num}.csv'
+    response.headers['Content-Type'] = 'text/csv'
+    return response
 
     with get_db() as conn:
         conn.execute("UPDATE jobs SET status='invoiced' WHERE id=?", (job_id,))

@@ -133,7 +133,7 @@ def setup_2fa():
 
         with get_db() as conn:
             conn.execute(
-                "UPDATE users SET totp_secret=?, totp_enabled=1 WHERE id=?",
+                "UPDATE users SET totp_secret=?, totp_enabled=1, require_2fa=0 WHERE id=?",
                 (secret, user_id))
             conn.commit()
         session['totp_enabled'] = True
@@ -182,6 +182,18 @@ def change_password():
             conn.commit()
 
         flash('Password updated successfully.', 'success')
+        # Only prompt for 2FA setup if explicitly required and not already enabled
+        with get_db() as conn:
+            user = conn.execute(
+                "SELECT totp_enabled, require_2fa FROM users WHERE id=?",
+                (session['user_id'],)).fetchone()
+        if user and not user['totp_enabled']:
+            try:
+                require_2fa = user['require_2fa']
+            except (IndexError, KeyError):
+                require_2fa = 0
+            if require_2fa:
+                return redirect(url_for('auth.setup_2fa'))
         return redirect(url_for('jobs.index'))
 
     return render_template('auth/change_password.html')
@@ -239,10 +251,14 @@ def new_user():
 @admin_required
 def edit_user(user_id):
     with get_db() as conn:
-        user = conn.execute(
+        user_row = conn.execute(
             "SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
-    if not user:
+    if not user_row:
         return "User not found", 404
+    # Convert to dict and ensure new columns have safe defaults
+    user = dict(user_row)
+    user.setdefault('show_cash_payments', 0)
+    user.setdefault('require_2fa', 0)
 
     if request.method == 'POST':
         name  = request.form.get('name', '').strip()
@@ -257,12 +273,14 @@ def edit_user(user_id):
                 return render_template('auth/user_form.html', user=user)
 
             conn.execute("""
-                UPDATE users SET name=?, email=?, phone=?, role=?, active=?
+                UPDATE users SET name=?, email=?, phone=?, role=?, active=?,
+                                 show_cash_payments=?
                 WHERE id=?
             """, (name, email,
                   request.form.get('phone', '').strip(),
                   request.form.get('role', 'mechanic'),
                   1 if 'active' in request.form else 0,
+                  1 if 'show_cash_payments' in request.form else 0,
                   user_id))
 
             # Optional password reset
@@ -275,12 +293,19 @@ def edit_user(user_id):
                     UPDATE users SET password_hash=?, must_change_pw=1 WHERE id=?
                 """, (generate_password_hash(new_pw), user_id))
 
-            # Optional 2FA reset
+            # Optional 2FA reset — clears TOTP and sets require_2fa so user re-enrolls
             if 'reset_2fa' in request.form:
                 conn.execute("""
-                    UPDATE users SET totp_secret=NULL, totp_enabled=0 WHERE id=?
+                    UPDATE users SET totp_secret=NULL, totp_enabled=0, require_2fa=1
+                    WHERE id=?
                 """, (user_id,))
-                flash('2FA reset — user must re-enrol on next login.', 'success')
+                flash('2FA reset — user will be prompted to re-enrol on next login.', 'success')
+            else:
+                # Save require_2fa checkbox (only shown when totp not yet enabled)
+                require_2fa = 1 if 'require_2fa' in request.form else 0
+                conn.execute(
+                    "UPDATE users SET require_2fa=? WHERE id=?",
+                    (require_2fa, user_id))
 
             conn.commit()
 
@@ -305,7 +330,11 @@ def _complete_login(user):
 def _post_login_redirect(user):
     if user['must_change_pw']:
         return redirect(url_for('auth.change_password'))
-    if not user['totp_enabled']:
+    try:
+        require_2fa = user['require_2fa']
+    except (IndexError, KeyError):
+        require_2fa = 0
+    if require_2fa and not user['totp_enabled']:
         return redirect(url_for('auth.setup_2fa'))
     next_url = request.args.get('next') or url_for('jobs.index')
     return redirect(next_url)
