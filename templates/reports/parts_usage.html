@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Parts Usage{% endblock %}
+{% block topbar_title %}Parts Usage Report{% endblock %}
+
+{% block content %}
+<div class="sd-card mb-3">
+  <div style="padding:0.75rem 1.25rem; display:flex; align-items:center; gap:1rem; flex-wrap:wrap;">
+    <!-- Include ad-hoc toggle -->
+    <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer; font-size:0.875rem;">
+      <input type="checkbox" id="adhoc-toggle"
+             {% if include_adhoc %}checked{% endif %}
+             style="accent-color:var(--sd-accent); width:14px; height:14px;"
+             onchange="applyFilter()">
+      Include one-off parts (not in catalogue)
+    </label>
+    <div style="flex:1;"></div>
+    <!-- CSV export -->
+    <a id="csv-link"
+       href="{{ url_for('reports.parts_usage', include_adhoc='1' if include_adhoc else '0', export='csv') }}"
+       class="btn-ghost" style="font-size:0.82rem; padding:0.35rem 0.75rem;">
+      <i class="bi bi-download"></i> CSV
+    </a>
+    <span style="font-size:0.78rem; color:var(--sd-muted);">
+      {{ rows|length }} part{{ 's' if rows|length != 1 }}
+    </span>
+  </div>
+</div>
+
+<div class="sd-card">
+  <div class="table-responsive-sd"><table class="sd-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Part #</th>
+        <th style="text-align:right;">List Price</th>
+        <th style="text-align:center;">Active</th>
+        <th style="text-align:right;">Jobs Used</th>
+        <th style="text-align:right;">Total Qty</th>
+        <th style="text-align:right;">Min Charged</th>
+        <th style="text-align:right;">Max Charged</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr {% if not row['active'] %}style="opacity:0.5;"{% endif %}>
+        <td>
+          {% if row['id'] %}
+          <a href="{{ url_for('parts.edit_part', part_id=row['id']) }}"
+             style="font-weight:500;">{{ row['name'] }}</a>
+          {% else %}
+          <span style="font-weight:500; color:var(--sd-muted);">
+            <i class="bi bi-pencil-square" style="font-size:0.7rem;"></i>
+            {{ row['name'] }}
+          </span>
+          {% endif %}
+        </td>
+        <td class="mono" style="font-size:0.82rem; color:var(--sd-muted);">
+          {{ row['part_number'] or '—' }}
+        </td>
+        <td class="mono" style="text-align:right;">
+          {% if row['unit_cost'] is not none %}${{ '%.2f'|format(row['unit_cost']) }}{% else %}—{% endif %}
+        </td>
+        <td style="text-align:center;">
+          {% if row['is_adhoc'] %}
+          <span style="font-size:0.7rem; color:var(--sd-muted);">ad-hoc</span>
+          {% elif row['active'] %}
+          <i class="bi bi-check-circle" style="color:#4ade80;"></i>
+          {% else %}
+          <i class="bi bi-x-circle" style="color:#f87171;"></i>
+          {% endif %}
+        </td>
+        <td class="mono" style="text-align:right; font-weight:{% if row['usage_count'] %}600{% else %}400{% endif %};">
+          {{ row['usage_count'] or 0 }}
+        </td>
+        <td class="mono" style="text-align:right; color:var(--sd-muted);">
+          {{ '%.2f'|format(row['total_qty']) if row['total_qty'] else '—' }}
+        </td>
+        <td class="mono" style="text-align:right; color:var(--sd-muted);">
+          {% if row['min_cost'] is not none %}${{ '%.2f'|format(row['min_cost']) }}{% else %}—{% endif %}
+        </td>
+        <td class="mono" style="text-align:right;">
+          {% if row['max_cost'] is not none %}
+            {% if row['max_cost'] != row['min_cost'] %}
+            <span style="color:var(--sd-accent); font-weight:600;">
+              ${{ '%.2f'|format(row['max_cost']) }}
+            </span>
+            {% else %}
+            ${{ '%.2f'|format(row['max_cost']) }}
+            {% endif %}
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr style="background:var(--sd-surface2); border-top:2px solid var(--sd-border);">
+        <td colspan="4" style="padding:0.6rem 1rem; font-size:0.8rem;
+                                font-weight:600; color:var(--sd-muted);">Totals</td>
+        <td class="mono" style="text-align:right; font-weight:700; padding:0.6rem 1rem;">
+          {{ rows|sum(attribute='usage_count') }}
+        </td>
+        <td class="mono" style="text-align:right; font-weight:600; padding:0.6rem 1rem; color:var(--sd-muted);">
+          {{ '%.2f'|format(rows|selectattr('total_qty')|sum(attribute='total_qty')) }}
+        </td>
+        <td colspan="2" style="padding:0.6rem 1rem;"></td>
+      </tr>
+    </tfoot>
+  </table></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function applyFilter() {
+  const adhoc = document.getElementById('adhoc-toggle').checked ? '1' : '0';
+  window.location = '/reports/parts?include_adhoc=' + adhoc;
+}
+</script>
+{% endblock %}

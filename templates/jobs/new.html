@@ -174,9 +174,10 @@
             </div>
             <div class="col-md-6">
               <label class="sd-label">Tax Treatment</label>
-              <select name="tax_inclusive" class="sd-input">
+              <select name="tax_inclusive" id="tax-select" class="sd-input">
                 <option value="1" selected>Tax Inclusive (prices include GST)</option>
                 <option value="0">Tax Exclusive (GST added on top)</option>
+                <option value="2">GST Exempt (nil GST)</option>
               </select>
             </div>
             <div class="col-12" id="service-types-col">
@@ -445,6 +446,84 @@ function regionChanged(regionId) {
     });
 }
 
+
+// ── Job type field visibility ─────────────────────────────────────────────────
+function updateJobType(type) {
+  const isBooking  = type === 'booking';
+  const isWorkshop = type === 'workshop';
+  const isRental   = type === 'rental';
+
+  // Region + suburb + time slots: booking only
+  [document.getElementById('region-col'),
+   document.getElementById('suburb-col'),
+   document.getElementById('time-slot-col'),
+   document.getElementById('end-time-col')].forEach(function(el) {
+    if (el) el.style.display = isBooking ? '' : 'none';
+  });
+
+  // Address + service types: hide for workshop and rental
+  // Bike description: hide for rental only (workshop needs it)
+  [document.getElementById('address-col'),
+   document.getElementById('service-types-col')].forEach(function(el) {
+    if (el) el.style.display = (isWorkshop || isRental) ? 'none' : '';
+  });
+  const bikeCol = document.getElementById('bike-desc-col');
+  if (bikeCol) bikeCol.style.display = isRental ? 'none' : '';
+
+  // Date: booking uses region-driven select; workshop+rental use plain date input
+  const dateSel   = document.getElementById('date-select');
+  const nonbkDate = document.getElementById('nonbooking-date');
+  if (dateSel)  { dateSel.style.display = isBooking ? '' : 'none'; dateSel.disabled = !isBooking; }
+  if (nonbkDate) {
+    nonbkDate.style.display = isBooking ? 'none' : '';
+    nonbkDate.disabled      = isBooking;
+    if (isWorkshop && !nonbkDate.value) nonbkDate.value = new Date().toISOString().slice(0,10);
+    if (isRental) nonbkDate.value = '';
+  }
+
+  // End date col: rental only
+  const rentalEndCol = document.getElementById('rental-end-date-col');
+  const rentalEndDt  = document.getElementById('rental-end-date');
+  if (rentalEndCol) rentalEndCol.style.display = isRental ? '' : 'none';
+  if (rentalEndDt)  rentalEndDt.disabled       = !isRental;
+
+  // Region required: booking only
+  const regionSel = document.getElementById('region-select');
+  if (regionSel) {
+    if (isBooking) { regionSel.setAttribute('required',''); }
+    else { regionSel.removeAttribute('required'); if (!regionSel.value) regionSel.selectedIndex = 1; }
+  }
+
+  // Default tax treatment: GST Exempt for rental, Tax Inclusive for others
+  const taxSel = document.getElementById('tax-select');
+  if (taxSel) {
+    taxSel.value = isRental ? '2' : '1';
+  }
+}
+
+// ── Rental date validation: end >= start, end calendar opens at start ─────────
+(function() {
+  const startDt = document.getElementById('nonbooking-date');
+  const endDt   = document.getElementById('rental-end-date');
+  if (!startDt || !endDt) return;
+
+  startDt.addEventListener('change', function() {
+    if (startDt.value) {
+      endDt.min = startDt.value;
+      if (!endDt.value || endDt.value < startDt.value) endDt.value = startDt.value;
+    }
+  });
+
+  endDt.addEventListener('change', function() {
+    if (startDt.value && endDt.value && endDt.value < startDt.value) {
+      endDt.setCustomValidity('End date must be on or after start date.');
+      endDt.reportValidity();
+      endDt.value = startDt.value;
+    } else {
+      endDt.setCustomValidity('');
+    }
+  });
+})();
 
 // ── Auto-set end time to start + 1 hour ─────────────────────────────────────
 (function () {

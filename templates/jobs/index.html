@@ -62,13 +62,25 @@
   <div class="table-responsive-sd"><table class="sd-table">
     <thead>
       <tr>
-        <th>Reference</th>
-        <th>Customer</th>
-        <th>Region</th>
-        <th>Scheduled</th>
-        <th>Status</th>
-        <th>Total</th>
-        <th>Paid</th>
+        {% set cur_params = {'status': status, 'region_id': region_id,
+                             'job_type': job_type, 'date_from': date_from,
+                             'date_to': date_to} %}
+        {% for col_key, col_label in [
+            ('ref','Reference'), ('customer','Customer'), ('region','Region'),
+            ('date','Scheduled'), ('status','Status'),
+            ('total','Total'), ('paid','Paid')] %}
+        {% set is_active = sort == col_key %}
+        <th {% if col_key in ('total','paid') %}style="text-align:right;"{% endif %}>
+          <a href="{{ url_for('jobs.index', sort=col_key, **cur_params) }}"
+             style="text-decoration:none; white-space:nowrap; display:inline-flex;
+                    align-items:center; gap:0.3rem;
+                    color:{{ 'var(--sd-text)' if is_active else 'var(--sd-muted)' }};">
+            {{ col_label }}
+            <i class="bi bi-caret-{{ 'down-fill' if is_active else 'down' }}"
+               style="font-size:0.6rem; {{ '' if is_active else 'opacity:0.4;' }}"></i>
+          </a>
+        </th>
+        {% endfor %}
         <th></th>
       </tr>
     </thead>
@@ -121,6 +133,9 @@ function applyFilters() {
   if (jobType)  params.set('job_type',  jobType);
   if (dateFrom) params.set('date_from', dateFrom);
   if (dateTo)   params.set('date_to',   dateTo);
+  // Preserve current sort when applying filters
+  const sort = {{ sort|tojson }};
+  if (sort && sort !== 'date') params.set('sort', sort);
   window.location = '?' + params.toString();
 }
 </script>

@@ -2,9 +2,10 @@
 {% block title %}{{ job['reference'] }}{% endblock %}
 {% block topbar_title %}{{ job['reference'] }} — {{ job['customer_name'] }}{% endblock %}
 {% block topbar_actions %}
-  <button type="button" class="btn-ghost" onclick="openTypeModal()"><i class="bi bi-arrow-left-right"></i> Type</button>
+  {% if job['job_type'] != 'sale' %}<button type="button" class="btn-ghost" onclick="openTypeModal()"><i class="bi bi-arrow-left-right"></i> Type</button>{% endif %}
   <a href="{{ url_for('invoice.shop_ticket', job_id=job['id']) }}" class="btn-ghost" target="_blank"><i class="bi bi-printer"></i> Print Ticket</a>
   <a href="{{ url_for('invoice.pdf_invoice', job_id=job['id']) }}" class="btn-ghost" target="_blank"><i class="bi bi-file-pdf"></i> Preview Invoice</a>
+  <a href="{{ url_for('invoice.xero_csv', job_id=job['id']) }}" class="btn-ghost"><i class="bi bi-download"></i> Xero CSV</a>
   <a href="{{ url_for('email_replies.compose_reply', job_id=job['id']) }}" class="btn-ghost"><i class="bi bi-reply"></i> <span>Reply</span></a>
 {% endblock %}
 
@@ -43,14 +44,50 @@
 
 {% block content %}
 {% set is_workshop = job['job_type'] == 'workshop' %}
-<div class="row g-3">
+{% set is_sale     = job['job_type'] == 'sale' %}
+
+<!-- ── Save form wraps ALL editable content ──────────────────────────────── -->
+<form method="post" id="save-form"
+      action="{{ url_for('jobs.job_detail', job_id=job['id']) }}">
+  <input type="hidden" name="return_to" id="return-to-field" value="">
+  <!-- Status & Payment hidden fields (merged into main save) -->
+  <input type="hidden" name="payment_type" id="payment-type-hidden" value="">
+
+  <!-- Sticky control bar — spans full width above grid -->
+  <div id="detail-controls"
+       style="position:sticky; top:0; z-index:100;
+              background:var(--sd-slate); border:1px solid var(--sd-border);
+              border-radius:8px; padding:0.5rem 0.75rem;
+              display:flex; align-items:center; gap:0.5rem;
+              margin-bottom:0.75rem;
+              box-shadow:0 2px 8px rgba(0,0,0,0.25);">
+    <button type="button" class="btn-ghost"
+            style="color:#f87171; border-color:rgba(248,113,113,0.35); padding:0.35rem 0.7rem; font-size:0.82rem;"
+            onclick="confirmDelete()">
+      <i class="bi bi-trash3"></i>
+    </button>
+    <div style="flex:1;"></div>
+    <button type="button" id="btn-cancel" class="btn-ghost"
+            style="padding:0.35rem 0.85rem; font-size:0.82rem;"
+            onclick="cancelDetail()">
+      <i class="bi bi-x-lg"></i> Cancel
+    </button>
+    <button type="submit" id="btn-save" class="btn-ghost"
+            style="padding:0.35rem 0.85rem; font-size:0.82rem;"
+            onclick="document.getElementById('return-to-field').value=''">
+      <i class="bi bi-floppy"></i> Save
+    </button>
+    <button type="submit" id="btn-save-return" class="btn-accent"
+            style="padding:0.35rem 0.85rem; font-size:0.82rem;"
+            onclick="setSaveReturn()">
+      <i class="bi bi-floppy"></i> Save &amp; Return
+    </button>
+  </div>
+
+<div style="display:grid; grid-template-columns:42% 1fr; gap:1rem; align-items:start;">
 
   <!-- Left column -->
-  <div class="col-lg-5">
-
-    <!-- ── Save form wraps editable cards ──────────────────────────────── -->
-    <form method="post" id="save-form"
-          action="{{ url_for('jobs.job_detail', job_id=job['id']) }}">
+  <div>
 
 
       <!-- Customer card — read-only -->
@@ -103,7 +140,7 @@
       <!-- Editable: Description + Address + Scheduling + Notes -->
       <div class="sd-card mb-3">
         <div class="sd-card-header">
-          Details
+          {% if is_sale %}Sale Details{% else %}Details{% endif %}
           <span class="badge-status {% if job['job_type'] == 'workshop' %}status-in_progress{% else %}status-scheduled{% endif %}"
                 style="font-size:0.7rem;">
             {{ JOB_TYPES.get(job['job_type'], {}).get('label', job['job_type']) }}
@@ -112,7 +149,36 @@
         <div style="padding:1.25rem;">
           <div class="row g-3">
 
-            <!-- Description -->
+            {% if is_sale %}
+            <!-- Sale: date + payment type + notes only -->
+            <div class="col-md-6">
+              <label class="sd-label">Sale Date</label>
+              <input type="date" name="scheduled_date" class="sd-input"
+                     value="{{ job['scheduled_date'] or '' }}">
+            </div>
+            <div class="col-md-6">
+              <label class="sd-label">Payment Type</label>
+              <div style="display:flex; gap:1rem; padding-top:0.55rem;">
+                {% for pt in ['EFTPOS', 'Cash'] %}
+                <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer; font-size:0.875rem;">
+                  <input type="radio" name="payment_type" value="{{ pt }}"
+                         {% if job['payment_type'] == pt %}checked{% endif %}
+                         style="accent-color:var(--sd-accent); width:15px; height:15px;">
+                  {{ pt }}
+                </label>
+                {% endfor %}
+              </div>
+              <!-- hidden fallback so payment_type is always submitted -->
+              <input type="hidden" name="payment_type_fallback" value="{{ job['payment_type'] or '' }}">
+            </div>
+            <div class="col-12">
+              <label class="sd-label">Notes</label>
+              <input type="text" name="description" class="sd-input"
+                     value="{{ job['description'] or '' }}"
+                     placeholder="e.g. Walk-in, regular customer…">
+            </div>
+
+            {% else %}
             <div class="col-12">
               <label class="sd-label">Description</label>
               <textarea name="description" class="sd-input" rows="2"
@@ -126,6 +192,26 @@
               <input type="text" name="bike_description" class="sd-input"
                      value="{{ job['bike_description'] or '' }}"
                      placeholder="e.g. 2022 Trek Domane…">
+            </div>
+            {% endif %}
+
+            <!-- Service Types — booking only, read-only display -->
+            {% if job['job_type'] == 'booking' and job['service_types'] %}
+            <div class="col-12">
+              <label class="sd-label">Service Types</label>
+              <div style="display:flex; flex-wrap:wrap; gap:0.35rem; padding-top:0.25rem;">
+                {% for st in job['service_types'].split(',') %}
+                {% set st = st.strip() %}
+                {% if st %}
+                <span style="font-size:0.78rem; font-weight:500;
+                             background:rgba(99,102,241,0.15); color:var(--sd-accent);
+                             border:1px solid rgba(99,102,241,0.3);
+                             border-radius:4px; padding:0.2rem 0.5rem;">
+                  {{ st }}
+                </span>
+                {% endif %}
+                {% endfor %}
+              </div>
             </div>
             {% endif %}
 
@@ -249,34 +335,82 @@
             </div>
 
           </div><!-- /.row -->
+          {% endif %}{# end is_sale else #}
         </div><!-- /padding -->
 
-        <!-- Delete + Save footer -->
-        <div style="padding:0.75rem 1.25rem; border-top:1px solid var(--sd-border);
-                    display:flex; align-items:center; gap:0.75rem;">
-          <button type="button" class="btn-ghost"
-                  style="color:#f87171; border-color:rgba(248,113,113,0.35);"
-                  onclick="confirmDelete()">
-            <i class="bi bi-trash3"></i> Delete
-          </button>
-          <div style="flex:1;"></div>
-          <button type="submit" class="btn-accent">
-            <i class="bi bi-check-lg"></i> Save
-          </button>
-        </div>
       </div>
-
-    </form><!-- /.save-form -->
 
     <!-- Delete form — outside save form, submit by JS -->
     <form id="delete-form" method="post"
           action="{{ url_for('jobs.delete_job', job_id=job['id']) }}"
           style="display:none;"></form>
 
-  </div><!-- /col-lg-5 -->
 
-  <!-- Right column: Parts -->
-  <div class="col-lg-7">
+  </div><!-- /left column -->
+
+  <!-- Right column -->
+  <div>
+    <!-- Status & Payment — now part of main save form, above Parts Used -->
+    {% if not is_sale %}
+    <div class="sd-card mb-3">
+      <div class="sd-card-header">
+        Status &amp; Payment
+        {% if job_parts %}
+        <span class="mono" style="font-size:0.9rem; font-weight:700;
+                                   color:var(--sd-accent); margin-left:auto;">
+          ${{ '%.2f'|format(total) }}
+        </span>
+        {% endif %}
+      </div>
+      <div style="padding:1rem 1.25rem; display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+        <span class="badge-status status-{{ job['status'] }}" style="flex-shrink:0;">
+          {{ job['status']|replace('_',' ') }}
+        </span>
+        <select name="status" class="sd-input" style="flex:1; min-width:120px;">
+          {% for s in ['pending','scheduled','in_progress','complete','invoiced','paid','void'] %}
+          <option value="{{ s }}" {% if job['status'] == s %}selected{% endif %}>
+            {{ s|replace('_',' ')|title }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="padding:0.5rem 1.25rem; border-top:1px solid var(--sd-border);">
+        <label class="sd-label" style="margin-bottom:0.35rem;">Invoice Number</label>
+        <input type="text" name="invoice_number" class="sd-input"
+               value="{{ job['invoice_number'] or '' }}"
+               placeholder="e.g. INV-0042"
+               style="max-width:200px;">
+      </div>
+      <div style="padding:0 1.25rem 0.6rem; border-top:1px solid var(--sd-border);">
+        <div class="sd-label" style="margin-bottom:0.5rem;">Quick Pay</div>
+        <div style="display:flex; gap:0.5rem; flex-wrap:wrap;" id="quick-pay-radios">
+          {% for pt in ['EFTPOS','Cash','Transfer'] %}
+          <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;
+                        font-size:0.875rem; color:var(--sd-text);">
+            <input type="radio" name="_payment_display" value="{{ pt }}"
+                   {% if job['payment_type'] == pt %}checked{% endif %}
+                   style="accent-color:var(--sd-accent); width:14px; height:14px;">
+            {{ pt }}
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+      <div style="padding:0 1.25rem 0.75rem; display:flex; gap:0.75rem; flex-wrap:wrap; align-items:flex-end;">
+        <div style="flex:1; min-width:130px;">
+          <label class="sd-label">Paid Date</label>
+          <input type="date" name="paid_date" class="sd-input"
+                 value="{{ job['paid_date'] or '' }}">
+        </div>
+        <div style="flex:1; min-width:120px;">
+          <label class="sd-label">Amount Paid ($)</label>
+          <input type="number" name="amount_paid" class="sd-input"
+                 step="0.01" min="0"
+                 value="{{ '%.2f'|format(job['amount_paid']) if job['amount_paid'] else '' }}"
+                 placeholder="0.00">
+        </div>
+      </div>
+    </div>
+    {% endif %}{# end not is_sale #}
     <div class="sd-card mb-3">
       <div class="sd-card-header">
         Parts Used
@@ -306,7 +440,7 @@
                      data-jp="{{ jp['id'] }}"
                      data-field="quantity"
                      value="{{ jp['quantity'] }}"
-                     min="0.01" step="0.1"
+                     min="0.01" step="any"
                      style="width:4.5rem; text-align:right;">
             </td>
             <td class="mono" style="text-align:right; padding:0.4rem 0.875rem;">
@@ -366,7 +500,7 @@
             <div class="col-md-2">
               <label class="sd-label">Qty</label>
               <input type="number" name="quantity" id="part-qty"
-                     class="sd-input" value="1" min="0.1" step="0.1">
+                     class="sd-input" value="1" min="0.01" step="any">
             </div>
             <div class="col-md-3">
               <label class="sd-label">Unit Cost ($)</label>
@@ -386,71 +520,18 @@
 
 
 
-    <!-- Status & Payment card — separate POST -->
-    <div class="sd-card">
-      <div class="sd-card-header">Status &amp; Payment</div>
-      <form method="post" action="{{ url_for('jobs.update_status', job_id=job['id']) }}">
-        <input type="hidden" name="return_to" id="return-to-field" value="">
-        <div style="padding:1rem 1.25rem; display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
-          <span class="badge-status status-{{ job['status'] }}" style="flex-shrink:0;">
-            {{ job['status']|replace('_',' ') }}
-          </span>
-          <select name="status" class="sd-input" style="flex:1; min-width:120px;">
-            {% for s in ['pending','scheduled','in_progress','complete','invoiced','paid','void'] %}
-            <option value="{{ s }}" {% if job['status'] == s %}selected{% endif %}>
-              {{ s|replace('_',' ')|title }}
-            </option>
-            {% endfor %}
-          </select>
-        </div>
-        <input type="hidden" name="payment_type" id="payment-type-hidden" value="">
-        <div style="padding:0.5rem 1.25rem; border-top:1px solid var(--sd-border);">
-          <label class="sd-label" style="margin-bottom:0.35rem;">Invoice Number</label>
-          <input type="text" name="invoice_number" class="sd-input"
-                 value="{{ job['invoice_number'] or '' }}"
-                 placeholder="e.g. INV-0042"
-                 style="max-width:200px;">
-        </div>
-        <div style="padding:0 1.25rem 0.6rem; border-top:1px solid var(--sd-border);">
-          <div class="sd-label" style="margin-bottom:0.5rem;">Quick Pay</div>
-          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;" id="quick-pay-radios">
-            {% for pt in ['EFTPOS','Cash','Transfer'] %}
-            <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;
-                          font-size:0.875rem; color:var(--sd-text);">
-              <input type="radio" name="_payment_display" value="{{ pt }}"
-                     {% if job['payment_type'] == pt %}checked{% endif %}
-                     style="accent-color:var(--sd-accent); width:14px; height:14px;">
-              {{ pt }}
-            </label>
-            {% endfor %}
-          </div>
-        </div>
-        <div style="padding:0 1.25rem 0.75rem; display:flex; gap:0.75rem; flex-wrap:wrap; align-items:flex-end;">
-          <div style="flex:1; min-width:130px;">
-            <label class="sd-label">Paid Date</label>
-            <input type="date" name="paid_date" class="sd-input"
-                   value="{{ job['paid_date'] or '' }}">
-          </div>
-          <div style="flex:1; min-width:120px;">
-            <label class="sd-label">Amount Paid ($)</label>
-            <input type="number" name="amount_paid" class="sd-input"
-                   step="0.01" min="0"
-                   value="{{ '%.2f'|format(job['amount_paid']) if job['amount_paid'] else '' }}"
-                   placeholder="0.00">
-          </div>
-          <button type="submit" class="btn-ghost" style="white-space:nowrap; padding:0.45rem 1rem;">
-            <i class="bi bi-check-lg"></i> Update
-          </button>
-        </div>
-      </form>
-    </div>
+  </div><!-- /right column -->
 
+</div><!-- /grid layout -->
+</form><!-- /.save-form -->
 
-  </div>
+<!-- Delete form — outside save form, submit by JS -->
+<form id="delete-form" method="post"
+      action="{{ url_for('jobs.delete_job', job_id=job['id']) }}"
+      style="display:none;"></form>
 
-
-  <!-- Email Thread — full width below all columns -->
-  <div class="col-12" style="margin-top:0.25rem;">
+<!-- Email Thread — full width below grid -->
+<div style="margin-top:0.75rem; grid-column:1/-1;">
     <!-- Email Thread — collapsed by default -->
         {% if thread_emails %}
         <div class="sd-card" style="margin-top:0.75rem;">
@@ -524,8 +605,7 @@
           </div><!-- /thread-body -->
         </div><!-- /email thread card -->
         {% endif %}
-  </div>
-</div>
+</div><!-- /email thread wrapper, spans both cols -->
 {% endblock %}
 
 
@@ -594,6 +674,54 @@ function toggleThread() {
   body.style.display      = open ? 'none' : 'block';
   chevron.style.transform = open ? ''      : 'rotate(180deg)';
 }
+
+
+// ── Detail control bar: dirty tracking + Cancel/Save/Save & Return ────────────
+(function () {
+  const fromParam = {{ request.args.get('from', '')|tojson }};
+  const returnUrl = fromParam === 'calendar' ? '/calendar'
+                  : fromParam === 'email'    ? '/jobs/email-imports'
+                  : '/';
+
+  let isDirty = false;
+
+  function setDirty(val) {
+    isDirty = val;
+    ['btn-save','btn-save-return'].forEach(function(id) {
+      const btn = document.getElementById(id);
+      if (!btn) return;
+      btn.style.opacity       = val ? '' : '0.35';
+      btn.style.pointerEvents = val ? '' : 'none';
+      btn.style.cursor        = val ? '' : 'default';
+    });
+  }
+
+  // Start insensitive
+  setDirty(false);
+
+  // Any input/change in the save form marks dirty
+  const form = document.getElementById('save-form');
+  if (form) {
+    form.addEventListener('input',  function() { setDirty(true); });
+    form.addEventListener('change', function() { setDirty(true); });
+  }
+
+  // Part add/remove also counts as a change
+  document.querySelectorAll('form[action*="add-part"], form[action*="remove-part"]')
+    .forEach(function(f) { f.addEventListener('submit', function() { setDirty(true); }); });
+
+  // If page reloaded after part add/remove, consider dirty
+  if (window.location.hash === '#add-part') { setDirty(true); }
+
+  window.cancelDetail = function() {
+    window.location.href = returnUrl;
+  };
+
+  window.setSaveReturn = function() {
+    var f = document.getElementById('return-to-field');
+    if (f) f.value = fromParam || 'jobs';
+  };
+})();
 
 
 // ── Auto-set end time to start + 1 hour when start changes ──────────────────
@@ -701,7 +829,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 
 (function () {
-  const searchInput = document.getElementById('part-search');  // merged search + description
+  const searchInput = document.getElementById('part-search');
   const dropdown    = document.getElementById('part-dropdown');
   const idH         = document.getElementById('part-id-hidden');
   const pnum        = document.getElementById('part-number');
@@ -717,9 +845,24 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function positionDropdown() {
     const rect = searchInput.getBoundingClientRect();
+    const ddH  = Math.min(260, dropdown.scrollHeight || 200);
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
     dropdown.style.left  = rect.left + 'px';
-    dropdown.style.top   = (rect.bottom + 2) + 'px';
     dropdown.style.width = rect.width + 'px';
+
+    if (spaceBelow >= ddH || spaceBelow >= spaceAbove) {
+      // Show below input
+      dropdown.style.top    = (rect.bottom + 2) + 'px';
+      dropdown.style.bottom = 'auto';
+      dropdown.style.maxHeight = Math.max(120, spaceBelow - 8) + 'px';
+    } else {
+      // Flip above input
+      dropdown.style.bottom = (window.innerHeight - rect.top + 2) + 'px';
+      dropdown.style.top    = 'auto';
+      dropdown.style.maxHeight = Math.max(120, spaceAbove - 8) + 'px';
+    }
   }
 
   function closeDropdown() { dropdown.style.display = 'none'; }
@@ -767,7 +910,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function selectPart(p) {
     idH.value         = p.id;
-    searchInput.value = p.name;          // description = selected part name
+    searchInput.value = p.name;
     pnum.value        = p.part_number || '';
     cost.value        = parseFloat(p.unit_cost).toFixed(2);
     qty.value         = '1';
@@ -776,7 +919,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   searchInput.addEventListener('input', function () {
-    idH.value = '';  // clear selection when user types (treat as new if no pick)
+    idH.value = '';
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => fetchResults(searchInput.value.trim()), 180);
   });

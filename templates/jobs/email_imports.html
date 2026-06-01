@@ -10,7 +10,7 @@
       Auto {{ 'On' if polling_on else 'Off' }}
     </button>
   </form>
-  <form method="post" action="{{ url_for('jobs.poll_now') }}" style="display:inline;">
+  <form method="post" action="{{ url_for('jobs.poll_now') }}" style="display:inline;" data-busy>
     <button type="submit" class="btn-ghost">
       <i class="bi bi-arrow-repeat"></i> <span>Poll Now</span>
     </button>
@@ -46,34 +46,86 @@
   {% endif %}
 </div>
 
-<!-- Search bar -->
+<!-- Filter bar -->
 <div class="sd-card mb-3">
-  <div style="padding:0.75rem 1.25rem; display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap;">
-    <form method="get" action="{{ url_for('jobs.email_imports') }}"
-          style="display:flex; gap:0.5rem; flex:1; min-width:0;">
-      <div style="position:relative; flex:1; min-width:0;">
+  <form method="get" action="{{ url_for('jobs.email_imports') }}"
+        style="padding:0.75rem 1.25rem; display:flex; gap:0.6rem;
+               align-items:flex-end; flex-wrap:wrap;">
+
+    <!-- Search -->
+    <div style="flex:1; min-width:160px;">
+      <label class="sd-label" style="margin-bottom:0.3rem;">Search</label>
+      <div style="position:relative;">
         <i class="bi bi-search"
            style="position:absolute; left:0.75rem; top:50%; transform:translateY(-50%);
                   color:var(--sd-muted); pointer-events:none; font-size:0.85rem;"></i>
-        <input type="text" name="q" id="search-input" value="{{ q }}"
-               class="sd-input" style="padding-left:2.25rem;"
-               placeholder="Search sender or subject…"
-               autofocus>
+        <input type="text" name="q" value="{{ q }}" class="sd-input"
+               style="padding-left:2.25rem;"
+               placeholder="Sender or subject…">
       </div>
-      <button type="submit" class="btn-accent" style="white-space:nowrap;">
-        <i class="bi bi-search"></i> Search
+    </div>
+
+    <!-- Filter type buttons -->
+    <div>
+      <label class="sd-label" style="margin-bottom:0.3rem;">Show</label>
+      <div style="display:flex; gap:0.35rem;">
+        {% for val, label in [('all','All'),('unread','Unread'),('no_reply','No Reply')] %}
+        <button type="submit" name="filter" value="{{ val }}"
+                class="{{ 'btn-accent' if filter == val else 'btn-ghost' }}"
+                style="padding:0.4rem 0.75rem; font-size:0.82rem; white-space:nowrap;">
+          {{ label }}
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Date range -->
+    <div>
+      <label class="sd-label" style="margin-bottom:0.3rem;">From</label>
+      <input type="date" name="date_from" value="{{ date_from }}" class="sd-input"
+             style="width:140px;">
+    </div>
+    <div>
+      <label class="sd-label" style="margin-bottom:0.3rem;">To</label>
+      <input type="date" name="date_to" value="{{ date_to }}" class="sd-input"
+             style="width:140px;">
+    </div>
+
+    <!-- Apply -->
+    <div style="display:flex; gap:0.35rem; align-items:flex-end;">
+      <button type="submit" class="btn-accent"
+              style="padding:0.4rem 0.9rem; white-space:nowrap;">
+        <i class="bi bi-funnel"></i> Apply
+      </button>
+    </div>
+
+  </form>
+
+  <!-- Clear + count row -->
+  <div style="padding:0 1.25rem 0.6rem; display:flex; align-items:center; gap:0.75rem;
+              border-top:1px solid var(--sd-border);">
+    <form method="post" action="{{ url_for('jobs.clear_email_filters') }}"
+          style="display:inline;">
+      <button type="submit" class="btn-ghost"
+              style="padding:0.3rem 0.7rem; font-size:0.8rem;">
+        <i class="bi bi-x-circle"></i> Clear Filters
       </button>
     </form>
-    {% if q %}
-    <form method="post" action="{{ url_for('jobs.clear_email_search') }}" id="clear-search-form">
-      <button type="submit" class="btn-ghost" title="Clear search">
-        <i class="bi bi-x-lg"></i>
-      </button>
-    </form>
-    {% endif %}
-    <span style="font-size:0.8rem; color:var(--sd-muted); flex-shrink:0;">
+    <span style="font-size:0.8rem; color:var(--sd-muted);">
       {{ imports|length }} message{{ 's' if imports|length != 1 }}
-      {% if q %}<span style="color:var(--sd-accent);"> matching "{{ q }}"</span>{% endif %}
+      {% if filter != 'all' %}
+        <span style="color:var(--sd-accent);">
+          · {{ {'unread':'Unread only','no_reply':'No reply'}[filter] }}
+        </span>
+      {% endif %}
+      {% if q %}
+        <span style="color:var(--sd-accent);">· "{{ q }}"</span>
+      {% endif %}
+      {% if date_from or date_to %}
+        <span style="color:var(--sd-accent);">
+          · {{ date_from or '…' }} – {{ date_to or '…' }}
+        </span>
+      {% endif %}
     </span>
   </div>
 </div>

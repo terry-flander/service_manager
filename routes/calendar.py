@@ -153,7 +153,8 @@ def events():
                     'extendedProps': {
                         'type':    'rental',
                         'status':  job['status'],
-                        'address': location,
+                        'address': job['address'] or '',
+                        'suburb':  job['suburb']  or '',
                         'phone':   job['customer_phone'] or '',
                         'marker':  suffix,
                     }
@@ -180,7 +181,8 @@ def events():
                 'extendedProps': {
                     'region':  job['region_name'],
                     'status':  job['status'],
-                    'address': location,
+                    'address': job['address'] or '',
+                    'suburb':  job['suburb']  or '',
                     'phone':   job['customer_phone'] or '',
                     'time':    job['scheduled_time'] or '',
                 }

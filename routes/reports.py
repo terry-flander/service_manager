@@ -18,29 +18,38 @@ STATUS_OPTIONS = [
 
 JOB_TYPE_OPTIONS = [
     ('booking',  'Booking (FB-)'),
-    ('workshop', 'Workshop (PB-)'),
+    ('workshop', 'Workshop + Sales (PB-/CS-)'),
     ('rental',   'Rental (RB-)'),
+    ('sale',     None),  # included with workshop — not shown separately
 ]
 
 
-def _get_report_data(date_from, date_to, job_types, statuses):
+def _get_report_data(date_from, date_to, job_types, show_cash=False):
     """
     Fetch all jobs in range, calculate financials per job.
-    Returns list of row dicts sorted by scheduled_date.
+    Returns list of row dicts ordered by paid_date.
     """
-    if not job_types or not statuses:
+    # sale always travels with workshop
+    if 'workshop' in job_types and 'sale' not in job_types:
+        job_types = list(job_types) + ['sale']
+    if 'sale' in job_types and 'workshop' not in job_types:
+        job_types = [t for t in job_types if t != 'sale']
+    # Filter out the display-only None entry
+    job_types = [t for t in job_types if t]
+    if not job_types:
         return []
 
     jt_ph = ','.join('?' * len(job_types))
-    st_ph = ','.join('?' * len(statuses))
-    params = [date_from, date_to, date_from, date_to] + list(job_types) + list(statuses)
+    params = [date_from, date_to, date_from, date_to] + list(job_types)
+
+    cash_clause = '' if show_cash else "AND (j.payment_type IS NULL OR j.payment_type != 'Cash')"
 
     with get_db() as conn:
         jobs = conn.execute(f"""
             SELECT j.id, j.reference, j.job_type, j.customer_name,
-                   j.scheduled_date, j.status, j.tax_inclusive,
+                   j.scheduled_date, j.paid_date, j.status, j.tax_inclusive,
                    j.amount_paid, j.payment_type,
-                   coalesce(j.scheduled_date, j.paid_date) as report_date
+                   coalesce(j.paid_date, j.scheduled_date) as report_date
             FROM jobs j
             WHERE (
                 (j.scheduled_date IS NOT NULL AND j.scheduled_date BETWEEN ? AND ?)
@@ -48,8 +57,9 @@ def _get_report_data(date_from, date_to, job_types, statuses):
                 (j.scheduled_date IS NULL AND j.paid_date BETWEEN ? AND ?)
             )
               AND j.job_type IN ({jt_ph})
-              AND j.status IN ({st_ph})
-            ORDER BY report_date ASC, j.id ASC
+              AND j.status IN ('invoiced', 'paid')
+              {cash_clause}
+            ORDER BY coalesce(j.paid_date, j.scheduled_date) ASC, j.id ASC
         """, params).fetchall()
 
         rows = []
@@ -66,43 +76,63 @@ def _get_report_data(date_from, date_to, job_types, statuses):
             else:
                 subtotal, gst, total = calc_totals(parts, tax_raw)
             rows.append({
-                'id':            job['id'],
-                'reference':     job['reference'],
-                'job_type':      job['job_type'],
-                'customer_name': job['customer_name'],
-                'scheduled_date': job['report_date'] or job['scheduled_date'] or '',
-                'status':        job['status'],
-                'gross':         total,
-                'gst':           gst,
-                'net':           subtotal,
-                'amount_paid':   float(job['amount_paid'] or 0),
-                'payment_type':  job['payment_type'] or '',
+                'id':             job['id'],
+                'reference':      job['reference'],
+                'job_type':       job['job_type'],
+                'customer_name':  job['customer_name'],
+                'paid_date':      job['paid_date'] or '',
+                'scheduled_date': job['scheduled_date'] or '',
+                'status':         job['status'],
+                'gross':          total,
+                'gst':            gst,
+                'net':            subtotal,
+                'amount_paid':    float(job['amount_paid'] or 0),
+                'payment_type':   job['payment_type'] or '',
             })
     return rows
 
 
 def _group_by_month(rows):
-    """Group rows into months, return list of (month_label, rows, subtotals)."""
+    """Group rows into months with daily sub-groups."""
     from collections import OrderedDict
+    from datetime import datetime
     months = OrderedDict()
     for row in rows:
-        d = row['scheduled_date'] or ''
-        key = d[:7] if d else 'Unknown'  # YYYY-MM
-        months.setdefault(key, []).append(row)
+        d = row['paid_date'] or row['scheduled_date'] or ''
+        month_key = d[:7] if d else 'Unknown'
+        months.setdefault(month_key, OrderedDict())
+        day_key = d[:10] if d else 'Unknown'
+        months[month_key].setdefault(day_key, []).append(row)
 
     result = []
-    for key, month_rows in months.items():
+    for month_key, days in months.items():
         try:
-            from datetime import datetime
-            label = datetime.strptime(key, '%Y-%m').strftime('%B %Y')
+            month_label = datetime.strptime(month_key, '%Y-%m').strftime('%B %Y')
         except Exception:
-            label = key
-        subtotals = {
-            'gross': sum(r['gross'] for r in month_rows),
-            'gst':   sum(r['gst']   for r in month_rows),
-            'net':   sum(r['net']   for r in month_rows),
+            month_label = month_key
+
+        day_groups = []
+        all_month_rows = []
+        for day_key, day_rows in days.items():
+            try:
+                day_label = datetime.strptime(day_key, '%Y-%m-%d').strftime('%a %-d %b')
+            except Exception:
+                day_label = day_key
+            day_sub = {
+                'gross': sum(r['gross'] for r in day_rows),
+                'gst':   sum(r['gst']   for r in day_rows),
+                'net':   sum(r['net']   for r in day_rows),
+                'count': len(day_rows),
+            }
+            day_groups.append((day_label, day_rows, day_sub))
+            all_month_rows.extend(day_rows)
+
+        month_sub = {
+            'gross': sum(r['gross'] for r in all_month_rows),
+            'gst':   sum(r['gst']   for r in all_month_rows),
+            'net':   sum(r['net']   for r in all_month_rows),
         }
-        result.append((label, month_rows, subtotals))
+        result.append((month_label, day_groups, month_sub))
     return result
 
 
@@ -130,11 +160,12 @@ def sales():
         if request.method == 'POST':
             date_from = request.form.get('date_from', first_of_month)
             date_to   = request.form.get('date_to',   default_to)
-            job_types = request.form.getlist('job_types') or ['booking', 'workshop']
-            statuses  = request.form.getlist('statuses') or ['invoiced', 'paid']
+            job_types  = request.form.getlist('job_types') or ['booking', 'workshop', 'sale']
+            show_daily = 'show_daily' in request.form
             # Save to settings
             prefs = {'date_from': date_from, 'date_to': date_to,
-                     'job_types': job_types, 'statuses': statuses}
+                     'job_types': job_types,
+                     'show_daily': show_daily}
             conn.execute(
                 "INSERT INTO settings (key,value) VALUES (?,?) "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
@@ -150,28 +181,39 @@ def sales():
                     prefs     = _json.loads(row['value'])
                     date_from = prefs.get('date_from', first_of_month)
                     date_to   = prefs.get('date_to',   default_to)
-                    job_types = prefs.get('job_types',  ['booking', 'workshop'])
-                    statuses  = prefs.get('statuses',   ['invoiced', 'paid'])
+                    job_types  = prefs.get('job_types',  ['booking', 'workshop', 'sale'])
+                    show_daily = prefs.get('show_daily', False)
                 except Exception:
-                    date_from = first_of_month
-                    date_to   = default_to
-                    job_types = ['booking', 'workshop']
-                    statuses  = ['invoiced', 'paid']
+                    date_from  = first_of_month
+                    date_to    = default_to
+                    job_types  = ['booking', 'workshop', 'sale']
+                    show_daily = False
             else:
-                date_from = first_of_month
-                date_to   = default_to
-                job_types = ['booking', 'workshop']
-                statuses  = ['invoiced', 'paid']
+                date_from  = first_of_month
+                date_to    = default_to
+                job_types  = ['booking', 'workshop', 'sale']
+                show_daily = False
 
-    ran     = bool(request.method == 'POST' or request.args.get('run'))
-    rows    = _get_report_data(date_from, date_to, job_types, statuses) if ran else []
+    ran = bool(request.method == 'POST' or request.args.get('run'))
+
+    # Get show_cash_payments from current user
+    try:
+        with get_db() as _uc:
+            _u = _uc.execute('SELECT show_cash_payments FROM users WHERE id=?',
+                             (user_id,)).fetchone()
+            show_cash = bool(_u and _u['show_cash_payments'])
+    except Exception:
+        show_cash = False
+
+    rows    = _get_report_data(date_from, date_to, job_types, show_cash) if ran else []
     months  = _group_by_month(rows) if ran else {}
     totals  = _grand_totals(rows) if ran else {}
 
     return render_template('reports/sales.html',
                            date_from=date_from, date_to=date_to,
-                           job_types=job_types, statuses=statuses,
-                           STATUS_OPTIONS=STATUS_OPTIONS,
+                           job_types=job_types,
+                           show_daily=show_daily,
+                           show_cash=show_cash,
                            JOB_TYPE_OPTIONS=JOB_TYPE_OPTIONS,
                            months=months, rows=rows, totals=totals,
                            ran=ran)
@@ -184,9 +226,10 @@ def sales_csv():
     date_from = request.args.get('date_from', date.today().replace(day=1).isoformat())
     date_to   = request.args.get('date_to',   date.today().isoformat())
     job_types = request.args.getlist('job_types') or ['booking', 'workshop']
-    statuses  = request.args.getlist('statuses') or ['invoiced']
+    statuses  = ['invoiced', 'paid']
 
-    rows = _get_report_data(date_from, date_to, job_types, statuses)
+    show_cash = False
+    rows = _get_report_data(date_from, date_to, job_types, show_cash)
 
     buf = io.StringIO()
     writer = csv.writer(buf)
@@ -259,13 +302,13 @@ def sales_pdf():
     date_from = request.args.get('date_from', date.today().replace(day=1).isoformat())
     date_to   = request.args.get('date_to',   date.today().isoformat())
     job_types = request.args.getlist('job_types') or ['booking', 'workshop']
-    statuses  = request.args.getlist('statuses') or ['invoiced']
+    statuses  = ['invoiced', 'paid']
 
-    rows   = _get_report_data(date_from, date_to, job_types, statuses)
+    rows   = _get_report_data(date_from, date_to, job_types, show_cash=False)
     months = _group_by_month(rows)
     totals = _grand_totals(rows)
 
-    buf = _build_pdf(date_from, date_to, job_types, statuses, months, totals)
+    buf = _build_pdf(date_from, date_to, job_types, None, months, totals)
     fname = f"sales_report_{date_from}_to_{date_to}.pdf"
     return send_file(buf, mimetype='application/pdf',
                      as_attachment=True, download_name=fname)
@@ -326,7 +369,7 @@ def _build_pdf(date_from, date_to, job_types, statuses, months, totals):
         c.drawString(M + 38*mm, y - 4*mm, 'Sales Report')
         c.setFont('Helvetica', 8)
         jt_label = ' & '.join(j.title() for j in job_types)
-        st_label = ', '.join(s.replace('_',' ').title() for s in statuses)
+        st_label = 'Invoiced/Paid'
         c.drawString(M + 38*mm, y - 9*mm,
                      f"{date_from} to {date_to}   |   {jt_label}   |   {st_label}   |   {totals['count']} jobs")
         y -= 14*mm
@@ -423,3 +466,74 @@ def _build_pdf(date_from, date_to, job_types, statuses, months, totals):
     c.save()
     buf.seek(0)
     return buf
+
+
+@reports_bp.route('/reports/parts')
+def parts_usage():
+    from models import get_db
+    import csv as _csv, io as _io
+    from flask import request as _req, make_response as _mr
+
+    include_adhoc = _req.args.get('include_adhoc', '0') == '1'
+    export_csv    = _req.args.get('export', '') == 'csv'
+
+    with get_db() as conn:
+        catalogue_rows = conn.execute("""
+            SELECT p.id, p.name, p.part_number, p.unit_cost, p.active,
+                   COUNT(jp.id)       AS usage_count,
+                   SUM(jp.quantity)   AS total_qty,
+                   MIN(jp.unit_cost)  AS min_cost,
+                   MAX(jp.unit_cost)  AS max_cost,
+                   0                  AS is_adhoc
+            FROM parts p
+            LEFT JOIN job_parts jp ON jp.part_id = p.id
+            GROUP BY p.id
+            ORDER BY p.name COLLATE NOCASE
+        """).fetchall()
+
+        adhoc_rows = []
+        if include_adhoc:
+            adhoc_rows = conn.execute("""
+                SELECT NULL              AS id,
+                       jp.description   AS name,
+                       jp.part_number   AS part_number,
+                       NULL             AS unit_cost,
+                       1                AS active,
+                       COUNT(jp.id)     AS usage_count,
+                       SUM(jp.quantity) AS total_qty,
+                       MIN(jp.unit_cost) AS min_cost,
+                       MAX(jp.unit_cost) AS max_cost,
+                       1                AS is_adhoc
+                FROM job_parts jp
+                WHERE jp.part_id IS NULL
+                GROUP BY LOWER(jp.description)
+                ORDER BY jp.description COLLATE NOCASE
+            """).fetchall()
+
+    rows = [dict(r) for r in catalogue_rows] + [dict(r) for r in adhoc_rows]
+    if include_adhoc:
+        rows.sort(key=lambda r: (r['name'] or '').lower())
+
+    if export_csv:
+        out = _io.StringIO()
+        w   = _csv.writer(out)
+        w.writerow(['Name','Part Number','List Price','Active',
+                    'Jobs Used','Total Qty','Min Charged','Max Charged','Ad-hoc'])
+        for r in rows:
+            w.writerow([
+                r['name'], r['part_number'] or '',
+                f"{r['unit_cost']:.2f}" if r['unit_cost'] is not None else '',
+                'Yes' if r['active'] else 'No',
+                r['usage_count'] or 0,
+                f"{r['total_qty']:.2f}" if r['total_qty'] else '',
+                f"{r['min_cost']:.2f}" if r['min_cost'] is not None else '',
+                f"{r['max_cost']:.2f}" if r['max_cost'] is not None else '',
+                'Yes' if r['is_adhoc'] else 'No',
+            ])
+        resp = _mr(out.getvalue())
+        resp.headers['Content-Disposition'] = 'attachment; filename=parts_usage.csv'
+        resp.headers['Content-Type'] = 'text/csv'
+        return resp
+
+    return render_template('reports/parts_usage.html',
+                           rows=rows, include_adhoc=include_adhoc)

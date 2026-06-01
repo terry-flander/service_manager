@@ -101,6 +101,21 @@ def delete_part(part_id):
     return redirect(url_for('parts.index'))
 
 
+@parts_bp.route('/parts/<int:part_id>/destroy', methods=['POST'])
+def destroy_part(part_id):
+    """Permanently delete a part. Nullifies job_parts.part_id first to preserve history."""
+    with get_db() as conn:
+        part = conn.execute("SELECT name FROM parts WHERE id=?", (part_id,)).fetchone()
+        if not part:
+            flash('Part not found.', 'danger')
+            return redirect(url_for('parts.index'))
+        conn.execute("UPDATE job_parts SET part_id=NULL WHERE part_id=?", (part_id,))
+        conn.execute("DELETE FROM parts WHERE id=?", (part_id,))
+        conn.commit()
+    flash(f'Part "{part["name"]}" permanently deleted. Job history preserved.', 'success')
+    return redirect(url_for('parts.index'))
+
+
 @parts_bp.route('/parts/search')
 def search():
     """

@@ -143,25 +143,67 @@ def _decode_header(h):
     return ' '.join(decoded)
 
 
+def _html_to_text(html):
+    """Convert HTML to plain text — strip tags, decode entities, normalise whitespace."""
+    import html as _html_mod
+    # Remove style and script blocks entirely
+    text = re.sub(r'<(style|script)[^>]*>.*?</\1>', ' ', html,
+                  flags=re.DOTALL | re.IGNORECASE)
+    # Block elements → newlines
+    text = re.sub(r'<(br|p|div|tr|li|h[1-6])[^>]*>', '\n', text,
+                  flags=re.IGNORECASE)
+    # Strip remaining tags
+    text = re.sub(r'<[^>]+>', '', text)
+    # Decode HTML entities (&amp; &nbsp; &#39; etc.)
+    text = _html_mod.unescape(text)
+    # Collapse runs of blank lines to max two, normalise spaces within lines
+    lines = [re.sub(r'[ \t]+', ' ', ln).strip() for ln in text.splitlines()]
+    result = re.sub(r'\n{3,}', '\n\n', '\n'.join(lines))
+    return result.strip()
+
+
 def _get_text_body(msg):
-    body = ''
+    """Extract plain-text body from an email.Message object.
+
+    Preference order:
+      1. text/plain parts (concatenated, non-attachment)
+      2. text/html parts converted to plain text (fallback)
+      3. Non-multipart payload decoded directly
+    """
+    plain_parts = []
+    html_parts  = []
+
     if msg.is_multipart():
         for part in msg.walk():
-            ct   = part.get_content_type()
-            disp = str(part.get('Content-Disposition', ''))
-            if ct == 'text/plain' and 'attachment' not in disp:
-                charset = part.get_content_charset() or 'utf-8'
-                body += part.get_payload(decode=True).decode(charset, errors='replace')
-                break
-            elif ct == 'text/html' and not body and 'attachment' not in disp:
-                charset = part.get_content_charset() or 'utf-8'
-                raw = part.get_payload(decode=True).decode(charset, errors='replace')
-                body = re.sub(r'<[^>]+>', ' ', raw)
-                body = re.sub(r'\s+', ' ', body).strip()
+            ct   = (part.get_content_type() or '').lower()
+            disp = str(part.get('Content-Disposition', '')).lower()
+            if 'attachment' in disp:
+                continue
+            payload = part.get_payload(decode=True)
+            if payload is None:
+                continue
+            charset = part.get_content_charset() or 'utf-8'
+            text = payload.decode(charset, errors='replace')
+            if ct == 'text/plain':
+                plain_parts.append(text)
+            elif ct == 'text/html':
+                html_parts.append(text)
     else:
-        charset = msg.get_content_charset() or 'utf-8'
-        body = msg.get_payload(decode=True).decode(charset, errors='replace')
-    return body.strip()
+        payload = msg.get_payload(decode=True)
+        if payload is not None:
+            charset = msg.get_content_charset() or 'utf-8'
+            text = payload.decode(charset, errors='replace')
+            ct = (msg.get_content_type() or '').lower()
+            if ct == 'text/html':
+                html_parts.append(text)
+            else:
+                plain_parts.append(text)
+
+    if plain_parts:
+        return '\n'.join(plain_parts).strip()
+    if html_parts:
+        return _html_to_text('\n'.join(html_parts))
+    return ''
 
 
 def _strip_footer(text):
@@ -290,6 +332,7 @@ def _parse_email(msg):
         'phone':         phone,
         'suburb':        suburb,
         'message':       message[:1000],
+        'body':          body,           # full plain-text body for email_imports
         'service_types': service_types,
         'subject':       subject,
         'from_name':     from_name,
@@ -409,10 +452,27 @@ def _create_job(conn, parsed, message_id, thread_id=None, in_reply_to=None):
                         ?, ?, 'ok', 1)
             """, (message_id, thread_id, in_reply_to,
                     parsed['subject'], parsed['from_email'],
-                    parsed['message'][:4000],
+                    parsed.get('body', parsed['message'])[:8000],
                     parsed.get('received_at'), parsed.get('received_at'),
                     job_id))
             conn.commit()
+
+            # Auto-add a job_part for each service type, same as new_job form
+            if parsed['service_types']:
+                for stype in [s.strip() for s in parsed['service_types'].split(',') if s.strip()]:
+                    part = conn.execute(
+                        """SELECT id, name, part_number, unit_cost FROM parts
+                           WHERE LOWER(name) = LOWER(?) AND active = 1 LIMIT 1""",
+                        (stype,)).fetchone()
+                    if part:
+                        conn.execute(
+                            """INSERT INTO job_parts
+                               (job_id, part_id, description, part_number, quantity, unit_cost)
+                               VALUES (?, ?, ?, ?, 1, ?)""",
+                            (job_id, part['id'], part['name'],
+                             part['part_number'] or '', part['unit_cost']))
+                conn.commit()
+
             log.info(f"Created job {ref} from email {message_id[:40]}")
             return job_id
 
@@ -565,69 +625,68 @@ def poll_once(app, force=False):
             return 0
 
         status, data = imap.search(None, 'UNSEEN')
-        if status != 'OK' or not data[0]:
-            imap.logout()
-            return 0
+        if status == 'OK' and data[0]:
+            ids = data[0].split()
+            log.info(f"IMAP connected as {user}, label='{label}'")
+            log.info(f"Found {len(ids)} unread message(s) in '{label}'")
 
-        ids = data[0].split()
-        log.info(f"IMAP connected as {user}, label='{label}'")
-        log.info(f"Found {len(ids)} unread message(s) in '{label}'")
+            for num in ids:
+                status, msg_data = imap.fetch(num, '(RFC822)')
+                if status != 'OK':
+                    continue
+                msg = email.message_from_bytes(msg_data[0][1])
 
-        for num in ids:
-            status, msg_data = imap.fetch(num, '(RFC822)')
-            if status != 'OK':
-                continue
-            msg = email.message_from_bytes(msg_data[0][1])
+                message_id = msg.get('Message-ID', '').strip() or \
+                             f"{msg.get('Date','')}_{msg.get('From','')}"
 
-            message_id = msg.get('Message-ID', '').strip() or \
-                         f"{msg.get('Date','')}_{msg.get('From','')}"
+                # Extract thread-tracking headers and date
+                in_reply_to  = (msg.get('In-Reply-To') or '').strip()
+                references   = (msg.get('References')  or '').strip()
+                received_at  = _parse_received_date(msg)
+                # Gmail thread ID (X-GM-THRID) — requires FETCH X-GM-THRID
+                thread_id   = in_reply_to or message_id
 
-            # Extract thread-tracking headers and date
-            in_reply_to  = (msg.get('In-Reply-To') or '').strip()
-            references   = (msg.get('References')  or '').strip()
-            received_at  = _parse_received_date(msg)
-            # Gmail thread ID (X-GM-THRID) — requires FETCH X-GM-THRID
-            thread_id   = in_reply_to or message_id
-
-            with app.app_context():
-                from models import get_db
-                with get_db() as db_conn:
-                    if _already_imported(db_conn, message_id):
-                        continue
-
-                    parsed = _parse_email(msg)
-                    parsed['received_at'] = received_at
-                    body   = _get_text_body(msg)
-
-                    # Is this a reply in an existing thread?
-                    existing_job_id = _find_job_for_thread(
-                        db_conn, in_reply_to, references, parsed['from_email'])
-
-                    if existing_job_id:
-                        # Follow-up email — log it, no new job
-                        _log_thread_email(
-                            db_conn, message_id, thread_id, in_reply_to,
-                            parsed['subject'], parsed['from_email'],
-                            body, existing_job_id, received_at)
-                        log.info(f"Thread follow-up logged for job {existing_job_id}")
-                    else:
-                        # New booking — create job
-                        if parsed['name'] == 'Unknown':
-                            log.warning(f"Could not parse name from {message_id[:40]}")
-                            db_conn.execute("""
-                                INSERT OR IGNORE INTO email_imports
-                                    (message_id, thread_id, subject, sender,
-                                     body, status)
-                                VALUES (?, ?, ?, ?, ?, 'parse_error')
-                            """, (message_id, thread_id, parsed['subject'],
-                                    parsed['from_email'], body[:4000]))
-                            db_conn.commit()
+                with app.app_context():
+                    from models import get_db
+                    with get_db() as db_conn:
+                        if _already_imported(db_conn, message_id):
                             continue
-                        if _create_job(db_conn, parsed, message_id,
-                                       thread_id, in_reply_to):
-                            imported += 1
 
-            imap.store(num, '+FLAGS', '\\Seen')
+                        parsed = _parse_email(msg)
+                        parsed['received_at'] = received_at
+                        body   = _get_text_body(msg)
+
+                        # Is this a reply in an existing thread?
+                        existing_job_id = _find_job_for_thread(
+                            db_conn, in_reply_to, references, parsed['from_email'])
+
+                        if existing_job_id:
+                            # Follow-up email — log it, no new job
+                            _log_thread_email(
+                                db_conn, message_id, thread_id, in_reply_to,
+                                parsed['subject'], parsed['from_email'],
+                                body, existing_job_id, received_at)
+                            log.info(f"Thread follow-up logged for job {existing_job_id}")
+                        else:
+                            # New booking — create job
+                            if parsed['name'] == 'Unknown':
+                                log.warning(f"Could not parse name from {message_id[:40]}")
+                                db_conn.execute("""
+                                    INSERT OR IGNORE INTO email_imports
+                                        (message_id, thread_id, subject, sender,
+                                         body, status)
+                                    VALUES (?, ?, ?, ?, ?, 'parse_error')
+                                """, (message_id, thread_id, parsed['subject'],
+                                        parsed['from_email'], body[:4000]))
+                                db_conn.commit()
+                                continue
+                            if _create_job(db_conn, parsed, message_id,
+                                           thread_id, in_reply_to):
+                                imported += 1
+
+                imap.store(num, '+FLAGS', '\\Seen')
+        else:
+            log.info(f"No unread messages in '{label}'")
 
         # Also scan INBOX for customer replies
         inbox_count = _poll_inbox_replies(imap, app)

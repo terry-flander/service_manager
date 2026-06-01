@@ -121,8 +121,8 @@
             <form method="post"
                   action="{{ url_for('parts.delete_part', part_id=part.id) }}"
                   onsubmit="return confirm('Deactivate \'{{ part.name }}\'?')">
-              <button type="submit" class="btn-danger">
-                <i class="bi bi-trash3"></i>
+              <button type="submit" class="btn-danger" title="Deactivate">
+                <i class="bi bi-slash-circle"></i>
               </button>
             </form>
             {% else %}
@@ -135,6 +135,15 @@
               </button>
             </form>
             {% endif %}
+            <form method="post"
+                  action="{{ url_for('parts.destroy_part', part_id=part.id) }}"
+                  onsubmit="return confirm('Permanently DELETE \'{{ part.name }}\' from the database? This cannot be undone.')">
+              <button type="submit" class="btn-ghost"
+                      style="padding:0.25rem 0.6rem; font-size:0.8rem; color:#f87171; border-color:rgba(248,113,113,0.35);"
+                      title="Delete permanently">
+                <i class="bi bi-trash3"></i>
+              </button>
+            </form>
           </td>
         </tr>
         {% else %}
