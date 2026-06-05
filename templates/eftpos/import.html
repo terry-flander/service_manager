@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Import EFTPOS Transactions{% endblock %}
+{% block topbar_title %}Import EFTPOS Transactions{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('eftpos.reconcile') }}" class="btn-ghost">
+    <i class="bi bi-arrow-left"></i> Reconciliation
+  </a>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-5">
+    <div class="sd-card">
+      <div class="sd-card-header">
+        <i class="bi bi-upload" style="color:var(--sd-accent);"></i>
+        Upload Terminal CSV
+      </div>
+      <form method="post" enctype="multipart/form-data">
+        <div style="padding:1.5rem;">
+          <div style="border:2px dashed var(--sd-border); border-radius:8px;
+                      padding:2rem 1.5rem; text-align:center; color:var(--sd-muted);
+                      font-size:0.875rem; margin-bottom:1rem;">
+            <i class="bi bi-file-earmark-spreadsheet"
+               style="font-size:2rem; display:block; margin-bottom:0.5rem;
+                      color:var(--sd-accent);"></i>
+            <label style="cursor:pointer; color:var(--sd-text);">
+              <strong>Choose CSV file</strong> or drag and drop
+              <input type="file" name="csv_file" accept=".csv"
+                     style="display:none;" id="csv-input"
+                     onchange="this.closest('label').nextElementSibling.textContent=this.files[0]?.name||''">
+            </label>
+            <div id="filename-display" style="margin-top:0.5rem; font-size:0.82rem;"></div>
+          </div>
+          <ul style="font-size:0.8rem; color:var(--sd-muted); padding-left:1.25rem; margin:0;">
+            <li>Approved transactions only — Declined rows skipped automatically</li>
+            <li>Duplicate Reference Numbers skipped — safe to re-upload</li>
+            <li>Columns used: Transaction Date, Reference Number, Method, Amount, Total Amount, Surcharge, RRN, Card Number</li>
+          </ul>
+        </div>
+        <div style="padding:0.75rem 1.5rem; border-top:1px solid var(--sd-border);
+                    display:flex; justify-content:flex-end; gap:0.6rem;">
+          <a href="{{ url_for('eftpos.reconcile') }}" class="btn-ghost">Cancel</a>
+          <button type="submit" class="btn-accent" data-busy>
+            <i class="bi bi-upload"></i> Import
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

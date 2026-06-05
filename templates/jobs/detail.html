@@ -50,8 +50,6 @@
 <form method="post" id="save-form"
       action="{{ url_for('jobs.job_detail', job_id=job['id']) }}">
   <input type="hidden" name="return_to" id="return-to-field" value="">
-  <!-- Status & Payment hidden fields (merged into main save) -->
-  <input type="hidden" name="payment_type" id="payment-type-hidden" value="">
 
   <!-- Sticky control bar — spans full width above grid -->
   <div id="detail-controls"
@@ -383,6 +381,7 @@
       </div>
       <div style="padding:0 1.25rem 0.6rem; border-top:1px solid var(--sd-border);">
         <div class="sd-label" style="margin-bottom:0.5rem;">Quick Pay</div>
+        <input type="hidden" name="payment_type" id="payment-type-hidden" value="{{ job['payment_type'] or '' }}">
         <div style="display:flex; gap:0.5rem; flex-wrap:wrap;" id="quick-pay-radios">
           {% for pt in ['EFTPOS','Cash','Transfer'] %}
           <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;

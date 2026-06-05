@@ -193,16 +193,22 @@ def index():
     sort      = request.args.get('sort', 'date')
 
     SORT_MAP = {
-        'ref':      'j.reference',
-        'customer': 'j.customer_name',
-        'region':   'r.name',
-        'date':     'j.scheduled_date ASC, j.scheduled_time',
-        'status':   'j.status',
-        'total':    'total_sort',   # handled post-query
-        'paid':     'j.amount_paid',
+        'scheduled': 'j.scheduled_date ASC, j.scheduled_time',
+        'paid':      'j.paid_date',
+        'ref':       'j.reference',
+        'type':      'j.job_type',
+        'customer':  'j.customer_name',
+        'gross':     'total_sort',   # post-query
+        'payment':   'j.payment_type',
+        'amount':    'j.amount_paid',
+        'status':    'j.status',
+        'region':    'r.name',
+        # legacy compat
+        'date':      'j.scheduled_date ASC, j.scheduled_time',
+        'total':     'total_sort',
     }
     if sort not in SORT_MAP:
-        sort = 'date'
+        sort = 'paid'
 
     has_params = bool(request.args)
 
@@ -259,9 +265,11 @@ def index():
         if date_to:
             query += " AND j.scheduled_date <= ?"
             params.append(date_to)
-        # ORDER BY — total/paid sort applied post-query on the tuples list
-        if sort in ('total', 'paid'):
-            query += " ORDER BY j.scheduled_date ASC, j.id DESC"
+        # ORDER BY
+        if sort in ('gross', 'total'):
+            query += " ORDER BY coalesce(j.paid_date, j.scheduled_date) ASC, j.id DESC"
+        elif sort == 'paid':
+            query += " ORDER BY j.paid_date ASC, j.scheduled_date ASC, j.id DESC"
         else:
             order_col = SORT_MAP[sort]
             query += f" ORDER BY {order_col} ASC, j.id DESC"
@@ -287,10 +295,10 @@ def index():
                 _, _, total = calc_totals(j_parts, bool(j['tax_inclusive']))
             jobs.append((j, total))
 
-        # Post-query sort for computed columns
-        if sort == 'total':
+        # Post-query sort for computed gross column
+        if sort in ('gross', 'total'):
             jobs.sort(key=lambda x: x[1] or 0, reverse=True)
-        elif sort == 'paid':
+        elif sort == 'amount':
             jobs.sort(key=lambda x: x[0]['amount_paid'] or 0, reverse=True)
 
         regions = conn.execute("SELECT * FROM regions ORDER BY name").fetchall()
@@ -443,10 +451,10 @@ def job_detail(job_id):
         paid_date      = request.form.get('paid_date', '').strip() or None
         amount_paid_s  = request.form.get('amount_paid', '').strip()
         amount_paid    = float(amount_paid_s) if amount_paid_s else None
-        # payment_type: prefer hidden field set by Quick Pay JS, fall back to radio
+        # payment_type: prefer submitted value, fall back to _payment_display, then keep existing
         payment_type   = (request.form.get('payment_type', '').strip()
                           or request.form.get('_payment_display', '').strip()
-                          or None)
+                          or job['payment_type'] or None)
 
         if jt == 'booking':
             sched_date = request.form.get('scheduled_date') or None

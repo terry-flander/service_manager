@@ -415,6 +415,12 @@
     <a href="{{ url_for('reports.parts_usage') }}" class="sidebar-link {% if request.endpoint == 'reports.parts_usage' %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-tools"></i> Parts Usage
     </a>
+    <a href="{{ url_for('eftpos.reconcile') }}" class="sidebar-link {% if request.endpoint and request.endpoint.startswith('eftpos.') %}active{% endif %}" onclick="closeSidebar()">
+      <i class="bi bi-credit-card-2-front"></i> EFTPOS Reconcile
+    </a>
+    <a href="{{ url_for('reports.unreconciled_eftpos') }}" class="sidebar-link {% if request.endpoint == 'reports.unreconciled_eftpos' %}active{% endif %}" onclick="closeSidebar()">
+      <i class="bi bi-exclamation-circle"></i> Unreconciled Jobs
+    </a>
     <div class="nav-section-label" style="margin-top:0.5rem;">Inventory</div>
     <a href="{{ url_for('parts.index') }}" class="sidebar-link {% if request.endpoint in ['parts.index','parts.new_part','parts.edit_part'] %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-box-seam"></i> Parts List

@@ -110,7 +110,30 @@ def init_db():
                 amount_paid    REAL,
                 service_types  TEXT,
                 payment_type   TEXT,
-                bike_description TEXT
+                bike_description TEXT,
+                reconciled_eftpos TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS eftpos_transactions (
+                id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                reference_number     TEXT UNIQUE NOT NULL,
+                rrn                  TEXT,
+                transaction_datetime TEXT,
+                transaction_date     TEXT,
+                method               TEXT,
+                amount               REAL,
+                total_amount         REAL,
+                surcharge            REAL DEFAULT 0,
+                terminal_id          TEXT,
+                card_number          TEXT,
+                transaction_status   TEXT,
+                pay_status           TEXT,
+                settlement_date      TEXT,
+                settlement_amount    REAL,
+                job_id               INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+                reconciled_at        TEXT,
+                reconciled_by        INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                imported_at          TEXT DEFAULT (datetime('now'))
             );
 
             CREATE TABLE IF NOT EXISTS settings (

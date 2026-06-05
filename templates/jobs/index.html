@@ -65,12 +65,18 @@
         {% set cur_params = {'status': status, 'region_id': region_id,
                              'job_type': job_type, 'date_from': date_from,
                              'date_to': date_to} %}
-        {% for col_key, col_label in [
-            ('ref','Reference'), ('customer','Customer'), ('region','Region'),
-            ('date','Scheduled'), ('status','Status'),
-            ('total','Total'), ('paid','Paid')] %}
+        {% for col_key, col_label, right_align in [
+            ('scheduled', 'Scheduled',   false),
+            ('paid',      'Date Paid',   false),
+            ('ref',       'Reference',   false),
+            ('type',      'Type',        false),
+            ('customer',  'Customer',    false),
+            ('gross',     'Gross',       true),
+            ('payment',   'Payment',     false),
+            ('amount',    'Amount Paid', true),
+            ('status',    'Status',      false)] %}
         {% set is_active = sort == col_key %}
-        <th {% if col_key in ('total','paid') %}style="text-align:right;"{% endif %}>
+        <th {% if right_align %}style="text-align:right;"{% endif %}>
           <a href="{{ url_for('jobs.index', sort=col_key, **cur_params) }}"
              style="text-decoration:none; white-space:nowrap; display:inline-flex;
                     align-items:center; gap:0.3rem;
@@ -81,38 +87,47 @@
           </a>
         </th>
         {% endfor %}
-        <th></th>
       </tr>
     </thead>
     <tbody>
       {% for job, total in jobs %}
-      <tr style="cursor:pointer;" onclick="window.location='{{ url_for('jobs.job_detail', job_id=job['id']) + '?from=jobs' }}'">
+      {% set detail_url = url_for('jobs.job_detail', job_id=job['id']) + '?from=jobs' %}
+      <tr style="cursor:pointer;" onclick="window.location='{{ detail_url }}'">
+        <td class="mono" style="font-size:0.82rem; white-space:nowrap;">
+          {{ job['scheduled_date']|fmt_date('dmy') if job['scheduled_date'] else '—' }}
+        </td>
+        <td class="mono" style="font-size:0.82rem; white-space:nowrap;">
+          {{ job['paid_date']|fmt_date('dmy') if job['status'] == 'paid' and job['paid_date'] else '—' }}
+        </td>
         <td>
-          <a href="{{ url_for('jobs.job_detail', job_id=job['id']) + '?from=jobs' }}" class="mono">{{ job['reference'] }}</a>
-          <span class="badge-status {% if job['job_type'] == 'workshop' %}status-in_progress{% else %}status-scheduled{% endif %}"
-                style="margin-left:0.4rem; font-size:0.65rem; padding:0.1rem 0.4rem; vertical-align:middle;">
+          <a href="{{ detail_url }}" class="mono"
+             style="font-size:0.82rem;" onclick="event.stopPropagation()">
+            {{ job['reference'] }}
+          </a>
+        </td>
+        <td style="font-size:0.82rem;">
+          <span class="badge-status {% if job['job_type'] == 'booking' %}status-scheduled{% elif job['job_type'] == 'sale' %}status-complete{% else %}status-in_progress{% endif %}">
             {{ JOB_TYPES[job['job_type']]['label'] if job['job_type'] in JOB_TYPES else job['job_type'] }}
           </span>
         </td>
-        <td>{{ job.customer_name }}</td>
-        <td><span style="font-size:0.8rem; color: var(--sd-muted);">{{ job['region_name'] }}</span></td>
-        <td class="mono" style="font-size:0.8rem;">
-          {% if job['scheduled_date'] %}
-            {{ job['scheduled_date']|fmt_date }}
-            {% if job['scheduled_time'] %}<span style="color:var(--sd-muted);"> {{ TIME_LABELS.get(job['scheduled_time'], job['scheduled_time']) }}{% if job['end_time'] %} – {{ TIME_LABELS.get(job['end_time'], job['end_time']) }}{% endif %}</span>{% endif %}
-          {% else %}—{% endif %}
+        <td style="font-size:0.875rem;">{{ job['customer_name'] }}</td>
+        <td class="mono" style="text-align:right; font-size:0.85rem;">
+          {% if total %}${{ '%.2f'|format(total) }}{% else %}<span style="color:var(--sd-muted);">—</span>{% endif %}
         </td>
-        <td><span class="badge-status status-{{ job['status'] }}">{{ job['status']|replace('_',' ') }}</span></td>
-        <td class="mono" style="font-size:0.85rem;">
-          {% if total %}${{ '%.2f'|format(total) }}{% else %}<span style="color:var(--sd-muted)">—</span>{% endif %}
+        <td style="font-size:0.82rem;">{{ job['payment_type'] or '—' }}</td>
+        <td class="mono" style="text-align:right; font-size:0.85rem;">
+          {% if job['amount_paid'] %}
+            <span style="color:#34d399;">${{ '%.2f'|format(job['amount_paid']) }}</span>
+          {% else %}<span style="color:var(--sd-muted);">—</span>{% endif %}
         </td>
-        <td class="mono" style="font-size:0.85rem;">
-          {% if job['amount_paid'] %}<span style="color:#34d399;">${{ '%.2f'|format(job['amount_paid']) }}</span>{% else %}<span style="color:var(--sd-muted)">—</span>{% endif %}
+        <td>
+          <span class="badge-status status-{{ job['status'] }}">
+            {{ job['status']|replace('_',' ') }}
+          </span>
         </td>
-        <td><a href="{{ url_for('jobs.job_detail', job_id=job['id']) + '?from=jobs' }}" class="btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.8rem;">View</a></td>
       </tr>
       {% else %}
-      <tr><td colspan="8" style="text-align:center; color: var(--sd-muted); padding: 2rem;">No jobs found.</td></tr>
+      <tr><td colspan="9" style="text-align:center; color:var(--sd-muted); padding:2rem;">No jobs found.</td></tr>
       {% endfor %}
     </tbody>
   </table></div>

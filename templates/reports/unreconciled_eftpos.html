@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+{% block title %}Unreconciled EFTPOS Jobs{% endblock %}
+{% block topbar_title %}Unreconciled EFTPOS Jobs{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('eftpos.import_csv') }}" class="btn-ghost">
+    <i class="bi bi-upload"></i> Import CSV
+  </a>
+  <a href="{{ url_for('eftpos.reconcile') }}" class="btn-ghost">
+    <i class="bi bi-check2-square"></i> Reconcile
+  </a>
+{% endblock %}
+
+{% block content %}
+
+<!-- Date range filter -->
+<div class="sd-card mb-3">
+  <form method="get" style="padding:0.75rem 1.25rem; display:flex; gap:0.6rem;
+                             align-items:flex-end; flex-wrap:wrap;">
+    <div>
+      <label class="sd-label" style="margin-bottom:0.3rem;">From</label>
+      <input type="date" name="date_from" value="{{ date_from }}"
+             class="sd-input" style="width:140px;">
+    </div>
+    <div>
+      <label class="sd-label" style="margin-bottom:0.3rem;">To</label>
+      <input type="date" name="date_to" value="{{ date_to }}"
+             class="sd-input" style="width:140px;">
+    </div>
+    <button type="submit" class="btn-accent"
+            style="padding:0.4rem 0.9rem; white-space:nowrap;">
+      <i class="bi bi-funnel"></i> Apply
+    </button>
+    <a href="{{ url_for('reports.unreconciled_eftpos') }}" class="btn-ghost"
+       style="padding:0.4rem 0.9rem; white-space:nowrap;">Clear</a>
+    <div style="margin-left:auto; font-size:0.8rem; color:var(--sd-muted); align-self:center;">
+      <span style="color:#f87171; font-weight:600;">{{ rows|length }}</span>
+      unreconciled job{{ 's' if rows|length != 1 }}
+    </div>
+  </form>
+</div>
+
+{% if rows %}
+<div class="sd-card">
+  <div class="table-responsive-sd"><table class="sd-table">
+    <thead>
+      <tr>
+        <th>Scheduled</th>
+        <th>Date Paid</th>
+        <th>Reference</th>
+        <th>Type</th>
+        <th>Customer</th>
+        <th style="text-align:right;">Amount Paid</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      {% set job = r['job'] %}
+      <tr id="job-row-{{ job['id'] }}">
+        <td class="mono" style="font-size:0.82rem; white-space:nowrap;">
+          {{ job['scheduled_date']|fmt_date('dmy') if job['scheduled_date'] else '—' }}
+        </td>
+        <td class="mono" style="font-size:0.82rem; white-space:nowrap;">
+          {{ job['paid_date']|fmt_date('dmy') if job['paid_date'] else '—' }}
+        </td>
+        <td>
+          <a href="{{ url_for('jobs.job_detail', job_id=job['id']) }}"
+             class="mono" style="font-size:0.82rem;">
+            {{ job['reference'] }}
+          </a>
+        </td>
+        <td style="font-size:0.82rem;">
+          <span class="badge-status
+            {% if job['job_type'] == 'booking' %}status-scheduled
+            {% elif job['job_type'] == 'sale' %}status-complete
+            {% else %}status-in_progress{% endif %}">
+            {{ job['job_type']|title }}
+          </span>
+        </td>
+        <td style="font-size:0.875rem;">{{ job['customer_name'] }}</td>
+        <td class="mono" style="text-align:right; font-size:0.85rem; color:#4ade80;">
+          {% if job['amount_paid'] %}${{ '%.2f'|format(job['amount_paid']) }}{% else %}—{% endif %}
+        </td>
+        <td>
+          <button class="btn-ghost"
+                  style="padding:0.3rem 0.7rem; font-size:0.78rem;"
+                  onclick="openFindPanel({{ job['id'] }},
+                                        '{{ job['reference'] }}',
+                                        '{{ job['paid_date'] or '' }}',
+                                        {{ job['amount_paid'] or 0 }})">
+            <i class="bi bi-search"></i> Find
+          </button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% else %}
+<div class="sd-card" style="padding:2rem; text-align:center; color:var(--sd-muted);">
+  <i class="bi bi-check-circle" style="font-size:2rem; color:#4ade80; display:block; margin-bottom:0.5rem;"></i>
+  No unreconciled EFTPOS jobs in this date range.
+</div>
+{% endif %}
+
+<!-- ── Find panel (slide-in) ─────────────────────────────────────────────── -->
+<div id="find-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55);
+            z-index:2000; align-items:flex-start; justify-content:flex-end;">
+  <div id="find-panel"
+       style="background:var(--sd-surface); border-left:1px solid var(--sd-border);
+              width:min(480px,95vw); height:100%; overflow-y:auto;
+              padding:1.5rem; box-shadow:-6px 0 24px rgba(0,0,0,0.3);">
+
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+      <div>
+        <div style="font-weight:700; font-size:1rem;" id="panel-job-ref"></div>
+        <div style="font-size:0.82rem; color:var(--sd-muted);" id="panel-job-info"></div>
+      </div>
+      <button class="btn-ghost" style="padding:0.3rem 0.6rem;"
+              onclick="closeFindPanel()">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+
+    <!-- Override fields -->
+    <div style="background:var(--sd-slate); border-radius:6px; padding:0.75rem 1rem;
+                margin-bottom:1rem; font-size:0.82rem;">
+      <div class="sd-label" style="margin-bottom:0.5rem;">Override when matching</div>
+      <div style="display:flex; gap:0.6rem; flex-wrap:wrap;">
+        <div style="flex:1; min-width:130px;">
+          <label class="sd-label" style="font-size:0.72rem; margin-bottom:0.25rem;">Override Paid Date</label>
+          <input type="date" id="find-override-date" class="sd-input" style="font-size:0.82rem;">
+        </div>
+        <div style="flex:1; min-width:110px;">
+          <label class="sd-label" style="font-size:0.72rem; margin-bottom:0.25rem;">Override Amount ($)</label>
+          <input type="number" id="find-override-amount" class="sd-input"
+                 step="0.01" style="font-size:0.82rem;">
+        </div>
+      </div>
+      <div style="font-size:0.72rem; color:var(--sd-muted); margin-top:0.4rem;">
+        Leave blank to keep existing job values.
+      </div>
+    </div>
+
+    <!-- Unmatched transactions list -->
+    <div class="sd-label" style="margin-bottom:0.5rem;">Unreconciled Transactions</div>
+    <div id="find-candidates"
+         style="display:flex; flex-direction:column; gap:0.5rem;">
+      <div style="color:var(--sd-muted); font-size:0.82rem; padding:0.5rem;">Loading…</div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let _activeJobId   = null;
+let _activeJobRef  = null;
+let _activeJobDate = null;
+let _activeJobAmt  = null;
+
+function openFindPanel(jobId, jobRef, jobDate, jobAmt) {
+  _activeJobId   = jobId;
+  _activeJobRef  = jobRef;
+  _activeJobDate = jobDate;
+  _activeJobAmt  = jobAmt;
+
+  document.getElementById('panel-job-ref').textContent  = jobRef;
+  document.getElementById('panel-job-info').textContent =
+    (jobDate || '—') + ' · $' + parseFloat(jobAmt || 0).toFixed(2);
+  document.getElementById('find-override-date').value   = jobDate || '';
+  document.getElementById('find-override-amount').value = parseFloat(jobAmt || 0).toFixed(2);
+
+  document.getElementById('find-overlay').style.display = 'flex';
+  loadTransactions(jobId, jobDate, jobAmt);
+}
+
+function closeFindPanel() {
+  document.getElementById('find-overlay').style.display = 'none';
+  _activeJobId = null;
+}
+
+document.getElementById('find-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeFindPanel();
+});
+
+function loadTransactions(jobId, jobDate, jobAmt) {
+  const container = document.getElementById('find-candidates');
+  container.innerHTML = '<div style="color:var(--sd-muted); font-size:0.82rem; padding:0.5rem;">Loading…</div>';
+
+  fetch('/reports/unreconciled-eftpos/transactions?job_id=' + jobId)
+    .then(r => r.json())
+    .then(txns => {
+      if (!txns.length) {
+        container.innerHTML = '<div style="color:var(--sd-muted); font-size:0.82rem; padding:0.5rem;">No unreconciled transactions found.</div>';
+        return;
+      }
+      container.innerHTML = '';
+      txns.forEach(function(t) {
+        const isExact   = t.transaction_date === jobDate &&
+                          Math.abs(parseFloat(t.amount) - parseFloat(jobAmt)) < 0.01;
+        const isDateMatch = t.transaction_date === jobDate;
+        const isAmtMatch  = Math.abs(parseFloat(t.amount) - parseFloat(jobAmt)) < 0.01;
+        const badge = isExact     ? '#4ade80'
+                    : isDateMatch ? '#fbbf24'
+                    : isAmtMatch  ? '#60a5fa' : 'var(--sd-muted)';
+        const label = isExact     ? '✓ Exact'
+                    : isDateMatch ? '≈ Date'
+                    : isAmtMatch  ? '≈ Amount' : '~ Near';
+
+        const div = document.createElement('div');
+        div.style.cssText = 'background:var(--sd-slate); border:1px solid var(--sd-border);' +
+          'border-radius:6px; padding:0.6rem 0.75rem; display:flex; align-items:center; gap:0.6rem;';
+        div.innerHTML =
+          '<div style="flex:1; min-width:0;">' +
+            '<div style="font-size:0.82rem; font-weight:600; font-family:monospace;">' + escHtml(t.reference_number) + '</div>' +
+            '<div style="font-size:0.78rem; color:var(--sd-muted);">' +
+              escHtml(t.method) + ' · ' + (t.transaction_date || '—') +
+              ' · $' + parseFloat(t.amount).toFixed(2) +
+            '</div>' +
+          '</div>' +
+          '<span style="font-size:0.7rem; padding:0.15rem 0.4rem; border-radius:3px;' +
+            'background:' + badge + '20; color:' + badge + '; border:1px solid ' + badge + '60;' +
+            'white-space:nowrap; flex-shrink:0;">' + label + '</span>' +
+          '<button class="btn-accent" style="padding:0.3rem 0.65rem; font-size:0.78rem; flex-shrink:0;"' +
+            ' onclick="linkTransaction(' + t.id + ', \'' + escHtml(t.reference_number) + '\')">Link</button>';
+        container.appendChild(div);
+      });
+    })
+    .catch(() => {
+      container.innerHTML = '<div style="color:#f87171; font-size:0.82rem;">Error loading transactions.</div>';
+    });
+}
+
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function linkTransaction(txnId, txnRef) {
+  const overDate   = document.getElementById('find-override-date').value;
+  const overAmount = document.getElementById('find-override-amount').value;
+  const body = new URLSearchParams({txn_id: txnId});
+  body.append('job_id[]', _activeJobId);
+  if (overDate)   body.append('paid_date',   overDate);
+  if (overAmount) body.append('amount_paid', overAmount);
+
+  fetch('/eftpos/match', {method: 'POST', body})
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) { showToast(data.error || 'Error', 'error'); return; }
+      const row = document.getElementById('job-row-' + _activeJobId);
+      if (row) {
+        row.style.opacity = '0.4';
+        row.style.transition = 'opacity 0.4s';
+        setTimeout(() => row.remove(), 400);
+      }
+      closeFindPanel();
+      showToast('Linked to transaction ' + txnRef, 'success');
+    })
+    .catch(() => showToast('Network error', 'error'));
+}
+</script>
+{% endblock %}

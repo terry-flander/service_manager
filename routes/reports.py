@@ -537,3 +537,82 @@ def parts_usage():
 
     return render_template('reports/parts_usage.html',
                            rows=rows, include_adhoc=include_adhoc)
+
+
+@reports_bp.route('/reports/unreconciled-eftpos')
+def unreconciled_eftpos():
+    from models import get_db
+    from routes.invoice import calc_totals
+    date_from = request.args.get('date_from', '')
+    date_to   = request.args.get('date_to',   '')
+
+    with get_db() as conn:
+        where  = ["j.status = 'paid'",
+                  "j.payment_type IN ('EFTPOS','VISA','MASTERCARD','AMEX')",
+                  "j.reconciled_eftpos IS NULL"]
+        params = []
+        if date_from:
+            where.append("coalesce(j.paid_date, j.scheduled_date) >= ?")
+            params.append(date_from)
+        if date_to:
+            where.append("coalesce(j.paid_date, j.scheduled_date) <= ?")
+            params.append(date_to)
+
+        jobs = conn.execute(f"""
+            SELECT j.id, j.reference, j.job_type, j.customer_name,
+                   j.scheduled_date, j.paid_date, j.amount_paid,
+                   j.payment_type, j.tax_inclusive
+            FROM jobs j
+            WHERE {' AND '.join(where)}
+            ORDER BY coalesce(j.paid_date, j.scheduled_date) ASC, j.id ASC
+        """, params).fetchall()
+
+        # Compute gross total per job (for display)
+        rows = []
+        for job in jobs:
+            parts = conn.execute(
+                "SELECT * FROM job_parts WHERE job_id=?", (job['id'],)
+            ).fetchall()
+            _, _, total = calc_totals(parts, job['tax_inclusive'] or 1)
+            rows.append({'job': dict(job), 'total': total})
+
+    return render_template('reports/unreconciled_eftpos.html',
+                           rows=rows, date_from=date_from, date_to=date_to)
+
+
+@reports_bp.route('/reports/unreconciled-eftpos/transactions')
+def unreconciled_eftpos_transactions():
+    """AJAX: return unreconciled EFTPOS transactions near a job's paid date."""
+    from models import get_db
+    from flask import jsonify
+    job_id = request.args.get('job_id', type=int)
+    if not job_id:
+        return jsonify([])
+    with get_db() as conn:
+        job = conn.execute(
+            "SELECT paid_date, amount_paid FROM jobs WHERE id=?", (job_id,)
+        ).fetchone()
+        if not job:
+            return jsonify([])
+        paid_date  = job['paid_date'] or ''
+        amount     = float(job['amount_paid'] or 0)
+        # All unmatched transactions, sorted by match quality then date proximity
+        rows = conn.execute("""
+            SELECT id, reference_number, method, transaction_date,
+                   amount, total_amount, surcharge, terminal_id
+            FROM eftpos_transactions
+            WHERE job_id IS NULL
+              AND reconciled_at IS NULL
+            ORDER BY
+              CASE
+                WHEN transaction_date = ? AND ABS(amount - ?) < 0.01 THEN 0
+                WHEN transaction_date = ?                             THEN 1
+                WHEN ABS(amount - ?) < 0.01                          THEN 2
+                ELSE 3
+              END,
+              ABS(julianday(transaction_date) - julianday(?)) ASC,
+              transaction_date ASC
+            LIMIT 30
+        """, (paid_date, amount, paid_date, amount, paid_date or 'now')
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
