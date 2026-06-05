@@ -1,0 +1,443 @@
+{% extends "base.html" %}
+{% block title %}EFTPOS Reconciliation{% endblock %}
+{% block topbar_title %}EFTPOS Reconciliation{% endblock %}
+{% block topbar_actions %}
+  <a href="{{ url_for('eftpos.import_csv') }}" class="btn-ghost">
+    <i class="bi bi-upload"></i> Import CSV
+  </a>
+{% endblock %}
+
+{% block content %}
+
+<!-- Filter bar -->
+<div class="sd-card mb-3">
+  <form method="get" style="padding:0.75rem 1.25rem; display:flex; gap:0.6rem;
+                             align-items:flex-end; flex-wrap:wrap;">
+    <div>
+      <label class="sd-label" style="margin-bottom:0.3rem;">From</label>
+      <input type="date" name="date_from" value="{{ date_from }}"
+             class="sd-input" style="width:140px;">
+    </div>
+    <div>
+      <label class="sd-label" style="margin-bottom:0.3rem;">To</label>
+      <input type="date" name="date_to" value="{{ date_to }}"
+             class="sd-input" style="width:140px;">
+    </div>
+    <label style="display:flex; align-items:center; gap:0.4rem; cursor:pointer;
+                  font-size:0.875rem; align-self:flex-end; padding-bottom:0.1rem;">
+      <input type="checkbox" name="unreconciled_only" value="1"
+             {% if unreconciled_only %}checked{% endif %}
+             style="accent-color:var(--sd-accent); width:14px; height:14px;">
+      Unreconciled only
+    </label>
+    <button type="submit" class="btn-accent"
+            style="padding:0.4rem 0.9rem; white-space:nowrap;">
+      <i class="bi bi-funnel"></i> Apply
+    </button>
+    <a href="{{ url_for('eftpos.reconcile') }}" class="btn-ghost"
+       style="padding:0.4rem 0.9rem; white-space:nowrap;">Clear</a>
+    <div style="margin-left:auto; font-size:0.8rem; color:var(--sd-muted); align-self:center;">
+      <span style="color:#f87171; font-weight:600;">{{ txns|length }}</span> unreconciled
+      &nbsp;·&nbsp;
+      <span style="color:#4ade80; font-weight:600;">{{ reconciled|length }}</span> reconciled
+    </div>
+  </form>
+</div>
+
+<!-- Unreconciled -->
+{% if txns %}
+<div class="sd-card mb-3">
+  <div class="sd-card-header">
+    <i class="bi bi-exclamation-circle" style="color:#f87171;"></i>
+    Unreconciled Transactions
+  </div>
+  <div class="table-responsive-sd">
+    <table class="sd-table" id="unrecon-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Terminal</th>
+          <th>Reference</th>
+          <th>Method</th>
+          <th style="text-align:right;">Amount</th>
+          <th style="text-align:right;">Surcharge</th>
+          <th>Matched Job</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for txn in txns %}
+        {% set cands = candidates.get(txn['reference_number'], []) %}
+        {% set exact = cands[0] if cands and cands[0]['match_type'] == 'exact' else none %}
+        <tr id="txn-row-{{ txn['id'] }}">
+          <td class="mono" style="font-size:0.82rem; white-space:nowrap;">
+            {{ txn['transaction_date']|fmt_date('dmy') if txn['transaction_date'] else '—' }}
+          </td>
+          <td style="font-size:0.78rem;">
+            <span style="font-weight:600;">{{ terminal_label(txn['terminal_id']) }}</span>
+            <span style="color:var(--sd-muted); font-size:0.7rem; display:block;">{{ txn['terminal_id'] }}</span>
+          </td>
+          <td class="mono" style="font-size:0.8rem; color:var(--sd-muted);">
+            {{ txn['reference_number'] }}
+          </td>
+          <td>
+            <span style="font-size:0.78rem; font-weight:500; padding:0.15rem 0.45rem;
+                         border-radius:4px; background:rgba(99,102,241,0.15);
+                         color:var(--sd-accent); border:1px solid rgba(99,102,241,0.3);">
+              {{ txn['method'] }}
+            </span>
+          </td>
+          <td class="mono" style="text-align:right; font-weight:600;">
+            ${{ '%.2f'|format(txn['amount']) }}
+          </td>
+          <td class="mono" style="text-align:right; font-size:0.8rem; color:var(--sd-muted);">
+            {% if txn['surcharge'] %}${{ '%.2f'|format(txn['surcharge']) }}{% else %}—{% endif %}
+          </td>
+          <td id="match-cell-{{ txn['id'] }}" style="min-width:200px;">
+            {% if exact %}
+            <span style="font-size:0.82rem; color:#4ade80;">
+              <i class="bi bi-check-circle"></i>
+              <strong>{{ exact['reference'] }}</strong> {{ exact['customer_name'] }}
+            </span>
+            {% elif cands %}
+            <span style="font-size:0.78rem; color:#fbbf24;">
+              <i class="bi bi-exclamation-triangle"></i>
+              {{ cands|length }} near match{{ 'es' if cands|length != 1 }}
+            </span>
+            {% else %}
+            <span style="font-size:0.78rem; color:var(--sd-muted);">No matches found</span>
+            {% endif %}
+          </td>
+          <td>
+            <div style="display:flex; gap:0.35rem; align-items:center;">
+              {% if exact %}
+              <button class="btn-accent"
+                      style="padding:0.3rem 0.7rem; font-size:0.78rem;"
+                      onclick="quickMatch({{ txn['id'] }}, {{ exact['id'] }}, '{{ exact['reference'] }}')">
+                <i class="bi bi-check-lg"></i> OK
+              </button>
+              {% endif %}
+              <button class="btn-ghost"
+                      style="padding:0.3rem 0.7rem; font-size:0.78rem;"
+                      onclick="openMatchPanel({{ txn['id'] }},
+                                             '{{ txn['reference_number'] }}',
+                                             '{{ txn['transaction_date'] }}',
+                                             {{ txn['amount'] }})">
+                <i class="bi bi-search"></i> {{ 'Review' if exact else 'Find' }}
+              </button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="sd-card mb-3" style="padding:2rem; text-align:center; color:var(--sd-muted);">
+  <i class="bi bi-check-circle" style="font-size:2rem; color:#4ade80; display:block; margin-bottom:0.5rem;"></i>
+  No unreconciled transactions in this date range.
+</div>
+{% endif %}
+
+<!-- Reconciled -->
+{% if reconciled %}
+<div class="sd-card">
+  <div class="sd-card-header">
+    <i class="bi bi-check-circle" style="color:#4ade80;"></i>
+    Reconciled
+    <span style="font-size:0.75rem; font-weight:400; color:var(--sd-muted); margin-left:0.5rem;">
+      Total: ${{ '%.2f'|format(reconciled|sum(attribute='amount')) }}
+    </span>
+  </div>
+  <div class="table-responsive-sd">
+    <table class="sd-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Terminal</th>
+          <th>Reference</th>
+          <th>Method</th>
+          <th style="text-align:right;">Amount</th>
+          <th>Job</th>
+          <th>Customer</th>
+          <th>Reconciled</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for txn in reconciled %}
+        <tr id="recon-row-{{ txn['id'] }}">
+          <td class="mono" style="font-size:0.82rem; white-space:nowrap;">
+            {{ txn['transaction_date']|fmt_date('dmy') if txn['transaction_date'] else '—' }}
+          </td>
+          <td style="font-size:0.78rem;">
+            <span style="font-weight:600;">{{ terminal_label(txn['terminal_id']) }}</span>
+            <span style="color:var(--sd-muted); font-size:0.7rem; display:block;">{{ txn['terminal_id'] }}</span>
+          </td>
+          <td class="mono" style="font-size:0.8rem; color:var(--sd-muted);">
+            {{ txn['reference_number'] }}
+          </td>
+          <td style="font-size:0.82rem;">{{ txn['method'] }}</td>
+          <td class="mono" style="text-align:right; font-weight:600;">
+            ${{ '%.2f'|format(txn['amount']) }}
+          </td>
+          <td>
+            {% if txn['job_id'] %}
+            <a href="{{ url_for('jobs.job_detail', job_id=txn['job_id']) }}"
+               class="mono" style="font-size:0.82rem;">
+              {{ txn['job_ref'] or '—' }}
+            </a>
+            {% else %}—{% endif %}
+          </td>
+          <td style="font-size:0.875rem;">{{ txn['customer_name'] or '—' }}</td>
+          <td style="font-size:0.78rem; color:var(--sd-muted);">
+            {{ txn['reconciled_at'][:10] if txn['reconciled_at'] else '—' }}
+          </td>
+          <td>
+            <button class="btn-ghost"
+                    style="padding:0.25rem 0.5rem; font-size:0.75rem;
+                           color:#f87171; border-color:rgba(248,113,113,0.3);"
+                    onclick="unmatch({{ txn['id'] }})">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<!-- Match panel -->
+<div id="match-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55);
+            z-index:2000; align-items:flex-start; justify-content:flex-end;">
+  <div id="match-panel"
+       style="background:var(--sd-surface); border-left:1px solid var(--sd-border);
+              width:min(500px,95vw); height:100%; overflow-y:auto;
+              padding:1.5rem; box-shadow:-6px 0 24px rgba(0,0,0,0.3);">
+
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem;">
+      <div>
+        <div style="font-weight:700; font-size:1rem;" id="panel-txn-ref"></div>
+        <div style="font-size:0.82rem; color:var(--sd-muted);" id="panel-txn-info"></div>
+      </div>
+      <button class="btn-ghost" style="padding:0.3rem 0.6rem;" onclick="closeMatchPanel()">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+
+    <!-- Override fields -->
+    <div style="background:var(--sd-slate); border-radius:6px; padding:0.75rem 1rem; margin-bottom:1rem;">
+      <div class="sd-label" style="margin-bottom:0.5rem;">Override job fields when matching</div>
+      <div style="display:flex; gap:0.6rem; flex-wrap:wrap;">
+        <div style="flex:1; min-width:130px;">
+          <label class="sd-label" style="font-size:0.72rem; margin-bottom:0.25rem;">Override Paid Date</label>
+          <input type="date" id="override-date" class="sd-input" style="font-size:0.82rem;">
+        </div>
+        <div style="flex:1; min-width:110px;">
+          <label class="sd-label" style="font-size:0.72rem; margin-bottom:0.25rem;">Override Amount ($)</label>
+          <input type="number" id="override-amount" class="sd-input" step="0.01" style="font-size:0.82rem;">
+        </div>
+      </div>
+      <div style="font-size:0.72rem; color:var(--sd-muted); margin-top:0.4rem;">
+        Leave blank to keep existing job values.
+      </div>
+    </div>
+
+    <!-- Total tracker -->
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.5rem;">
+      <div class="sd-label">Select Jobs to Match</div>
+      <div id="panel-total-bar"
+           style="font-size:0.8rem; font-weight:600; padding:0.2rem 0.55rem;
+                  border-radius:4px; background:var(--sd-slate); border:1px solid var(--sd-border);">
+        Selected: <span id="panel-selected-total">$0.00</span>
+        <span id="panel-total-warn" style="display:none; color:#f87171; margin-left:0.4rem;">≠ txn</span>
+        <span id="panel-total-ok"   style="display:none; color:#4ade80; margin-left:0.4rem;">✓</span>
+      </div>
+    </div>
+
+    <div id="panel-candidates" style="display:flex; flex-direction:column; gap:0.5rem;">
+      <div style="color:var(--sd-muted); font-size:0.82rem; padding:0.5rem;">Loading…</div>
+    </div>
+
+    <!-- Match Selected button -->
+    <div style="margin-top:0.75rem;">
+      <button id="btn-match-selected" class="btn-accent"
+              style="width:100%; padding:0.5rem; font-size:0.875rem;"
+              disabled onclick="submitSelected()">
+        <i class="bi bi-check-lg"></i> Match Selected Jobs
+      </button>
+    </div>
+
+    <div style="border-top:1px solid var(--sd-border); margin-top:1rem; padding-top:1rem;">
+      <a href="{{ url_for('jobs.new_job') }}" class="btn-ghost"
+         style="display:block; text-align:center; font-size:0.82rem;">
+        <i class="bi bi-plus-circle"></i> Create new job for this transaction
+      </a>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let _activeTxnId   = null;
+let _activeTxnRef  = null;
+let _activeTxnDate = null;
+let _activeTxnAmt  = null;
+
+function openMatchPanel(txnId, txnRef, txnDate, txnAmt) {
+  _activeTxnId   = txnId;
+  _activeTxnRef  = txnRef;
+  _activeTxnDate = txnDate;
+  _activeTxnAmt  = txnAmt;
+  document.getElementById('panel-txn-ref').textContent  = 'Ref: ' + txnRef;
+  document.getElementById('panel-txn-info').textContent = txnDate + ' · $' + txnAmt.toFixed(2);
+  document.getElementById('override-date').value   = txnDate || '';
+  document.getElementById('override-amount').value = txnAmt.toFixed(2);
+  document.getElementById('match-overlay').style.display = 'flex';
+  loadCandidates(txnRef);
+}
+
+function closeMatchPanel() {
+  document.getElementById('match-overlay').style.display = 'none';
+  _activeTxnId = null;
+}
+
+document.getElementById('match-overlay').addEventListener('click', function(e) {
+  if (e.target === this) closeMatchPanel();
+});
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function loadCandidates(txnRef) {
+  const container = document.getElementById('panel-candidates');
+  container.innerHTML = '<div style="color:var(--sd-muted); font-size:0.82rem; padding:0.5rem;">Loading…</div>';
+  updateTotal();
+  fetch('/eftpos/candidates?ref=' + encodeURIComponent(txnRef))
+    .then(r => r.json())
+    .then(cands => {
+      if (!cands.length) {
+        container.innerHTML = '<div style="color:var(--sd-muted); font-size:0.82rem; padding:0.5rem;">No matching jobs found.</div>';
+        return;
+      }
+      container.innerHTML = '';
+      cands.forEach(function(j) {
+        const badge = j.match_type === 'exact'        ? '#4ade80'
+                    : j.match_type === 'date_match'   ? '#fbbf24'
+                    : j.match_type === 'amount_match' ? '#60a5fa' : 'var(--sd-muted)';
+        const label = j.match_type === 'exact'        ? '✓ Exact'
+                    : j.match_type === 'date_match'   ? '≈ Date'
+                    : j.match_type === 'amount_match' ? '≈ Amount' : '~ Near';
+        const amt = j.amount_paid ? parseFloat(j.amount_paid).toFixed(2) : '—';
+        const uid = 'chk-job-' + j.id;
+        const lbl = document.createElement('label');
+        lbl.htmlFor = uid;
+        lbl.style.cssText = 'background:var(--sd-slate); border:1px solid var(--sd-border);' +
+          'border-radius:6px; padding:0.55rem 0.75rem; display:flex; align-items:center; gap:0.6rem; cursor:pointer;';
+        lbl.innerHTML =
+          '<input type="checkbox" id="' + uid + '" value="' + j.id + '"' +
+            ' data-amount="' + (j.amount_paid || 0) + '"' +
+            ' style="accent-color:var(--sd-accent); width:15px; height:15px; flex-shrink:0;"' +
+            ' onchange="updateTotal()">' +
+          '<div style="flex:1; min-width:0;">' +
+            '<div style="font-size:0.82rem; font-weight:600; font-family:monospace;">' + escHtml(j.reference) + '</div>' +
+            '<div style="font-size:0.78rem; color:var(--sd-muted);">' + escHtml(j.customer_name||'') + ' · ' + (j.job_type||'') + '</div>' +
+            '<div style="font-size:0.75rem; color:var(--sd-muted);">Paid: ' + (j.paid_date||'—') + ' · $' + amt + '</div>' +
+          '</div>' +
+          '<span style="font-size:0.7rem; padding:0.15rem 0.4rem; border-radius:3px;' +
+            'background:' + badge + '20; color:' + badge + '; border:1px solid ' + badge + '60;' +
+            'white-space:nowrap; flex-shrink:0;">' + label + '</span>';
+        container.appendChild(lbl);
+      });
+      // Auto-check exact matches
+      document.querySelectorAll('#panel-candidates input[type=checkbox]').forEach(function(cb) {
+        const sp = cb.closest('label') && cb.closest('label').querySelector('span');
+        if (sp && sp.textContent.trim().startsWith('✓')) cb.checked = true;
+      });
+      updateTotal();
+    })
+    .catch(() => {
+      container.innerHTML = '<div style="color:#f87171; font-size:0.82rem;">Error loading candidates.</div>';
+    });
+}
+
+function updateTotal() {
+  const checkboxes = document.querySelectorAll('#panel-candidates input[type=checkbox]:checked');
+  let sum = 0;
+  checkboxes.forEach(function(cb) { sum += parseFloat(cb.dataset.amount) || 0; });
+  const totalEl  = document.getElementById('panel-selected-total');
+  const warnEl   = document.getElementById('panel-total-warn');
+  const okEl     = document.getElementById('panel-total-ok');
+  const matchBtn = document.getElementById('btn-match-selected');
+  if (totalEl) totalEl.textContent = '$' + sum.toFixed(2);
+  const has  = checkboxes.length > 0;
+  const diff = Math.abs(sum - (_activeTxnAmt || 0));
+  if (matchBtn) matchBtn.disabled = !has;
+  if (okEl)   okEl.style.display   = has && diff < 0.01 ? 'inline' : 'none';
+  if (warnEl) warnEl.style.display = has && diff >= 0.01 ? 'inline' : 'none';
+}
+
+function quickMatch(txnId, jobId, jobRef) {
+  const body = new URLSearchParams({txn_id: txnId});
+  body.append('job_id[]', jobId);
+  fetch('/eftpos/match', {method:'POST', body})
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) { showToast(data.error||'Error','error'); return; }
+      const row = document.getElementById('txn-row-' + txnId);
+      if (row) { row.style.opacity='0.4'; row.style.transition='opacity 0.4s'; setTimeout(()=>row.remove(),400); }
+      showToast('Matched to ' + jobRef, 'success');
+      setTimeout(()=>{ if (!document.querySelector('#unrecon-table tbody tr')) location.reload(); }, 500);
+    })
+    .catch(()=>showToast('Network error','error'));
+}
+
+function submitSelected() {
+  const checkboxes = document.querySelectorAll('#panel-candidates input[type=checkbox]:checked');
+  if (!checkboxes.length) return;
+  const jobIds = Array.from(checkboxes).map(cb => cb.value);
+  const sum    = Array.from(checkboxes).reduce((s,cb) => s + (parseFloat(cb.dataset.amount)||0), 0);
+  const diff   = Math.abs(sum - (_activeTxnAmt||0));
+  if (diff >= 0.01) {
+    if (!confirm('Job totals ($' + sum.toFixed(2) + ') do not equal transaction ($' + (_activeTxnAmt||0).toFixed(2) + ').\n\nMatch anyway?')) return;
+  }
+  const overDate   = document.getElementById('override-date').value;
+  const overAmount = document.getElementById('override-amount').value;
+  const body = new URLSearchParams({txn_id: _activeTxnId});
+  jobIds.forEach(id => body.append('job_id[]', id));
+  if (overDate)   body.append('paid_date',   overDate);
+  if (overAmount) body.append('amount_paid', overAmount);
+  fetch('/eftpos/match', {method:'POST', body})
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) { showToast(data.error||'Error','error'); return; }
+      const row = document.getElementById('txn-row-' + _activeTxnId);
+      if (row) { row.style.opacity='0.4'; row.style.transition='opacity 0.4s'; setTimeout(()=>row.remove(),400); }
+      closeMatchPanel();
+      const n = data.job_count || jobIds.length;
+      showToast('Matched to ' + n + ' job' + (n!==1?'s':''), 'success');
+      setTimeout(()=>{ if (!document.querySelector('#unrecon-table tbody tr')) location.reload(); }, 500);
+    })
+    .catch(()=>showToast('Network error','error'));
+}
+
+function unmatch(txnId) {
+  if (!confirm('Remove this reconciliation match?')) return;
+  fetch('/eftpos/unmatch', {method:'POST', body: new URLSearchParams({txn_id: txnId})})
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) { showToast(data.error||'Error','error'); return; }
+      showToast('Match removed — refresh to see updated list', 'success');
+      const row = document.getElementById('recon-row-' + txnId);
+      if (row) { row.style.opacity='0.4'; setTimeout(()=>location.reload(), 800); }
+    });
+}
+</script>
+{% endblock %}

@@ -30,6 +30,8 @@ def create_app():
     from routes.reports     import reports_bp
     from routes.import_jobs   import import_jobs_bp
     from routes.email_replies    import email_replies_bp
+    from routes.eftpos import eftpos_bp
+    app.register_blueprint(eftpos_bp)
     from routes.import_customers import import_customers_bp
 
     app.register_blueprint(auth_bp)
