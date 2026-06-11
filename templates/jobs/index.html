@@ -9,45 +9,76 @@
 <!-- Filters -->
 <div class="sd-card mb-3">
   <div class="sd-card-header">Filters</div>
-  <div style="padding: 1rem 1.25rem; display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+  <div style="padding:1rem 1.25rem; display:flex; gap:0.75rem; align-items:flex-end; flex-wrap:wrap;">
+
+    <!-- Search -->
+    <div style="flex:1; min-width:180px;">
+      <label class="sd-label">Customer / Phone</label>
+      <input type="text" id="filter-search" class="sd-input"
+             placeholder="Name or phone…" value="{{ search }}"
+             onkeydown="if(event.key==='Enter') applyFilters()">
+    </div>
+
+    <!-- Status -->
     <div>
       <label class="sd-label">Status</label>
-      <select class="sd-input" style="width:160px;" id="filter-status">
+      <select class="sd-input" style="width:150px;" id="filter-status">
         <option value="">All statuses</option>
-        {% for s in ['pending','scheduled','in_progress','complete','invoiced','paid','void'] %}
+        {% for s in ['pending','scheduled','in_progress','complete','invoiced','paid','lost'] %}
         <option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s|replace('_',' ')|title }}</option>
         {% endfor %}
       </select>
     </div>
-    <div>
-      <label class="sd-label">Region</label>
-      <select class="sd-input" style="width:180px;" id="filter-region">
-        <option value="">All regions</option>
-        {% for r in regions %}
-        <option value="{{ r.id }}" {% if region_id|string == r.id|string %}selected{% endif %}>{{ r.name }}</option>
-        {% endfor %}
-      </select>
-    </div>
+
+    <!-- Job Type -->
     <div>
       <label class="sd-label">Type</label>
-      <select class="sd-input" style="width:150px;" id="filter-type">
+      <select class="sd-input" style="width:140px;" id="filter-type">
         <option value="">All types</option>
         {% for key, info in JOB_TYPES.items() %}
         <option value="{{ key }}" {% if job_type == key %}selected{% endif %}>{{ info.label }}</option>
         {% endfor %}
       </select>
     </div>
+
+    <!-- Payment Type -->
+    <div>
+      <label class="sd-label">Payment</label>
+      <select class="sd-input" style="width:130px;" id="filter-payment">
+        <option value="">All payments</option>
+        {% for pt in ['EFTPOS','Cash','Transfer','VISA','MASTERCARD','AMEX'] %}
+        <option value="{{ pt }}" {% if payment_type == pt %}selected{% endif %}>{{ pt }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <!-- Date range -->
     <div>
       <label class="sd-label">From</label>
-      <input type="date" id="filter-date-from" class="sd-input" style="width:145px;"
+      <input type="date" id="filter-date-from" class="sd-input" style="width:140px;"
              value="{{ date_from }}">
     </div>
     <div>
       <label class="sd-label">To</label>
-      <input type="date" id="filter-date-to" class="sd-input" style="width:145px;"
+      <input type="date" id="filter-date-to" class="sd-input" style="width:140px;"
              value="{{ date_to }}">
     </div>
-    <button class="btn-accent" onclick="applyFilters()"><i class="bi bi-funnel"></i> Apply</button>
+
+    <!-- Gross range -->
+    <div>
+      <label class="sd-label">Gross $min</label>
+      <input type="number" id="filter-gross-min" class="sd-input" style="width:90px;"
+             step="0.01" min="0" placeholder="0.00" value="{{ gross_min }}">
+    </div>
+    <div>
+      <label class="sd-label">Gross $max</label>
+      <input type="number" id="filter-gross-max" class="sd-input" style="width:90px;"
+             step="0.01" min="0" placeholder="any" value="{{ gross_max }}">
+    </div>
+
+    <button class="btn-accent" onclick="applyFilters()">
+      <i class="bi bi-funnel"></i> Apply
+    </button>
     <form method="post" action="{{ url_for('jobs.clear_job_filters') }}" style="display:inline;">
       <button type="submit" class="btn-ghost">Clear</button>
     </form>
@@ -62,19 +93,22 @@
   <div class="table-responsive-sd"><table class="sd-table">
     <thead>
       <tr>
-        {% set cur_params = {'status': status, 'region_id': region_id,
-                             'job_type': job_type, 'date_from': date_from,
-                             'date_to': date_to} %}
+        {% set cur_params = {'status': status, 'job_type': job_type,
+                             'payment_type': payment_type,
+                             'search': search,
+                             'gross_min': gross_min, 'gross_max': gross_max,
+                             'date_from': date_from, 'date_to': date_to} %}
         {% for col_key, col_label, right_align in [
-            ('scheduled', 'Scheduled',   false),
-            ('paid',      'Date Paid',   false),
-            ('ref',       'Reference',   false),
-            ('type',      'Type',        false),
-            ('customer',  'Customer',    false),
-            ('gross',     'Gross',       true),
-            ('payment',   'Payment',     false),
-            ('amount',    'Amount Paid', true),
-            ('status',    'Status',      false)] %}
+            ('scheduled', 'Scheduled',       false),
+            ('paid',      'Date Paid',       false),
+            ('ref',       'Reference',       false),
+            ('invoice',   'Invoice #',       false),
+            ('type',      'Type',            false),
+            ('customer',  'Customer',        false),
+            ('gross',     'Gross',           true),
+            ('payment',   'Payment',         false),
+            ('amount',    'Amount Paid',     true),
+            ('status',    'Status',          false)] %}
         {% set is_active = sort == col_key %}
         <th {% if right_align %}style="text-align:right;"{% endif %}>
           <a href="{{ url_for('jobs.index', sort=col_key, **cur_params) }}"
@@ -105,8 +139,14 @@
             {{ job['reference'] }}
           </a>
         </td>
+        <td class="mono" style="font-size:0.8rem; color:var(--sd-muted);">
+          {{ job['invoice_number'] or '' }}
+        </td>
         <td style="font-size:0.82rem;">
-          <span class="badge-status {% if job['job_type'] == 'booking' %}status-scheduled{% elif job['job_type'] == 'sale' %}status-complete{% else %}status-in_progress{% endif %}">
+          <span class="badge-status
+            {% if job['job_type'] == 'booking' %}status-scheduled
+            {% elif job['job_type'] == 'sale' %}status-complete
+            {% else %}status-in_progress{% endif %}">
             {{ JOB_TYPES[job['job_type']]['label'] if job['job_type'] in JOB_TYPES else job['job_type'] }}
           </span>
         </td>
@@ -127,7 +167,7 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="9" style="text-align:center; color:var(--sd-muted); padding:2rem;">No jobs found.</td></tr>
+      <tr><td colspan="10" style="text-align:center; color:var(--sd-muted); padding:2rem;">No jobs found.</td></tr>
       {% endfor %}
     </tbody>
   </table></div>
@@ -137,20 +177,25 @@
 {% block scripts %}
 <script>
 function applyFilters() {
-  const status   = document.getElementById('filter-status').value;
-  const region   = document.getElementById('filter-region').value;
-  const jobType  = document.getElementById('filter-type').value;
-  const dateFrom = document.getElementById('filter-date-from').value;
-  const dateTo   = document.getElementById('filter-date-to').value;
-  const params   = new URLSearchParams();
-  if (status)   params.set('status',    status);
-  if (region)   params.set('region_id', region);
-  if (jobType)  params.set('job_type',  jobType);
-  if (dateFrom) params.set('date_from', dateFrom);
-  if (dateTo)   params.set('date_to',   dateTo);
-  // Preserve current sort when applying filters
+  const search    = document.getElementById('filter-search').value;
+  const status    = document.getElementById('filter-status').value;
+  const jobType   = document.getElementById('filter-type').value;
+  const payment   = document.getElementById('filter-payment').value;
+  const dateFrom  = document.getElementById('filter-date-from').value;
+  const dateTo    = document.getElementById('filter-date-to').value;
+  const grossMin  = document.getElementById('filter-gross-min').value;
+  const grossMax  = document.getElementById('filter-gross-max').value;
+  const params    = new URLSearchParams();
+  if (search)   params.set('search',       search);
+  if (status)   params.set('status',       status);
+  if (jobType)  params.set('job_type',     jobType);
+  if (payment)  params.set('payment_type', payment);
+  if (dateFrom) params.set('date_from',    dateFrom);
+  if (dateTo)   params.set('date_to',      dateTo);
+  if (grossMin) params.set('gross_min',    grossMin);
+  if (grossMax) params.set('gross_max',    grossMax);
   const sort = {{ sort|tojson }};
-  if (sort && sort !== 'date') params.set('sort', sort);
+  if (sort && sort !== 'paid') params.set('sort', sort);
   window.location = '?' + params.toString();
 }
 </script>

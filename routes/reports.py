@@ -24,7 +24,7 @@ JOB_TYPE_OPTIONS = [
 ]
 
 
-def _get_report_data(date_from, date_to, job_types, show_cash=False):
+def _get_report_data(date_from, date_to, job_types, show_cash=False, sort_by='paid'):
     """
     Fetch all jobs in range, calculate financials per job.
     Returns list of row dicts ordered by paid_date.
@@ -42,11 +42,13 @@ def _get_report_data(date_from, date_to, job_types, show_cash=False):
     jt_ph = ','.join('?' * len(job_types))
     params = [date_from, date_to, date_from, date_to] + list(job_types)
 
-    cash_clause = '' if show_cash else "AND (j.payment_type IS NULL OR j.payment_type != 'Cash')"
+    cash_clause  = '' if show_cash else "AND (j.payment_type IS NULL OR j.payment_type != 'Cash')"
+    order_clause = 'j.scheduled_date ASC' if sort_by == 'scheduled' else \
+                   'coalesce(j.paid_date, j.scheduled_date) ASC'
 
     with get_db() as conn:
         jobs = conn.execute(f"""
-            SELECT j.id, j.reference, j.job_type, j.customer_name,
+            SELECT j.id, j.reference, j.invoice_number, j.job_type, j.customer_name,
                    j.scheduled_date, j.paid_date, j.status, j.tax_inclusive,
                    j.amount_paid, j.payment_type,
                    coalesce(j.paid_date, j.scheduled_date) as report_date
@@ -59,8 +61,8 @@ def _get_report_data(date_from, date_to, job_types, show_cash=False):
               AND j.job_type IN ({jt_ph})
               AND j.status IN ('invoiced', 'paid')
               {cash_clause}
-            ORDER BY coalesce(j.paid_date, j.scheduled_date) ASC, j.id ASC
-        """, params).fetchall()
+            ORDER BY {order_clause}, j.id ASC
+        """.format(order_clause=order_clause, jt_ph=jt_ph, cash_clause=cash_clause), params).fetchall()
 
         rows = []
         for job in jobs:
@@ -78,6 +80,7 @@ def _get_report_data(date_from, date_to, job_types, show_cash=False):
             rows.append({
                 'id':             job['id'],
                 'reference':      job['reference'],
+                'invoice_number': job['invoice_number'] or '',
                 'job_type':       job['job_type'],
                 'customer_name':  job['customer_name'],
                 'paid_date':      job['paid_date'] or '',
@@ -92,13 +95,14 @@ def _get_report_data(date_from, date_to, job_types, show_cash=False):
     return rows
 
 
-def _group_by_month(rows):
-    """Group rows into months with daily sub-groups."""
+def _group_by_month(rows, sort_by='paid'):
+    """Group rows into months → days. sort_by: 'paid' or 'scheduled'."""
     from collections import OrderedDict
     from datetime import datetime
     months = OrderedDict()
     for row in rows:
-        d = row['paid_date'] or row['scheduled_date'] or ''
+        d = (row['scheduled_date'] if sort_by == 'scheduled' else
+             (row['paid_date'] or row['scheduled_date'])) or ''
         month_key = d[:7] if d else 'Unknown'
         months.setdefault(month_key, OrderedDict())
         day_key = d[:10] if d else 'Unknown'
@@ -162,10 +166,11 @@ def sales():
             date_to   = request.form.get('date_to',   default_to)
             job_types  = request.form.getlist('job_types') or ['booking', 'workshop', 'sale']
             show_daily = 'show_daily' in request.form
+            sort_by    = request.form.get('sort_by', 'paid')
             # Save to settings
             prefs = {'date_from': date_from, 'date_to': date_to,
                      'job_types': job_types,
-                     'show_daily': show_daily}
+                     'show_daily': show_daily, 'sort_by': sort_by}
             conn.execute(
                 "INSERT INTO settings (key,value) VALUES (?,?) "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
@@ -183,16 +188,19 @@ def sales():
                     date_to   = prefs.get('date_to',   default_to)
                     job_types  = prefs.get('job_types',  ['booking', 'workshop', 'sale'])
                     show_daily = prefs.get('show_daily', False)
+                    sort_by    = prefs.get('sort_by', 'paid')
                 except Exception:
                     date_from  = first_of_month
                     date_to    = default_to
                     job_types  = ['booking', 'workshop', 'sale']
                     show_daily = False
+                    sort_by    = 'paid'
             else:
                 date_from  = first_of_month
                 date_to    = default_to
                 job_types  = ['booking', 'workshop', 'sale']
                 show_daily = False
+                sort_by    = 'paid'
 
     ran = bool(request.method == 'POST' or request.args.get('run'))
 
@@ -205,14 +213,14 @@ def sales():
     except Exception:
         show_cash = False
 
-    rows    = _get_report_data(date_from, date_to, job_types, show_cash) if ran else []
-    months  = _group_by_month(rows) if ran else {}
+    rows    = _get_report_data(date_from, date_to, job_types, show_cash, sort_by) if ran else []
+    months  = _group_by_month(rows, sort_by) if ran else {}
     totals  = _grand_totals(rows) if ran else {}
 
     return render_template('reports/sales.html',
                            date_from=date_from, date_to=date_to,
                            job_types=job_types,
-                           show_daily=show_daily,
+                           show_daily=show_daily, sort_by=sort_by,
                            show_cash=show_cash,
                            JOB_TYPE_OPTIONS=JOB_TYPE_OPTIONS,
                            months=months, rows=rows, totals=totals,
@@ -543,8 +551,33 @@ def parts_usage():
 def unreconciled_eftpos():
     from models import get_db
     from routes.invoice import calc_totals
-    date_from = request.args.get('date_from', '')
-    date_to   = request.args.get('date_to',   '')
+    import json as _json
+    from flask import session as _sess
+    user_id   = _sess.get('user_id')
+    PREFS_KEY = f'unrecon_eftpos_{user_id}'
+
+    if 'submitted' in request.args:
+        date_from = request.args.get('date_from', '')
+        date_to   = request.args.get('date_to',   '')
+        with get_db() as conn:
+            conn.execute(
+                "INSERT INTO settings (key,value) VALUES (?,?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (PREFS_KEY, _json.dumps({'date_from': date_from, 'date_to': date_to})))
+            conn.commit()
+    else:
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT value FROM settings WHERE key=?", (PREFS_KEY,)).fetchone()
+        if row:
+            try:
+                prefs = _json.loads(row['value'])
+                date_from = prefs.get('date_from', '')
+                date_to   = prefs.get('date_to',   '')
+            except Exception:
+                date_from, date_to = '', ''
+        else:
+            date_from, date_to = '', ''
 
     with get_db() as conn:
         where  = ["j.status = 'paid'",

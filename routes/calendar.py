@@ -10,7 +10,7 @@ STATUS_COLOR_DEFAULTS = {
     'complete':    '#10b981',
     'invoiced':    '#6b7280',
     'paid':        '#10b981',
-    'void':        '#ef4444',
+    'lost':        '#ef4444',
 }
 
 def _get_status_colors(conn):
@@ -92,7 +92,7 @@ def events():
                    j.scheduled_date, j.scheduled_time, j.end_time, j.end_date,
                    j.job_type, j.status, j.address, j.suburb, r.name as region_name
             FROM jobs j JOIN regions r ON j.region_id = r.id
-            WHERE j.status != 'void'
+            WHERE j.status != 'lost'
             AND (
                 (j.job_type = 'booking' AND j.scheduled_date IS NOT NULL)
                 OR

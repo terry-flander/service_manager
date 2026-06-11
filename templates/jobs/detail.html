@@ -50,6 +50,8 @@
 <form method="post" id="save-form"
       action="{{ url_for('jobs.job_detail', job_id=job['id']) }}">
   <input type="hidden" name="return_to" id="return-to-field" value="">
+  <!-- Status & Payment hidden fields (merged into main save) -->
+  <input type="hidden" name="payment_type" id="payment-type-hidden" value="">
 
   <!-- Sticky control bar — spans full width above grid -->
   <div id="detail-controls"
@@ -67,18 +69,13 @@
     <div style="flex:1;"></div>
     <button type="button" id="btn-cancel" class="btn-ghost"
             style="padding:0.35rem 0.85rem; font-size:0.82rem;"
-            onclick="cancelDetail()">
-      <i class="bi bi-x-lg"></i> Cancel
+            onclick="closeDetail()">
+      <i class="bi bi-x-lg"></i> Close
     </button>
     <button type="submit" id="btn-save" class="btn-ghost"
             style="padding:0.35rem 0.85rem; font-size:0.82rem;"
             onclick="document.getElementById('return-to-field').value=''">
       <i class="bi bi-floppy"></i> Save
-    </button>
-    <button type="submit" id="btn-save-return" class="btn-accent"
-            style="padding:0.35rem 0.85rem; font-size:0.82rem;"
-            onclick="setSaveReturn()">
-      <i class="bi bi-floppy"></i> Save &amp; Return
     </button>
   </div>
 
@@ -238,6 +235,27 @@
 
             <!-- Scheduling — booking: region + date select + times -->
             {% if job['job_type'] == 'booking' %}
+            {% set is_manual = job['scheduled_date'] and job['scheduled_date'] not in region_dates_list %}
+            <!-- Date mode toggle -->
+            <div class="col-12">
+              <div style="display:flex; gap:1rem; align-items:center;">
+                <span class="sd-label" style="margin:0;">Date Mode:</span>
+                <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer; font-size:0.875rem;">
+                  <input type="radio" name="booking_date_mode" id="mode-region" value="region"
+                         {% if not is_manual %}checked{% endif %}
+                         style="accent-color:var(--sd-accent); width:14px; height:14px;"
+                         onchange="bookingModeChanged('region')">
+                  Region
+                </label>
+                <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer; font-size:0.875rem;">
+                  <input type="radio" name="booking_date_mode" id="mode-manual" value="manual"
+                         {% if is_manual %}checked{% endif %}
+                         style="accent-color:var(--sd-accent); width:14px; height:14px;"
+                         onchange="bookingModeChanged('manual')">
+                  Manual
+                </label>
+              </div>
+            </div>
             <div class="col-12">
               <label class="sd-label">Region</label>
               <select name="region_id" id="region-select" class="sd-input"
@@ -250,9 +268,11 @@
                 {% endfor %}
               </select>
             </div>
-            <div class="col-md-5">
+            <div class="col-md-5" id="date-col">
               <label class="sd-label">Service Date</label>
-              <select name="scheduled_date" id="date-select" class="sd-input">
+              <!-- Region date select -->
+              <select name="scheduled_date" id="date-select" class="sd-input"
+                      {% if is_manual %}style="display:none;" disabled{% endif %}>
                 {% if job['scheduled_date'] %}
                 <option value="{{ job['scheduled_date'] }}" selected>
                   {{ job['scheduled_date']|fmt_date('dmy') }}
@@ -261,6 +281,10 @@
                 <option value="">— Select date —</option>
                 {% endif %}
               </select>
+              <!-- Manual date input -->
+              <input type="date" name="scheduled_date" id="manual-date" class="sd-input"
+                     value="{{ job['scheduled_date'] or '' }}"
+                     {% if not is_manual %}style="display:none;" disabled{% endif %}>
             </div>
             <div class="col-md-3">
               <label class="sd-label">Start Time</label>
@@ -365,7 +389,7 @@
           {{ job['status']|replace('_',' ') }}
         </span>
         <select name="status" class="sd-input" style="flex:1; min-width:120px;">
-          {% for s in ['pending','scheduled','in_progress','complete','invoiced','paid','void'] %}
+          {% for s in ['pending','scheduled','in_progress','complete','invoiced','paid','lost'] %}
           <option value="{{ s }}" {% if job['status'] == s %}selected{% endif %}>
             {{ s|replace('_',' ')|title }}
           </option>
@@ -381,7 +405,6 @@
       </div>
       <div style="padding:0 1.25rem 0.6rem; border-top:1px solid var(--sd-border);">
         <div class="sd-label" style="margin-bottom:0.5rem;">Quick Pay</div>
-        <input type="hidden" name="payment_type" id="payment-type-hidden" value="{{ job['payment_type'] or '' }}">
         <div style="display:flex; gap:0.5rem; flex-wrap:wrap;" id="quick-pay-radios">
           {% for pt in ['EFTPOS','Cash','Transfer'] %}
           <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer;
@@ -675,6 +698,21 @@ function toggleThread() {
 }
 
 
+// ── Booking date mode toggle ─────────────────────────────────────────────────
+function bookingModeChanged(mode) {
+  const dateSel    = document.getElementById('date-select');
+  const manualDate = document.getElementById('manual-date');
+  const isManual   = mode === 'manual';
+  if (dateSel) {
+    dateSel.style.display = isManual ? 'none' : '';
+    dateSel.disabled      = isManual;
+  }
+  if (manualDate) {
+    manualDate.style.display = isManual ? '' : 'none';
+    manualDate.disabled      = !isManual;
+  }
+}
+
 // ── Detail control bar: dirty tracking + Cancel/Save/Save & Return ────────────
 (function () {
   const fromParam = {{ request.args.get('from', '')|tojson }};
@@ -686,16 +724,30 @@ function toggleThread() {
 
   function setDirty(val) {
     isDirty = val;
-    ['btn-save','btn-save-return'].forEach(function(id) {
-      const btn = document.getElementById(id);
-      if (!btn) return;
-      btn.style.opacity       = val ? '' : '0.35';
-      btn.style.pointerEvents = val ? '' : 'none';
-      btn.style.cursor        = val ? '' : 'default';
-    });
+    const btnSave = document.getElementById('btn-save');
+    const btnClose = document.getElementById('btn-cancel');
+    if (btnSave) {
+      if (val) {
+        // Dirty: save button becomes accent (orange), full opacity
+        btnSave.className = 'btn-accent';
+        btnSave.style.opacity       = '';
+        btnSave.style.pointerEvents = '';
+        btnSave.style.cursor        = '';
+      } else {
+        // Clean: save button is ghost, dimmed
+        btnSave.className = 'btn-ghost';
+        btnSave.style.opacity       = '0.35';
+        btnSave.style.pointerEvents = 'none';
+        btnSave.style.cursor        = 'default';
+      }
+    }
+    // Close button label hint when dirty
+    if (btnClose) {
+      btnClose.style.color = val ? '#fbbf24' : '';
+    }
   }
 
-  // Start insensitive
+  // Start clean
   setDirty(false);
 
   // Any input/change in the save form marks dirty
@@ -712,14 +764,30 @@ function toggleThread() {
   // If page reloaded after part add/remove, consider dirty
   if (window.location.hash === '#add-part') { setDirty(true); }
 
-  window.cancelDetail = function() {
-    window.location.href = returnUrl;
+  window.closeDetail = function() {
+    if (!isDirty) {
+      window.location.href = returnUrl;
+      return;
+    }
+    // Dirty — offer Save & Close or just Close
+    const choice = window.confirm(
+      'You have unsaved changes.\n\nOK = Save & Close\nCancel = Discard & Close'
+    );
+    if (choice) {
+      // Save & Close: set return_to so the route navigates away
+      var f = document.getElementById('return-to-field');
+      if (f) f.value = fromParam || 'jobs';
+      document.getElementById('save-form').requestSubmit
+        ? document.getElementById('save-form').requestSubmit()
+        : document.getElementById('save-form').submit();
+    } else {
+      // Discard & Close
+      window.location.href = returnUrl;
+    }
   };
 
-  window.setSaveReturn = function() {
-    var f = document.getElementById('return-to-field');
-    if (f) f.value = fromParam || 'jobs';
-  };
+  // Keep cancelDetail as alias for backwards compat with any other callers
+  window.cancelDetail = window.closeDetail;
 })();
 
 

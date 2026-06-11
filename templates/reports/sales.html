@@ -45,6 +45,18 @@
         Daily subtotals
       </label>
 
+      <div style="display:flex; gap:0.5rem; align-items:center; font-size:0.875rem; color:var(--sd-text);">
+        <span style="color:var(--sd-muted);">Sort by:</span>
+        {% for val, lbl in [('paid','Date Paid'),('scheduled','Scheduled')] %}
+        <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
+          <input type="radio" name="sort_by" value="{{ val }}"
+                 {% if sort_by == val %}checked{% endif %}
+                 style="accent-color:var(--sd-accent); width:13px; height:13px;">
+          {{ lbl }}
+        </label>
+        {% endfor %}
+      </div>
+
       <button type="submit" class="btn-accent">
         <i class="bi bi-bar-chart"></i> Run Report
       </button>
@@ -108,6 +120,7 @@
           <th>Scheduled</th>
           <th>Date Paid</th>
           <th>Reference</th>
+          <th>Invoice #</th>
           <th>Type</th>
           <th>Customer</th>
           <th style="text-align:right;">Gross (inc GST)</th>
@@ -132,6 +145,9 @@
               {{ row['reference'] }}
             </a>
           </td>
+          <td class="mono" style="font-size:0.8rem; color:var(--sd-muted);">
+            {{ row['invoice_number'] or '' }}
+          </td>
           <td style="font-size:0.82rem;">
             <span class="badge-status {{ 'status-scheduled' if row['job_type']=='booking' else 'status-in_progress' if row['job_type']=='workshop' else 'status-complete' }}">
               {{ row['job_type']|title }}
@@ -154,7 +170,7 @@
         <!-- Daily subtotal row — optional -->
         {% if show_daily %}
         <tr style="background:rgba(0,0,0,0.06); border-top:1px solid var(--sd-border);">
-          <td colspan="5" style="padding:0.45rem 1rem; font-size:0.75rem;
+          <td colspan="6" style="padding:0.45rem 1rem; font-size:0.75rem;
                                   font-weight:600; color:var(--sd-muted);">
             {{ day_label }}
             <span style="font-weight:400;">&nbsp;·&nbsp;{{ day_sub['count'] }} item{{ 's' if day_sub['count'] != 1 }}</span>
@@ -176,7 +192,7 @@
       </tbody>
       <tfoot>
         <tr style="background:var(--sd-surface2); border-top:2px solid var(--sd-border);">
-          <td colspan="5" style="padding:0.6rem 1rem; font-size:0.8rem;
+          <td colspan="6" style="padding:0.6rem 1rem; font-size:0.8rem;
                                   font-weight:600; color:var(--sd-muted);">
             Subtotal — {{ month_label }}
           </td>
@@ -203,7 +219,7 @@
     <div class="table-responsive-sd"><table class="sd-table">
       <thead>
         <tr>
-          <th colspan="5" style="color:var(--sd-text); font-size:0.95rem;">
+          <th colspan="6" style="color:var(--sd-text); font-size:0.95rem;">
             Grand Total
             <span style="font-size:0.78rem; font-weight:400; color:var(--sd-muted); margin-left:0.5rem;">
               {{ totals['count'] }} job{{ 's' if totals['count'] != 1 }}
@@ -218,7 +234,7 @@
       </thead>
       <tbody>
         <tr style="background:var(--sd-surface2);">
-          <td colspan="5" style="padding:0.75rem 1rem;"></td>
+          <td colspan="6" style="padding:0.75rem 1rem;"></td>
           <td class="mono" style="text-align:right; font-size:1.05rem; font-weight:700;
                                    color:var(--sd-accent); padding:0.75rem 1rem;">
             ${{ '%.2f'|format(totals['gross']) }}

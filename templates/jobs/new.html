@@ -125,6 +125,24 @@
             <i class="bi bi-calendar3"></i> Scheduling
           </div>
           <div class="row g-3">
+            <!-- Booking date mode — only shown for booking type -->
+            <div class="col-12" id="booking-mode-row" style="display:none;">
+              <div style="display:flex; gap:1rem; align-items:center;">
+                <span class="sd-label" style="margin:0;">Date Mode:</span>
+                <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer; font-size:0.875rem;">
+                  <input type="radio" name="booking_date_mode" id="mode-region" value="region"
+                         checked style="accent-color:var(--sd-accent); width:14px; height:14px;"
+                         onchange="bookingModeChanged('region')">
+                  Region
+                </label>
+                <label style="display:flex; align-items:center; gap:0.35rem; cursor:pointer; font-size:0.875rem;">
+                  <input type="radio" name="booking_date_mode" id="mode-manual" value="manual"
+                         style="accent-color:var(--sd-accent); width:14px; height:14px;"
+                         onchange="bookingModeChanged('manual')">
+                  Manual
+                </label>
+              </div>
+            </div>
             <div class="col-md-6" id="region-col">
               <label class="sd-label">Service Region *</label>
               <select name="region_id" id="region-select" class="sd-input"
@@ -140,6 +158,9 @@
               <select name="scheduled_date" id="date-select" class="sd-input">
                 <option value="">— Select region first —</option>
               </select>
+              <!-- Manual date input — used when mode=manual -->
+              <input type="date" name="scheduled_date" id="manual-date"
+                     class="sd-input" style="display:none;" disabled>
               <!-- Workshop + Rental use a plain date input instead -->
               <input type="date" name="scheduled_date" id="nonbooking-date"
                      class="sd-input" style="display:none;" disabled>
@@ -453,6 +474,10 @@ function updateJobType(type) {
   const isWorkshop = type === 'workshop';
   const isRental   = type === 'rental';
 
+  // Booking date mode row
+  const modeRow = document.getElementById('booking-mode-row');
+  if (modeRow) modeRow.style.display = isBooking ? '' : 'none';
+
   // Region + suburb + time slots: booking only
   [document.getElementById('region-col'),
    document.getElementById('suburb-col'),
@@ -462,7 +487,6 @@ function updateJobType(type) {
   });
 
   // Address + service types: hide for workshop and rental
-  // Bike description: hide for rental only (workshop needs it)
   [document.getElementById('address-col'),
    document.getElementById('service-types-col')].forEach(function(el) {
     if (el) el.style.display = (isWorkshop || isRental) ? 'none' : '';
@@ -470,15 +494,27 @@ function updateJobType(type) {
   const bikeCol = document.getElementById('bike-desc-col');
   if (bikeCol) bikeCol.style.display = isRental ? 'none' : '';
 
-  // Date: booking uses region-driven select; workshop+rental use plain date input
-  const dateSel   = document.getElementById('date-select');
-  const nonbkDate = document.getElementById('nonbooking-date');
-  if (dateSel)  { dateSel.style.display = isBooking ? '' : 'none'; dateSel.disabled = !isBooking; }
-  if (nonbkDate) {
-    nonbkDate.style.display = isBooking ? 'none' : '';
-    nonbkDate.disabled      = isBooking;
-    if (isWorkshop && !nonbkDate.value) nonbkDate.value = new Date().toISOString().slice(0,10);
-    if (isRental) nonbkDate.value = '';
+  // Date inputs
+  const dateSel    = document.getElementById('date-select');
+  const manualDate = document.getElementById('manual-date');
+  const nonbkDate  = document.getElementById('nonbooking-date');
+  const isManual   = isBooking && document.getElementById('mode-manual') &&
+                     document.getElementById('mode-manual').checked;
+
+  if (isBooking) {
+    // Show region date select OR manual date input based on mode
+    if (dateSel)    { dateSel.style.display    = isManual ? 'none' : ''; dateSel.disabled    = isManual; }
+    if (manualDate) { manualDate.style.display  = isManual ? ''     : 'none'; manualDate.disabled = !isManual; }
+    if (nonbkDate)  { nonbkDate.style.display   = 'none'; nonbkDate.disabled  = true; }
+  } else {
+    if (dateSel)    { dateSel.style.display    = 'none'; dateSel.disabled    = true; }
+    if (manualDate) { manualDate.style.display  = 'none'; manualDate.disabled = true; }
+    if (nonbkDate) {
+      nonbkDate.style.display = '';
+      nonbkDate.disabled      = false;
+      if (isWorkshop && !nonbkDate.value) nonbkDate.value = new Date().toISOString().slice(0,10);
+      if (isRental) nonbkDate.value = '';
+    }
   }
 
   // End date col: rental only
@@ -494,11 +530,18 @@ function updateJobType(type) {
     else { regionSel.removeAttribute('required'); if (!regionSel.value) regionSel.selectedIndex = 1; }
   }
 
-  // Default tax treatment: GST Exempt for rental, Tax Inclusive for others
+  // Default tax treatment
   const taxSel = document.getElementById('tax-select');
-  if (taxSel) {
-    taxSel.value = isRental ? '2' : '1';
-  }
+  if (taxSel) taxSel.value = isRental ? '2' : '1';
+}
+
+function bookingModeChanged(mode) {
+  const dateSel    = document.getElementById('date-select');
+  const manualDate = document.getElementById('manual-date');
+  const isManual   = mode === 'manual';
+  if (dateSel)    { dateSel.style.display    = isManual ? 'none' : ''; dateSel.disabled    = isManual; }
+  if (manualDate) { manualDate.style.display  = isManual ? ''     : 'none'; manualDate.disabled = !isManual; }
+  // In manual mode, region select stays visible but date is free-entry
 }
 
 // ── Rental date validation: end >= start, end calendar opens at start ─────────
