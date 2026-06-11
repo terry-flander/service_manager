@@ -35,6 +35,10 @@ with get_db() as conn:
             imported_at          TEXT DEFAULT (datetime('now'))
         )''')
     except: pass
-conn.commit() 
-print('Done')
-    
+    # Rename void status to lost
+    try:
+        conn.execute("UPDATE jobs SET status='lost' WHERE status='void'")
+        print("  void → lost status migration complete")
+    except: pass
+
+    conn.commit()

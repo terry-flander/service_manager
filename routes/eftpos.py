@@ -143,10 +143,13 @@ def _candidate_query(conn, txn_date, amount, limit=10):
     All job types included — a booking may be paid at the workshop terminal.
     Date window: paid_date within txn_date -1 week to +4 weeks.
     Exact match requires same date AND same amount.
+    Already-reconciled paid jobs are included (for split payments) with is_reconciled=1.
     """
     rows = conn.execute("""
         SELECT j.id, j.reference, j.customer_name, j.paid_date,
                j.amount_paid, j.payment_type, j.status, j.job_type,
+               CASE WHEN j.reconciled_eftpos IS NOT NULL THEN 1 ELSE 0 END as is_reconciled,
+               j.reconciled_eftpos,
                CASE
                  WHEN j.paid_date = ? AND ABS(j.amount_paid - ?) < 0.01 THEN 'exact'
                  WHEN j.paid_date = ?                                    THEN 'date_match'
@@ -154,11 +157,11 @@ def _candidate_query(conn, txn_date, amount, limit=10):
                  ELSE 'near'
                END as match_type
         FROM jobs j
-        WHERE j.reconciled_eftpos IS NULL
-          AND j.status = 'paid'
+        WHERE j.status = 'paid'
           AND j.payment_type IN ('EFTPOS','VISA','MASTERCARD','AMEX')
           AND j.paid_date BETWEEN date(?, '-7 days') AND date(?, '+28 days')
         ORDER BY
+          j.reconciled_eftpos IS NOT NULL ASC,   -- unreconciled first
           CASE WHEN j.paid_date = ? AND ABS(j.amount_paid - ?) < 0.01 THEN 0
                WHEN j.paid_date = ?                                    THEN 1
                WHEN ABS(j.amount_paid - ?) < 0.01                     THEN 2
@@ -166,72 +169,96 @@ def _candidate_query(conn, txn_date, amount, limit=10):
           ABS(julianday(j.paid_date) - julianday(?)) ASC,
           j.paid_date ASC
         LIMIT ?
-    """, (txn_date, amount,   # exact CASE
-          txn_date,            # date_match CASE
-          amount,              # amount_match CASE
-          txn_date, txn_date,  # window bounds
-          txn_date, amount,    # ORDER exact
-          txn_date,            # ORDER date
-          amount,              # ORDER amount
-          txn_date,            # ORDER proximity
+    """, (txn_date, amount,
+          txn_date,
+          amount,
+          txn_date, txn_date,
+          txn_date, amount,
+          txn_date,
+          amount,
+          txn_date,
           limit)).fetchall()
     return [dict(r) for r in rows]
 
 
 @eftpos_bp.route('/eftpos/reconcile')
 def reconcile():
-    date_from = request.args.get('date_from', '')
-    date_to   = request.args.get('date_to',   '')
-    # Checkbox sends '1' when checked, nothing when unchecked.
-    # On first load (no params at all), default to unreconciled only.
-    form_submitted = bool(request.args.get('date_from') or request.args.get('date_to')
-                          or 'unreconciled_only' in request.args)
-    unreconciled_only = request.args.get('unreconciled_only', '') == '1'
-    if not form_submitted:
-        unreconciled_only = True
+    import json as _json
+    user_id   = session.get('user_id')
+    PREFS_KEY = f'eftpos_recon_{user_id}'
+
+    # Detect whether the filter form was submitted
+    # Use a sentinel param so unchecked checkbox is distinguishable from first load
+    form_submitted = 'submitted' in request.args
+
+    if form_submitted:
+        date_from         = request.args.get('date_from', '')
+        date_to           = request.args.get('date_to',   '')
+        # Checkbox: present = '1', absent = unchecked = False
+        unreconciled_only = request.args.get('unreconciled_only', '') == '1'
+        # Save prefs
+        with get_db() as conn:
+            conn.execute(
+                "INSERT INTO settings (key,value) VALUES (?,?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (PREFS_KEY, _json.dumps({
+                    'date_from': date_from, 'date_to': date_to,
+                    'unreconciled_only': unreconciled_only})))
+            conn.commit()
+    else:
+        # Restore saved prefs, or sensible defaults
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT value FROM settings WHERE key=?", (PREFS_KEY,)).fetchone()
+        if row:
+            try:
+                prefs = _json.loads(row['value'])
+                date_from         = prefs.get('date_from', '')
+                date_to           = prefs.get('date_to',   '')
+                unreconciled_only = prefs.get('unreconciled_only', True)
+            except Exception:
+                date_from, date_to, unreconciled_only = '', '', True
+        else:
+            date_from, date_to, unreconciled_only = '', '', True
 
     with get_db() as conn:
-        # ── Unreconciled ─────────────────────────────────────────────────────
-        where, params = ["et.reconciled_at IS NULL"], []
+        # Combined query: all transactions in range, filtered by unreconciled_only
+        where, params = ["et.transaction_date IS NOT NULL"], []
         if date_from:
             where.append("et.transaction_date >= ?"); params.append(date_from)
         if date_to:
             where.append("et.transaction_date <= ?"); params.append(date_to)
+        if unreconciled_only:
+            where.append("et.reconciled_at IS NULL")
 
-        txns = conn.execute(f"""
-            SELECT et.*, j.reference as matched_ref
+        txns = [dict(r) for r in conn.execute(f"""
+            SELECT et.*
             FROM eftpos_transactions et
-            LEFT JOIN jobs j ON j.id = et.job_id
             WHERE {' AND '.join(where)}
             ORDER BY et.transaction_date ASC, et.transaction_datetime ASC
-        """, params).fetchall()
+        """, params).fetchall()]
 
-        # Candidate jobs per transaction — all job types, date-windowed
+        # Candidate jobs for each unreconciled transaction
         candidates = {}
         for txn in txns:
-            if txn['job_id']:
-                continue
+            if txn['reconciled_at']:
+                continue  # reconciled — no candidates needed
             candidates[txn['reference_number']] = _candidate_query(
                 conn, txn['transaction_date'], txn['amount'], limit=10)
 
-        # ── Reconciled — one row per job ──────────────────────────────────────
-        recon_where, recon_params = ["et.reconciled_at IS NOT NULL"], []
-        if date_from:
-            recon_where.append("et.transaction_date >= ?"); recon_params.append(date_from)
-        if date_to:
-            recon_where.append("et.transaction_date <= ?"); recon_params.append(date_to)
-        reconciled = [] if unreconciled_only else conn.execute(f"""
-            SELECT et.*, j.reference as job_ref, j.customer_name,
-                   j.job_type as job_type, j.amount_paid as job_amount
-            FROM eftpos_transactions et
-            LEFT JOIN jobs j ON j.reconciled_eftpos = et.reference_number
-            WHERE {' AND '.join(recon_where)}
-            ORDER BY et.transaction_date ASC, j.reference ASC
-        """, recon_params).fetchall()
+        # Build reconciled_jobs lookup: ref_number → list of matched jobs
+        reconciled_jobs = {}
+        for txn in txns:
+            if txn['reconciled_at']:
+                jobs = conn.execute("""
+                    SELECT id, reference, customer_name FROM jobs
+                    WHERE reconciled_eftpos = ?
+                """, (txn['reference_number'],)).fetchall()
+                reconciled_jobs[txn['reference_number']] = [dict(j) for j in jobs]
 
     return render_template('eftpos/reconcile.html',
                            txns=txns, candidates=candidates,
-                           reconciled=reconciled,
+                           reconciled_jobs=reconciled_jobs,
                            date_from=date_from, date_to=date_to,
                            unreconciled_only=unreconciled_only,
                            terminal_label=_terminal_label)
@@ -288,10 +315,14 @@ def match():
                 updates.append("paid_date=?"); up_params.append(new_paid_date)
             if new_amount_paid is not None:
                 updates.append("amount_paid=?"); up_params.append(new_amount_paid)
-            updates.append("reconciled_eftpos=?")
-            up_params.append(txn['reference_number'])
-            up_params.append(job_id)
-            conn.execute(f"UPDATE jobs SET {', '.join(updates)} WHERE id=?", up_params)
+            # Only set reconciled_eftpos if not already set (split payment — job may
+            # already be reconciled against a different transaction)
+            if not job['reconciled_eftpos']:
+                updates.append("reconciled_eftpos=?")
+                up_params.append(txn['reference_number'])
+            if updates:
+                up_params.append(job_id)
+                conn.execute(f"UPDATE jobs SET {', '.join(updates)} WHERE id=?", up_params)
 
         conn.commit()
 

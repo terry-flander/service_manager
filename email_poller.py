@@ -667,6 +667,7 @@ def poll_once(app, force=False):
                                 parsed['subject'], parsed['from_email'],
                                 body, existing_job_id, received_at)
                             log.info(f"Thread follow-up logged for job {existing_job_id}")
+                            imap.store(num, '+FLAGS', '\\Seen')
                         else:
                             # New booking — create job
                             if parsed['name'] == 'Unknown':
@@ -679,12 +680,16 @@ def poll_once(app, force=False):
                                 """, (message_id, thread_id, parsed['subject'],
                                         parsed['from_email'], body[:4000]))
                                 db_conn.commit()
+                                # Leave unread — could not parse, needs manual review
+                                imap.store(num, '-FLAGS', '\\Seen')
                                 continue
                             if _create_job(db_conn, parsed, message_id,
                                            thread_id, in_reply_to):
                                 imported += 1
-
-                imap.store(num, '+FLAGS', '\\Seen')
+                                imap.store(num, '+FLAGS', '\\Seen')
+                            else:
+                                # Job creation failed — restore unread
+                                imap.store(num, '-FLAGS', '\\Seen')
         else:
             log.info(f"No unread messages in '{label}'")
 

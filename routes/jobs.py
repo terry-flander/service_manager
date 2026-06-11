@@ -185,27 +185,29 @@ def index():
     user_id   = _sess.get('user_id')
     PREFS_KEY = f'job_filter_{user_id}'
 
-    status    = request.args.get('status', '')
-    region_id = request.args.get('region_id', '')
-    job_type  = request.args.get('job_type', '')
-    date_from = request.args.get('date_from', '')
-    date_to   = request.args.get('date_to', '')
-    sort      = request.args.get('sort', 'date')
+    status       = request.args.get('status', '')
+    job_type     = request.args.get('job_type', '')
+    payment_type = request.args.get('payment_type', '')
+    date_from    = request.args.get('date_from', '')
+    date_to      = request.args.get('date_to', '')
+    search       = request.args.get('search', '').strip()
+    gross_min    = request.args.get('gross_min', '').strip()
+    gross_max    = request.args.get('gross_max', '').strip()
+    sort         = request.args.get('sort', 'paid')
 
     SORT_MAP = {
-        'scheduled': 'j.scheduled_date ASC, j.scheduled_time',
-        'paid':      'j.paid_date',
-        'ref':       'j.reference',
-        'type':      'j.job_type',
-        'customer':  'j.customer_name',
-        'gross':     'total_sort',   # post-query
-        'payment':   'j.payment_type',
-        'amount':    'j.amount_paid',
-        'status':    'j.status',
-        'region':    'r.name',
-        # legacy compat
-        'date':      'j.scheduled_date ASC, j.scheduled_time',
-        'total':     'total_sort',
+        'scheduled':  'j.scheduled_date ASC, j.scheduled_time',
+        'paid':       'j.paid_date',
+        'ref':        'j.reference',
+        'invoice':    'j.invoice_number',
+        'type':       'j.job_type',
+        'customer':   'j.customer_name',
+        'gross':      'total_sort',
+        'payment':    'j.payment_type',
+        'amount':     'j.amount_paid',
+        'status':     'j.status',
+        'date':       'j.scheduled_date ASC, j.scheduled_time',
+        'total':      'total_sort',
     }
     if sort not in SORT_MAP:
         sort = 'paid'
@@ -214,17 +216,17 @@ def index():
 
     with get_db() as conn:
         if has_params:
-            # Save current filter selection to settings
-            prefs = {'status': status, 'region_id': region_id,
-                     'job_type': job_type, 'date_from': date_from,
-                     'date_to': date_to, 'sort': sort}
+            prefs = {'status': status, 'job_type': job_type,
+                     'payment_type': payment_type,
+                     'date_from': date_from, 'date_to': date_to,
+                     'search': search, 'gross_min': gross_min,
+                     'gross_max': gross_max, 'sort': sort}
             conn.execute(
                 "INSERT INTO settings (key,value) VALUES (?,?) "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                 (PREFS_KEY, _json.dumps(prefs)))
             conn.commit()
         else:
-            # No params — restore saved filters and redirect immediately
             row = conn.execute(
                 "SELECT value FROM settings WHERE key=?",
                 (PREFS_KEY,)).fetchone()
@@ -246,25 +248,27 @@ def index():
             LEFT JOIN customers c ON j.customer_id = c.id
             WHERE 1=1
         """
-        # Exclude void unless explicitly filtered to void
-        if job_type != 'void' and status != 'void':
-            query += " AND j.status != 'void'"
+        if job_type != 'lost' and status != 'lost':
+            query += " AND j.status != 'lost'"
         params = []
         if status:
             query += " AND j.status = ?"
             params.append(status)
-        if region_id:
-            query += " AND j.region_id = ?"
-            params.append(int(region_id))
         if job_type:
             query += " AND j.job_type = ?"
             params.append(job_type)
+        if payment_type:
+            query += " AND j.payment_type = ?"
+            params.append(payment_type)
         if date_from:
             query += " AND j.scheduled_date >= ?"
             params.append(date_from)
         if date_to:
             query += " AND j.scheduled_date <= ?"
             params.append(date_to)
+        if search:
+            query += " AND (j.customer_name LIKE ? OR j.customer_phone LIKE ?)"
+            params.extend([f'%{search}%', f'%{search}%'])
         # ORDER BY
         if sort in ('gross', 'total'):
             query += " ORDER BY coalesce(j.paid_date, j.scheduled_date) ASC, j.id DESC"
@@ -275,7 +279,6 @@ def index():
             query += f" ORDER BY {order_col} ASC, j.id DESC"
         jobs_raw = conn.execute(query, params).fetchall()
 
-        # Fetch all parts for these jobs in one query, compute GST-correct totals
         if jobs_raw:
             job_ids   = [j['id'] for j in jobs_raw]
             ph        = ','.join('?' * len(job_ids))
@@ -287,24 +290,32 @@ def index():
 
         from routes.invoice import calc_totals
         jobs = []
+        gmin = float(gross_min) if gross_min else None
+        gmax = float(gross_max) if gross_max else None
         for j in jobs_raw:
             j_parts = parts_map.get(j['id'], []) if jobs_raw else []
             if (j['payment_type'] or '').lower() == 'cash':
                 total = round(sum(p['quantity'] * p['unit_cost'] for p in j_parts), 2)
             else:
                 _, _, total = calc_totals(j_parts, bool(j['tax_inclusive']))
+            # Gross range filter (post-query)
+            if gmin is not None and total < gmin:
+                continue
+            if gmax is not None and total > gmax:
+                continue
             jobs.append((j, total))
 
-        # Post-query sort for computed gross column
         if sort in ('gross', 'total'):
             jobs.sort(key=lambda x: x[1] or 0, reverse=True)
         elif sort == 'amount':
             jobs.sort(key=lambda x: x[0]['amount_paid'] or 0, reverse=True)
 
-        regions = conn.execute("SELECT * FROM regions ORDER BY name").fetchall()
-    return render_template('jobs/index.html', jobs=jobs, regions=regions,
-                           status=status, region_id=region_id, job_type=job_type,
-                           date_from=date_from, date_to=date_to, sort=sort,
+    return render_template('jobs/index.html', jobs=jobs,
+                           status=status, job_type=job_type,
+                           payment_type=payment_type,
+                           date_from=date_from, date_to=date_to,
+                           search=search, gross_min=gross_min, gross_max=gross_max,
+                           sort=sort,
                            TIME_LABELS=TIME_LABELS, JOB_TYPES=JOB_TYPES)
 
 
@@ -417,7 +428,8 @@ def new_job():
         """).fetchall()
     return render_template('jobs/new.html', regions=regions,
                            TIME_SLOTS=TIME_SLOTS, TIME_LABELS=TIME_LABELS,
-                           JOB_TYPES=JOB_TYPES, SERVICE_TYPES=SERVICE_TYPES,
+                           JOB_TYPES={k:v for k,v in JOB_TYPES.items() if k != 'sale'},
+                           SERVICE_TYPES=SERVICE_TYPES,
                            suburbs_list=suburbs_list,
                            today=date.today().isoformat(),
                            prefill_customer=prefill_customer)
@@ -451,10 +463,10 @@ def job_detail(job_id):
         paid_date      = request.form.get('paid_date', '').strip() or None
         amount_paid_s  = request.form.get('amount_paid', '').strip()
         amount_paid    = float(amount_paid_s) if amount_paid_s else None
-        # payment_type: prefer submitted value, fall back to _payment_display, then keep existing
+        # payment_type: prefer hidden field set by Quick Pay JS, fall back to radio
         payment_type   = (request.form.get('payment_type', '').strip()
                           or request.form.get('_payment_display', '').strip()
-                          or job['payment_type'] or None)
+                          or None)
 
         if jt == 'booking':
             sched_date = request.form.get('scheduled_date') or None
@@ -528,10 +540,15 @@ def job_detail(job_id):
             FROM email_replies WHERE job_id=?
             ORDER BY sent_at ASC
         """, (job_id, job_id)).fetchall()
+        # All region dates for this job's region (to detect manual vs region date)
+        region_dates_list = [r['date'] for r in conn.execute(
+            "SELECT date FROM region_dates WHERE region_id=?",
+            (job['region_id'],)).fetchall()] if job['region_id'] else []
 
     return render_template('jobs/detail.html', job=job, job_parts=job_parts,
                            parts=parts, total=total, regions=regions,
                            thread_emails=thread_emails,
+                           region_dates_list=region_dates_list,
                            TIME_SLOTS=TIME_SLOTS, TIME_LABELS=TIME_LABELS,
                            JOB_TYPES=JOB_TYPES)
 
@@ -869,9 +886,10 @@ def email_imports():
             wheres.append("(ei.read = 1 OR ei.read IS NULL)")
         elif filter_ == 'no_reply':
             wheres.append("ei.job_id IS NOT NULL")
-            wheres.append("""NOT EXISTS (
-                SELECT 1 FROM email_replies er WHERE er.job_id = ei.job_id
-            )""")
+            wheres.append("""(
+                SELECT COUNT(*) FROM email_imports ei2
+                WHERE ei2.job_id = ei.job_id
+            ) = 1""")
             wheres.append("ei.status = 'ok'")
 
         if date_from:
@@ -1015,7 +1033,7 @@ def poll_log():
 def status_colors():
     """Admin page to configure per-status badge colours."""
     statuses = ['pending', 'scheduled', 'in_progress', 'complete',
-                'invoiced', 'paid', 'void']
+                'invoiced', 'paid', 'lost']
     defaults = {
         'pending':     '#f59e0b',
         'scheduled':   '#3b82f6',
@@ -1023,7 +1041,7 @@ def status_colors():
         'complete':    '#10b981',
         'invoiced':    '#6b7280',
         'paid':        '#10b981',
-        'void':        '#ef4444',
+        'lost':        '#ef4444',
     }
     if request.method == 'POST':
         with get_db() as conn:
