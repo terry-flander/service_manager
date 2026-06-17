@@ -3,7 +3,7 @@
 {% block topbar_title %}{{ job['reference'] }} — {{ job['customer_name'] }}{% endblock %}
 {% block topbar_actions %}
   {% if job['job_type'] != 'sale' %}<button type="button" class="btn-ghost" onclick="openTypeModal()"><i class="bi bi-arrow-left-right"></i> Type</button>{% endif %}
-  <a href="{{ url_for('invoice.shop_ticket', job_id=job['id']) }}" class="btn-ghost" target="_blank"><i class="bi bi-printer"></i> Print Ticket</a>
+  <a href="{{ url_for('invoice.shop_ticket_print', job_id=job['id']) }}" class="btn-ghost" target="_blank"><i class="bi bi-printer"></i> Print Ticket</a>
   <a href="{{ url_for('invoice.pdf_invoice', job_id=job['id']) }}" class="btn-ghost" target="_blank"><i class="bi bi-file-pdf"></i> Preview Invoice</a>
   <a href="{{ url_for('invoice.xero_csv', job_id=job['id']) }}" class="btn-ghost"><i class="bi bi-download"></i> Xero CSV</a>
   <a href="{{ url_for('email_replies.compose_reply', job_id=job['id']) }}" class="btn-ghost"><i class="bi bi-reply"></i> <span>Reply</span></a>
@@ -79,10 +79,34 @@
     </button>
   </div>
 
-<div style="display:grid; grid-template-columns:42% 1fr; gap:1rem; align-items:start;">
+<style>
+  .detail-grid {
+    display: grid;
+    grid-template-columns: 42% 1fr;
+    grid-template-areas:
+      "left right"
+      "email email";
+    gap: 1rem;
+    align-items: start;
+  }
+  .detail-left  { grid-area: left; }
+  .detail-right { grid-area: right; }
+  .detail-email { grid-area: email; margin-top: 0; }
+
+  /* Mobile: single column stacking via JS body class */
+  body.is-mobile .detail-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "left"
+      "right"
+      "email";
+  }
+</style>
+
+<div class="detail-grid">
 
   <!-- Left column -->
-  <div>
+  <div class="detail-left">
 
 
       <!-- Customer card — read-only -->
@@ -205,6 +229,30 @@
                   {{ st }}
                 </span>
                 {% endif %}
+                {% endfor %}
+              </div>
+            </div>
+            {% endif %}
+
+            <!-- Service Request Types — workshop, editable checkboxes -->
+            {% if is_workshop and SR_PARTS %}
+            {% set current_svc = job['service_types'].split(',') | map('trim') | list if job['service_types'] else [] %}
+            <div class="col-12">
+              <label class="sd-label">Service Request Types</label>
+              <div style="display:flex; flex-wrap:wrap; gap:0.4rem 1rem; margin-top:0.25rem;">
+                {% for p in SR_PARTS %}
+                <label style="display:flex; align-items:center; gap:0.35rem;
+                               cursor:pointer; font-size:0.875rem;">
+                  <input type="checkbox" name="service_types" value="{{ p['name'] }}"
+                         {% if p['name'] in current_svc %}checked{% endif %}
+                         style="accent-color:var(--sd-accent); width:14px; height:14px;">
+                  {{ p['name'] }}
+                  {% if p['unit_cost'] > 0 %}
+                  <span style="font-size:0.75rem; color:var(--sd-muted);">
+                    ${{ '%.2f'|format(p['unit_cost']) }}
+                  </span>
+                  {% endif %}
+                </label>
                 {% endfor %}
               </div>
             </div>
@@ -371,7 +419,7 @@
   </div><!-- /left column -->
 
   <!-- Right column -->
-  <div>
+  <div class="detail-right">
     <!-- Status & Payment — now part of main save form, above Parts Used -->
     {% if not is_sale %}
     <div class="sd-card mb-3">
@@ -553,22 +601,30 @@
       style="display:none;"></form>
 
 <!-- Email Thread — full width below grid -->
-<div style="margin-top:0.75rem; grid-column:1/-1;">
-    <!-- Email Thread — collapsed by default -->
-        {% if thread_emails %}
-        <div class="sd-card" style="margin-top:0.75rem;">
-          <div class="sd-card-header" onclick="toggleThread()"
-               style="cursor:pointer; user-select:none;">
-            <span>
-              <i class="bi bi-envelope" style="margin-right:0.4rem; color:var(--sd-muted);"></i>
-              Email Thread
-              <span style="font-size:0.78rem; font-weight:400; color:var(--sd-muted);">
-                {{ thread_emails|length }} message{{ 's' if thread_emails|length != 1 }}
-              </span>
-            </span>
-            <i class="bi bi-chevron-down" id="thread-chevron"
-               style="font-size:0.75rem; color:var(--sd-muted); transition:transform 0.2s;"></i>
-          </div>
+<div class="detail-email">
+    {% if thread_emails %}
+    <div class="sd-card" style="margin-top:0.75rem;">
+      <div class="sd-card-header" onclick="toggleThread()"
+           style="cursor:pointer; user-select:none;">
+        <span>
+          <i class="bi bi-envelope" style="margin-right:0.4rem; color:var(--sd-muted);"></i>
+          Email Thread
+          <span style="font-size:0.78rem; font-weight:400; color:var(--sd-muted);">
+            {{ thread_emails|length }} message{{ 's' if thread_emails|length != 1 }}
+          </span>
+        </span>
+        <div style="display:flex; align-items:center; gap:0.5rem;">
+          <button type="button" class="btn-ghost"
+                  style="padding:0.2rem 0.6rem; font-size:0.75rem;"
+                  onclick="event.stopPropagation();
+                           openEmailThread('{{ url_for('jobs.email_thread_job', job_id=job['id']) }}',
+                                           '{{ job['reference'] }} — Conversation')">
+            <i class="bi bi-chat-left-text"></i> View Conversation
+          </button>
+          <i class="bi bi-chevron-down" id="thread-chevron"
+             style="font-size:0.75rem; color:var(--sd-muted); transition:transform 0.2s;"></i>
+        </div>
+      </div>
           <div id="thread-body" style="display:none;">
             {% for em in thread_emails %}
             <div style="padding:0.875rem 1.25rem;

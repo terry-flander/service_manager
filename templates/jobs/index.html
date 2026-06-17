@@ -2,80 +2,140 @@
 {% block title %}Jobs{% endblock %}
 {% block topbar_title %}Jobs{% endblock %}
 {% block topbar_actions %}
-  <a href="{{ url_for('jobs.new_job') }}" class="btn-accent"><i class="bi bi-plus-lg"></i> New Job</a>
+  <a href="{{ url_for('calendar.index') }}" class="btn-ghost hide-mobile">
+    <i class="bi bi-calendar3"></i><span> Calendar</span>
+  </a>
+  <a href="{{ url_for('jobs.new_sale') }}" class="btn-ghost hide-mobile">
+    <i class="bi bi-cash-coin"></i><span> Cash Sale</span>
+  </a>
+  <a href="{{ url_for('jobs.new_job') }}" class="btn-accent">
+    <i class="bi bi-plus-lg"></i><span> New Job</span>
+  </a>
+{% endblock %}
+
+{% block head %}
+<style>
+  /* Hide topbar links on mobile (bottom nav handles them) */
+  body.is-mobile .hide-mobile { display: none !important; }
+
+  /* ── Filter panel ── */
+  #filter-body {
+    padding: 1rem 1.25rem;
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+  #filter-body.collapsed { display: none; }
+
+  /* Active filter summary bar */
+  #filter-summary {
+    display: none;
+    padding: 0.5rem 1.25rem;
+    font-size: 0.8rem;
+    color: var(--sd-muted);
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  #filter-summary.visible { display: flex; }
+  .filter-chip {
+    background: rgba(234,88,12,0.12);
+    color: var(--sd-accent);
+    border: 1px solid rgba(234,88,12,0.3);
+    border-radius: 4px;
+    padding: 0.1rem 0.45rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+</style>
 {% endblock %}
 
 {% block content %}
-<!-- Filters -->
-<div class="sd-card mb-3">
-  <div class="sd-card-header">Filters</div>
-  <div style="padding:1rem 1.25rem; display:flex; gap:0.75rem; align-items:flex-end; flex-wrap:wrap;">
 
-    <!-- Search -->
-    <div style="flex:1; min-width:180px;">
+{%- set has_filters = search or status or job_type or payment_type or date_from or date_to or gross_min or gross_max -%}
+
+<!-- Filter card -->
+<div class="sd-card mb-3">
+  <!-- Header — always visible, click to toggle -->
+  <div class="sd-card-header" id="filter-header"
+       style="cursor:pointer; user-select:none;"
+       onclick="toggleFilters()">
+    <span>
+      <i class="bi bi-funnel" style="margin-right:0.35rem;"></i>Filters
+      {% if has_filters %}
+      <span class="filter-chip" style="margin-left:0.4rem;">Active</span>
+      {% endif %}
+    </span>
+    <i class="bi bi-chevron-down" id="filter-chevron"
+       style="transition:transform 0.2s;"></i>
+  </div>
+
+  <!-- Active filter summary (shown when collapsed + filters active) -->
+  <div id="filter-summary" class="{% if has_filters %}visible{% endif %}">
+    {% if search %}<span class="filter-chip">Search: {{ search }}</span>{% endif %}
+    {% if status %}<span class="filter-chip">{{ status|replace('_',' ')|title }}</span>{% endif %}
+    {% if job_type %}<span class="filter-chip">{{ job_type|title }}</span>{% endif %}
+    {% if payment_type %}<span class="filter-chip">{{ payment_type }}</span>{% endif %}
+    {% if date_from or date_to %}<span class="filter-chip">{{ date_from or '…' }} – {{ date_to or '…' }}</span>{% endif %}
+    {% if gross_min or gross_max %}<span class="filter-chip">${{ gross_min or '0' }} – ${{ gross_max or '∞' }}</span>{% endif %}
+    <a href="#" onclick="expandFilters(); return false;"
+       style="font-size:0.75rem; color:var(--sd-accent); margin-left:auto;">Edit</a>
+  </div>
+
+  <!-- Filter inputs -->
+  <div id="filter-body">
+    <div style="flex:1; min-width:160px;">
       <label class="sd-label">Customer / Phone</label>
       <input type="text" id="filter-search" class="sd-input"
              placeholder="Name or phone…" value="{{ search }}"
              onkeydown="if(event.key==='Enter') applyFilters()">
     </div>
-
-    <!-- Status -->
     <div>
       <label class="sd-label">Status</label>
-      <select class="sd-input" style="width:150px;" id="filter-status">
+      <select class="sd-input" style="width:140px;" id="filter-status">
         <option value="">All statuses</option>
         {% for s in ['pending','scheduled','in_progress','complete','invoiced','paid','lost'] %}
         <option value="{{ s }}" {% if status == s %}selected{% endif %}>{{ s|replace('_',' ')|title }}</option>
         {% endfor %}
       </select>
     </div>
-
-    <!-- Job Type -->
     <div>
       <label class="sd-label">Type</label>
-      <select class="sd-input" style="width:140px;" id="filter-type">
+      <select class="sd-input" style="width:130px;" id="filter-type">
         <option value="">All types</option>
         {% for key, info in JOB_TYPES.items() %}
         <option value="{{ key }}" {% if job_type == key %}selected{% endif %}>{{ info.label }}</option>
         {% endfor %}
       </select>
     </div>
-
-    <!-- Payment Type -->
     <div>
       <label class="sd-label">Payment</label>
-      <select class="sd-input" style="width:130px;" id="filter-payment">
+      <select class="sd-input" style="width:120px;" id="filter-payment">
         <option value="">All payments</option>
         {% for pt in ['EFTPOS','Cash','Transfer','VISA','MASTERCARD','AMEX'] %}
         <option value="{{ pt }}" {% if payment_type == pt %}selected{% endif %}>{{ pt }}</option>
         {% endfor %}
       </select>
     </div>
-
-    <!-- Date range -->
     <div>
       <label class="sd-label">From</label>
-      <input type="date" id="filter-date-from" class="sd-input" style="width:140px;"
-             value="{{ date_from }}">
+      <input type="date" id="filter-date-from" class="sd-input" style="width:135px;" value="{{ date_from }}">
     </div>
     <div>
       <label class="sd-label">To</label>
-      <input type="date" id="filter-date-to" class="sd-input" style="width:140px;"
-             value="{{ date_to }}">
+      <input type="date" id="filter-date-to" class="sd-input" style="width:135px;" value="{{ date_to }}">
     </div>
-
-    <!-- Gross range -->
     <div>
       <label class="sd-label">Gross $min</label>
-      <input type="number" id="filter-gross-min" class="sd-input" style="width:90px;"
+      <input type="number" id="filter-gross-min" class="sd-input" style="width:85px;"
              step="0.01" min="0" placeholder="0.00" value="{{ gross_min }}">
     </div>
     <div>
       <label class="sd-label">Gross $max</label>
-      <input type="number" id="filter-gross-max" class="sd-input" style="width:90px;"
+      <input type="number" id="filter-gross-max" class="sd-input" style="width:85px;"
              step="0.01" min="0" placeholder="any" value="{{ gross_max }}">
     </div>
-
     <button class="btn-accent" onclick="applyFilters()">
       <i class="bi bi-funnel"></i> Apply
     </button>
@@ -98,19 +158,20 @@
                              'search': search,
                              'gross_min': gross_min, 'gross_max': gross_max,
                              'date_from': date_from, 'date_to': date_to} %}
-        {% for col_key, col_label, right_align in [
-            ('scheduled', 'Scheduled',       false),
-            ('paid',      'Date Paid',       false),
-            ('ref',       'Reference',       false),
-            ('invoice',   'Invoice #',       false),
-            ('type',      'Type',            false),
-            ('customer',  'Customer',        false),
-            ('gross',     'Gross',           true),
-            ('payment',   'Payment',         false),
-            ('amount',    'Amount Paid',     true),
-            ('status',    'Status',          false)] %}
+        {% for col_key, col_label, right_align, mobile_hide in [
+            ('scheduled', 'Scheduled',   false, false),
+            ('paid',      'Date Paid',   false, true),
+            ('ref',       'Reference',   false, false),
+            ('invoice',   'Invoice #',   false, true),
+            ('type',      'Type',        false, false),
+            ('customer',  'Customer',    false, false),
+            ('gross',     'Gross',       true,  true),
+            ('payment',   'Payment',     false, true),
+            ('amount',    'Amount Paid', true,  true),
+            ('status',    'Status',      false, false)] %}
         {% set is_active = sort == col_key %}
-        <th {% if right_align %}style="text-align:right;"{% endif %}>
+        <th {% if right_align %}style="text-align:right;"{% endif %}
+            {% if mobile_hide %}class="col-mobile-hide"{% endif %}>
           <a href="{{ url_for('jobs.index', sort=col_key, **cur_params) }}"
              style="text-decoration:none; white-space:nowrap; display:inline-flex;
                     align-items:center; gap:0.3rem;
@@ -130,7 +191,7 @@
         <td class="mono" style="font-size:0.82rem; white-space:nowrap;">
           {{ job['scheduled_date']|fmt_date('dmy') if job['scheduled_date'] else '—' }}
         </td>
-        <td class="mono" style="font-size:0.82rem; white-space:nowrap;">
+        <td class="mono col-mobile-hide" style="font-size:0.82rem; white-space:nowrap;">
           {{ job['paid_date']|fmt_date('dmy') if job['status'] == 'paid' and job['paid_date'] else '—' }}
         </td>
         <td>
@@ -139,7 +200,7 @@
             {{ job['reference'] }}
           </a>
         </td>
-        <td class="mono" style="font-size:0.8rem; color:var(--sd-muted);">
+        <td class="mono col-mobile-hide" style="font-size:0.8rem; color:var(--sd-muted);">
           {{ job['invoice_number'] or '' }}
         </td>
         <td style="font-size:0.82rem;">
@@ -151,11 +212,11 @@
           </span>
         </td>
         <td style="font-size:0.875rem;">{{ job['customer_name'] }}</td>
-        <td class="mono" style="text-align:right; font-size:0.85rem;">
+        <td class="mono col-mobile-hide" style="text-align:right; font-size:0.85rem;">
           {% if total %}${{ '%.2f'|format(total) }}{% else %}<span style="color:var(--sd-muted);">—</span>{% endif %}
         </td>
-        <td style="font-size:0.82rem;">{{ job['payment_type'] or '—' }}</td>
-        <td class="mono" style="text-align:right; font-size:0.85rem;">
+        <td class="col-mobile-hide" style="font-size:0.82rem;">{{ job['payment_type'] or '—' }}</td>
+        <td class="mono col-mobile-hide" style="text-align:right; font-size:0.85rem;">
           {% if job['amount_paid'] %}
             <span style="color:#34d399;">${{ '%.2f'|format(job['amount_paid']) }}</span>
           {% else %}<span style="color:var(--sd-muted);">—</span>{% endif %}
@@ -176,6 +237,46 @@
 
 {% block scripts %}
 <script>
+// ── Filter panel collapse ─────────────────────────────────────────────────────
+const FILTER_KEY = 'jobs_filter_open';
+
+function setFilterState(open, animate) {
+  const body    = document.getElementById('filter-body');
+  const chevron = document.getElementById('filter-chevron');
+  const summary = document.getElementById('filter-summary');
+  const hasFilters = {{ 'true' if has_filters else 'false' }};
+
+  if (open) {
+    body.classList.remove('collapsed');
+    if (summary) summary.classList.remove('visible');
+    if (chevron) chevron.style.transform = 'rotate(180deg)';
+  } else {
+    body.classList.add('collapsed');
+    if (summary && hasFilters) summary.classList.add('visible');
+    if (chevron) chevron.style.transform = 'rotate(0deg)';
+  }
+  try { localStorage.setItem(FILTER_KEY, open ? '1' : '0'); } catch(e) {}
+}
+
+function toggleFilters() {
+  const body = document.getElementById('filter-body');
+  setFilterState(body.classList.contains('collapsed'), true);
+}
+
+function expandFilters() {
+  setFilterState(true, true);
+}
+
+// On load: mobile defaults collapsed, desktop defaults open
+(function() {
+  var saved = null;
+  try { saved = localStorage.getItem(FILTER_KEY); } catch(e) {}
+  var isMobile = window.innerWidth <= 768;
+  var open = saved !== null ? saved === '1' : !isMobile;
+  setFilterState(open, false);
+})();
+
+// ── Apply filters ─────────────────────────────────────────────────────────────
 function applyFilters() {
   const search    = document.getElementById('filter-search').value;
   const status    = document.getElementById('filter-status').value;

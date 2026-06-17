@@ -186,6 +186,7 @@
             {% else %}—{% endif %}
           </td>
           <td onclick="event.stopPropagation();">
+            <div style="display:flex; gap:0.3rem; align-items:center;">
             {% if imp['body'] %}
             <button onclick="openEmailPopup('{{ url_for('jobs.email_message', import_id=imp['id']) }}')"
                     class="btn-ghost"
@@ -193,6 +194,16 @@
               <i class="bi bi-envelope-open"></i>
             </button>
             {% endif %}
+            {% if imp['job_id'] %}
+            <button onclick="openEmailThread('{{ url_for('jobs.email_thread_job', job_id=imp['job_id']) }}',
+                                             '{{ imp['subject']|replace("'","\\'")|truncate(40) }}')"
+                    class="btn-ghost"
+                    style="padding:0.2rem 0.5rem; font-size:0.75rem; white-space:nowrap;"
+                    title="View full conversation">
+              <i class="bi bi-chat-left-text"></i>
+            </button>
+            {% endif %}
+            </div>
           </td>
         </tr>
         {% else %}

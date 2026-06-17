@@ -239,3 +239,25 @@ def shop_ticket_file(job_id):
     fname = f"ticket-{job['reference'].lower()}.pdf"
     return send_file(buf, mimetype='application/pdf',
                      as_attachment=False, download_name=fname)
+
+
+@invoice_bp.route('/jobs/<int:job_id>/ticket/print')
+def shop_ticket_print(job_id):
+    """HTML shop ticket — A5 portrait, opens browser print dialog on button click."""
+    with get_db() as conn:
+        job = conn.execute("""
+            SELECT j.*, r.name as region_name
+            FROM jobs j
+            JOIN regions r ON j.region_id = r.id
+            WHERE j.id=?
+        """, (job_id,)).fetchone()
+        job_parts = conn.execute(
+            "SELECT * FROM job_parts WHERE job_id=? ORDER BY id",
+            (job_id,)).fetchall()
+    if not job:
+        return "Job not found", 404
+
+    return render_template('invoice/shop_ticket_print.html',
+                           job=dict(job),
+                           job_parts=[dict(p) for p in job_parts],
+                           today=date.today())

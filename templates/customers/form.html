@@ -11,6 +11,11 @@
      class="btn-ghost">
     <i class="bi bi-person-dash"></i> Merge
   </a>
+  <button type="button" class="btn-ghost"
+          onclick="openEmailThread('{{ url_for('jobs.email_thread_customer', customer_id=customer['id']) }}',
+                                   '{{ customer['name']|replace("'","\\'") }} — All Emails')">
+    <i class="bi bi-chat-left-text"></i> Emails
+  </button>
   {% endif %}
 {% endblock %}
 
