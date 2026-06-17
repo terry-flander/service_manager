@@ -362,7 +362,19 @@ def new_job():
                     _suburb       = '' if job_type == 'rental' else suburb
                     _region_id    = region_id
                     _bike_desc    = '' if job_type == 'rental' else request.form.get('bike_description', '')
-                    _svc_types    = '' if job_type == 'rental' else ', '.join(request.form.getlist('service_types'))
+                    # service_types: for workshop, only accept SR- part names to avoid
+                    # picking up hidden booking SERVICE_TYPES checkboxes in the form
+                    if job_type == 'workshop':
+                        _sr_names = {r['name'] for r in conn.execute(
+                            "SELECT name FROM parts WHERE active=1 AND part_number LIKE 'SR-%'"
+                        ).fetchall()}
+                        _svc_types = ', '.join(
+                            v for v in request.form.getlist('service_types')
+                            if v in _sr_names)
+                    elif job_type == 'rental':
+                        _svc_types = ''
+                    else:
+                        _svc_types = ', '.join(request.form.getlist('service_types'))
                     conn.execute("""
                         INSERT INTO jobs (reference, job_type, customer_id, customer_name,
                             customer_email, customer_phone, suburb, address, description,
@@ -378,15 +390,21 @@ def new_job():
                     job_id = conn.execute(
                         "SELECT id FROM jobs WHERE reference=?", (ref,)).fetchone()['id']
 
-                    # Auto-add a job_part for each selected service type (booking only)
-                    selected_types = request.form.getlist('service_types') if job_type == 'booking' else []
+                    # Auto-add a job_part for each selected service type
+                    # Booking: all selected types; Workshop: SR- parts with unit_cost > 0
+                    selected_types = request.form.getlist('service_types') \
+                                     if job_type in ('booking', 'workshop') else []
                     for stype in selected_types:
                         part = conn.execute(
                             """SELECT id, name, part_number, unit_cost FROM parts
                                 WHERE LOWER(name) = LOWER(?) AND active = 1
+                                AND (? = 'booking' OR part_number LIKE 'SR-%')
                                 LIMIT 1""",
-                            (stype,)).fetchone()
+                            (stype, job_type)).fetchone()
                         if part:
+                            # Workshop SR- parts: only add to job_parts if billable
+                            if job_type == 'workshop' and part['unit_cost'] == 0:
+                                continue  # cost=0 → reference only in service_types
                             conn.execute(
                                 """INSERT INTO job_parts
                                     (job_id, part_id, description, part_number,
@@ -426,10 +444,16 @@ def new_job():
             FROM suburbs s JOIN regions r ON s.region_id=r.id
             ORDER BY s.name
         """).fetchall()
+        sr_parts = conn.execute("""
+            SELECT name, part_number, unit_cost FROM parts
+            WHERE active=1 AND part_number LIKE 'SR-%'
+            ORDER BY name
+        """).fetchall()
     return render_template('jobs/new.html', regions=regions,
                            TIME_SLOTS=TIME_SLOTS, TIME_LABELS=TIME_LABELS,
                            JOB_TYPES={k:v for k,v in JOB_TYPES.items() if k != 'sale'},
                            SERVICE_TYPES=SERVICE_TYPES,
+                           SR_PARTS=sr_parts,
                            suburbs_list=suburbs_list,
                            today=date.today().isoformat(),
                            prefill_customer=prefill_customer)
@@ -468,6 +492,7 @@ def job_detail(job_id):
                           or request.form.get('_payment_display', '').strip()
                           or None)
 
+        svc_types = ''  # only set for workshop below
         if jt == 'booking':
             sched_date = request.form.get('scheduled_date') or None
             sched_time = request.form.get('scheduled_time') or None
@@ -475,11 +500,16 @@ def job_detail(job_id):
             end_date   = None
             region_id  = int(request.form.get('region_id') or job['region_id'])
         elif jt == 'workshop':
-            sched_date = request.form.get('scheduled_date') or None
-            sched_time = None
-            end_time   = None
-            end_date   = None
-            region_id  = job['region_id']
+            sched_date  = request.form.get('scheduled_date') or None
+            sched_time  = None
+            end_time    = None
+            end_date    = None
+            region_id   = job['region_id']
+            # service_types: comma-separated names of selected SR- parts
+            # Detail only updates the field — does NOT touch job_parts
+            svc_types = ', '.join(
+                n.strip() for n in request.form.getlist('service_types') if n.strip()
+            )
         else:  # rental
             sched_date = request.form.get('scheduled_date') or None
             end_date   = request.form.get('end_date') or None
@@ -494,13 +524,16 @@ def job_detail(job_id):
                     scheduled_date=?, scheduled_time=?, end_time=?, end_date=?,
                     region_id=?, tax_inclusive=?, notes=?,
                     status=?, invoice_number=?,
-                    paid_date=?, amount_paid=?, payment_type=?
+                    paid_date=?, amount_paid=?, payment_type=?,
+                    service_types=CASE WHEN job_type='workshop'
+                                       THEN ? ELSE service_types END
                 WHERE id=?
             """, (description, bike_desc, address,
                   sched_date, sched_time, end_time, end_date,
                   region_id, tax_incl, notes,
                   new_status, invoice_number,
                   paid_date, amount_paid, payment_type,
+                  svc_types if jt == 'workshop' else '',
                   job_id))
             if jt == 'sale':
                 wconn.execute(
@@ -544,11 +577,17 @@ def job_detail(job_id):
         region_dates_list = [r['date'] for r in conn.execute(
             "SELECT date FROM region_dates WHERE region_id=?",
             (job['region_id'],)).fetchall()] if job['region_id'] else []
+        sr_parts = conn.execute("""
+            SELECT name, part_number, unit_cost FROM parts
+            WHERE active=1 AND part_number LIKE 'SR-%'
+            ORDER BY name
+        """).fetchall()
 
     return render_template('jobs/detail.html', job=job, job_parts=job_parts,
                            parts=parts, total=total, regions=regions,
                            thread_emails=thread_emails,
                            region_dates_list=region_dates_list,
+                           SR_PARTS=sr_parts,
                            TIME_SLOTS=TIME_SLOTS, TIME_LABELS=TIME_LABELS,
                            JOB_TYPES=JOB_TYPES)
 
@@ -1161,3 +1200,50 @@ def backup_db():
         os.unlink(tmp.name)
         flash(f'Backup failed: {e}', 'danger')
         return redirect(url_for('jobs.index'))
+
+
+@jobs_bp.route('/email/thread/<int:job_id>')
+def email_thread_job(job_id):
+    """AJAX: return unified email thread for one job as JSON."""
+    from flask import jsonify
+    with get_db() as conn:
+        job = conn.execute(
+            "SELECT reference FROM jobs WHERE id=?", (job_id,)).fetchone()
+        if not job:
+            return jsonify({'error': 'Not found'}), 404
+        rows = conn.execute("""
+            SELECT 'inbound' as direction, imported_at as ts,
+                   sender as from_addr, subject, body, status, id, ? as job_ref
+            FROM email_imports WHERE job_id=?
+            UNION ALL
+            SELECT 'outbound' as direction, sent_at as ts,
+                   to_address as from_addr, subject, body, 'sent' as status,
+                   id, ? as job_ref
+            FROM email_replies WHERE job_id=?
+            ORDER BY ts ASC
+        """, (job['reference'], job_id, job['reference'], job_id)).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@jobs_bp.route('/email/thread/customer/<int:customer_id>')
+def email_thread_customer(customer_id):
+    """AJAX: return all emails for a customer's jobs, reverse date order."""
+    from flask import jsonify
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT 'inbound' as direction, ei.imported_at as ts,
+                   ei.sender as from_addr, ei.subject, ei.body,
+                   ei.status, ei.id, j.reference as job_ref
+            FROM email_imports ei
+            JOIN jobs j ON j.id = ei.job_id
+            WHERE j.customer_id = ?
+            UNION ALL
+            SELECT 'outbound' as direction, er.sent_at as ts,
+                   er.to_address as from_addr, er.subject, er.body,
+                   'sent' as status, er.id, j.reference as job_ref
+            FROM email_replies er
+            JOIN jobs j ON j.id = er.job_id
+            WHERE j.customer_id = ?
+            ORDER BY ts DESC
+        """, (customer_id, customer_id)).fetchall()
+    return jsonify([dict(r) for r in rows])

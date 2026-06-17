@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>{{ job['reference'] }} — Shop Ticket</title>
+<style>
+  @page {
+    size: A5 portrait;
+    margin: 8mm;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 10pt;
+    color: #000;
+    background: #fff;
+    padding: 0;
+  }
+
+  /* ── Header ─────────────────────────────────────────────── */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 3mm;
+    margin-bottom: 4mm;
+    border-bottom: 1.5pt solid #808080;
+  }
+
+  .header-logo {
+    width: 20mm;
+    height: auto;
+    filter: grayscale(100%) contrast(200%);
+  }
+
+  .header-title {
+    font-size: 14pt;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+
+  .header-ref {
+    text-align: right;
+  }
+  .header-ref .ref-num {
+    font-size: 9pt;
+    font-weight: 700;
+  }
+  .header-ref .ref-date {
+    font-size: 7.5pt;
+    color: #444;
+  }
+
+  /* ── Fields ─────────────────────────────────────────────── */
+  .field {
+    margin-bottom: 3.5mm;
+  }
+  .field-label {
+    font-size: 6.5pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #555;
+    margin-bottom: 1mm;
+  }
+  .field-value {
+    font-size: 10pt;
+    min-height: 6mm;
+    padding-bottom: 1.5mm;
+  }
+  .field-value.tall {
+    min-height: 10mm;
+  }
+
+  /* ── Parts ───────────────────────────────────────────────── */
+  .section-rule {
+    border: none;
+    border-top: 1pt solid #808080;
+    margin: 4mm 0 2.5mm;
+  }
+  .parts-heading {
+    font-size: 6.5pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #555;
+    margin-bottom: 2mm;
+  }
+
+  table.parts {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9pt;
+  }
+  table.parts thead th {
+    font-size: 6.5pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #555;
+    border-bottom: 0.5pt solid #808080;
+    padding: 0 1mm 1mm 0;
+    text-align: left;
+  }
+  table.parts thead th.r { text-align: right; }
+  table.parts tbody td {
+    padding: 1.5mm 1mm 1.5mm 0;
+    border-bottom: 0.3pt solid #808080;
+    vertical-align: top;
+  }
+  table.parts tbody td.r { text-align: right; }
+  table.parts tbody tr.blank td {
+    height: 8mm;
+    border-bottom: 0.3pt solid #808080;
+  }
+
+  /* ── Screen chrome ───────────────────────────────────────── */
+  @media print {
+    .no-print { display: none !important; }
+    * {
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+  }
+  @media screen {
+    body {
+      background: #d1d5db;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 10mm;
+      gap: 6mm;
+    }
+    .controls {
+      display: flex;
+      gap: 8px;
+    }
+    .btn {
+      padding: 7px 20px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: 14px;
+      font-family: sans-serif;
+      font-weight: 600;
+    }
+    .btn-print { background: #ea580c; color: #fff; }
+    .btn-close  { background: #374151; color: #d1d5db; }
+    .ticket-sheet {
+      background: #fff;
+      width: 148mm;
+      min-height: 210mm;
+      padding: 8mm;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+    }
+  }
+
+  @media print {
+    .ticket-sheet { display: block; }
+  }
+</style>
+</head>
+<body>
+
+<div class="controls no-print">
+  <button class="btn btn-print" onclick="window.print()">🖨&nbsp; Print</button>
+  <button class="btn btn-close"  onclick="window.close()">Close</button>
+  <span style="font-size:11px; color:#6b7280; align-self:center; margin-left:4px;">
+    For system print dialog: use Safari, or press <strong>⌥⌘P</strong> in Chrome.
+  </span>
+</div>
+
+<div class="ticket-sheet">
+
+  <div class="header">
+    <img class="header-logo"
+         src="/static/img/flying_bike_logo.png"
+         alt="The Flying Bike" onerror="this.style.display='none'">
+    <div class="header-title">SHOP TICKET</div>
+    <div class="header-ref">
+      <div class="ref-num">{{ job['reference'] }}</div>
+      <div class="ref-date">
+        {{ today.strftime('%-d %b %Y') }}
+        {% if job['scheduled_date'] %}
+        <br>Due: {{ job['scheduled_date']|fmt_date('dmy') }}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="field" style="display:flex; justify-content:space-between; align-items:flex-end; gap:4mm;">
+    <div style="flex:1;">
+      <div class="field-label">Name</div>
+      <div class="field-value" style="padding-bottom:0;">{{ job['customer_name'] or '' }}</div>
+    </div>
+    <div style="text-align:right;">
+      <div class="field-label">Phone</div>
+      <div class="field-value" style="padding-bottom:0;">{{ job['customer_phone'] or '' }}</div>
+    </div>
+  </div>
+
+  <div class="field">
+    <div class="field-label">Bike</div>
+    <div class="field-value">{{ job['bike_description'] or '' }}</div>
+  </div>
+
+  {% if job['service_types'] %}
+  <div class="field">
+    <div class="field-label">Service Request Types</div>
+    <div class="field-value">{{ job['service_types'] }}</div>
+  </div>
+  {% endif %}
+
+  <div class="field">
+    <div class="field-label">Services Requested</div>
+    <div class="field-value tall">{{ job['description'] or '' }}</div>
+  </div>
+
+  <div class="field">
+    <div class="field-label">Internal Notes</div>
+    <div class="field-value tall">{{ job['notes'] or '' }}</div>
+  </div>
+
+  <hr class="section-rule">
+  <div class="parts-heading">Services / Parts</div>
+  <table class="parts">
+    <thead>
+      <tr>
+        <th>Description</th>
+        <th class="r">Qty</th>
+        <th class="r">Unit</th>
+        <th class="r">Amount</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in job_parts %}
+      <tr>
+        <td>{{ p['description'] }}</td>
+        <td class="r">{{ '%.2f'|format(p['quantity']) }}</td>
+        <td class="r">${{ '%.2f'|format(p['unit_cost']) }}</td>
+        <td class="r">${{ '%.2f'|format(p['quantity'] * p['unit_cost']) }}</td>
+      </tr>
+      {% endfor %}
+      {% set printed = job_parts|length %}
+      {% set min_rows = 5 %}
+      {% for _ in range([min_rows - printed, 0]|max) %}
+      <tr class="blank"><td></td><td></td><td></td><td></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <!-- JS fills remaining page height with blank rows before print -->
+  <div id="stretch-anchor"></div>
+
+</div><!-- /ticket-sheet -->
+
+<script>
+(function() {
+  var ROW_H = 8; // mm per blank row — matches CSS height:8mm on tr.blank
+  var MM_TO_PX = 3.7795; // approximate at 96dpi screen
+
+  function addRows() {
+    var anchor  = document.getElementById('stretch-anchor');
+    var sheet   = document.querySelector('.ticket-sheet');
+    var tbody   = document.querySelector('table.parts tbody');
+    if (!anchor || !sheet || !tbody) return;
+
+    var sheetBottom = sheet.getBoundingClientRect().bottom;
+    var anchorTop   = anchor.getBoundingClientRect().top;
+    var remaining   = sheetBottom - anchorTop; // px available
+
+    var rowPx  = ROW_H * MM_TO_PX;
+    var count  = Math.max(0, Math.floor(remaining / rowPx) - 3);
+
+    for (var i = 0; i < count; i++) {
+      var tr = document.createElement('tr');
+      tr.className = 'blank';
+      tr.innerHTML = '<td></td><td></td><td></td><td></td>';
+      tbody.appendChild(tr);
+    }
+  }
+
+  // Run after layout is complete
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', addRows);
+  } else {
+    addRows();
+  }
+})();
+</script>
+
+</body>
+</html>

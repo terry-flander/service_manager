@@ -133,6 +133,7 @@ def search():
             FROM parts
             WHERE active = 1
               AND (name LIKE ? OR part_number LIKE ?)
+              AND part_number NOT LIKE 'SR-%'
             ORDER BY
               CASE WHEN LOWER(name) LIKE LOWER(?) THEN 0 ELSE 1 END,
               name

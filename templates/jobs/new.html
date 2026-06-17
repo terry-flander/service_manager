@@ -114,6 +114,28 @@
               <input type="text" name="bike_description" class="sd-input"
                      placeholder="e.g. 2022 Trek Domane, Giant eBike…">
             </div>
+
+            <!-- Service Request Types — workshop only -->
+            {% if SR_PARTS %}
+            <div class="col-12" id="sr-types-col" style="display:none;">
+              <label class="sd-label">Service Request Types</label>
+              <div style="display:flex; flex-wrap:wrap; gap:0.4rem 1rem; margin-top:0.25rem;">
+                {% for p in SR_PARTS %}
+                <label style="display:flex; align-items:center; gap:0.35rem;
+                               cursor:pointer; font-size:0.875rem;">
+                  <input type="checkbox" name="service_types" value="{{ p['name'] }}"
+                         style="accent-color:var(--sd-accent); width:14px; height:14px;">
+                  {{ p['name'] }}
+                  {% if p['unit_cost'] > 0 %}
+                  <span style="font-size:0.75rem; color:var(--sd-muted);">
+                    ${{ '%.2f'|format(p['unit_cost']) }}
+                  </span>
+                  {% endif %}
+                </label>
+                {% endfor %}
+              </div>
+            </div>
+            {% endif %}
           </div>
         </div>
 
@@ -477,6 +499,10 @@ function updateJobType(type) {
   // Booking date mode row
   const modeRow = document.getElementById('booking-mode-row');
   if (modeRow) modeRow.style.display = isBooking ? '' : 'none';
+
+  // SR- Service Request Types — workshop only
+  const srCol = document.getElementById('sr-types-col');
+  if (srCol) srCol.style.display = isWorkshop ? '' : 'none';
 
   // Region + suburb + time slots: booking only
   [document.getElementById('region-col'),

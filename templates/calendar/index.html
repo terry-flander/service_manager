@@ -2,6 +2,12 @@
 {% block title %}Calendar{% endblock %}
 {% block topbar_title %}Job Calendar{% endblock %}
 {% block topbar_actions %}
+  <a href="{{ url_for('jobs.index') }}" class="btn-ghost hide-mobile">
+    <i class="bi bi-list-ul"></i><span> Jobs</span>
+  </a>
+  <a href="{{ url_for('jobs.new_sale') }}" class="btn-ghost hide-mobile">
+    <i class="bi bi-cash-coin"></i><span> Cash Sale</span>
+  </a>
   <a href="{{ url_for('jobs.new_job') }}" class="btn-accent">
     <i class="bi bi-plus-lg"></i> New Job
   </a>
@@ -10,6 +16,7 @@
 {% block head %}
 <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet">
 <style>
+  body.is-mobile .hide-mobile { display: none !important; }
   #calendar-wrap {
     background: var(--sd-surface);
     border: 1px solid var(--sd-border);
@@ -99,21 +106,6 @@
 {% endblock %}
 
 {% block content %}
-<div class="legend">
-  <div class="legend-item"><div class="legend-dot" style="background:var(--sc-pending,#f59e0b);"></div> Pending</div>
-  <div class="legend-item"><div class="legend-dot" style="background:var(--sc-scheduled,#3b82f6);"></div> Scheduled</div>
-  <div class="legend-item"><div class="legend-dot" style="background:var(--sc-in_progress,#8b5cf6);"></div> In Progress</div>
-  <div class="legend-item"><div class="legend-dot" style="background:var(--sc-complete,#10b981);"></div> Complete</div>
-  <div class="legend-item"><div class="legend-dot" style="background:var(--sc-invoiced,#6b7280);"></div> Invoiced</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#FFEF00; border:1px solid #ccc;"></div> Region Date</div>
-  <div class="legend-item"><div class="legend-dot" style="background:#6366f1;"></div> Event</div>
-  <div class="legend-item" style="margin-left:auto; color:var(--sd-muted); font-size:0.72rem;">
-    <i class="bi bi-arrows-move"></i> Drag to reschedule &nbsp;·&nbsp;
-    <i class="bi bi-plus-circle"></i> Click all-day area to add region date &nbsp;·&nbsp;
-    <i class="bi bi-calendar-x"></i> Click region date to delete
-  </div>
-</div>
-
 <div id="drag-toast"></div>
 
 <!-- Job info popup -->
@@ -273,6 +265,21 @@
 
 <div id="calendar-wrap">
   <div id="calendar"></div>
+</div>
+
+<div class="legend" style="margin-top:1rem;">
+  <div class="legend-item"><div class="legend-dot" style="background:var(--sc-pending,#f59e0b);"></div> Pending</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--sc-scheduled,#3b82f6);"></div> Scheduled</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--sc-in_progress,#8b5cf6);"></div> In Progress</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--sc-complete,#10b981);"></div> Complete</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--sc-invoiced,#6b7280);"></div> Invoiced</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#FFEF00; border:1px solid #ccc;"></div> Region Date</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#6366f1;"></div> Event</div>
+  <div class="legend-item" style="color:var(--sd-muted); font-size:0.72rem; flex-basis:100%; margin-top:0.25rem;">
+    <i class="bi bi-arrows-move"></i> Drag to reschedule &nbsp;·&nbsp;
+    <i class="bi bi-plus-circle"></i> Click all-day area to add region date &nbsp;·&nbsp;
+    <i class="bi bi-calendar-x"></i> Click region date to delete
+  </div>
 </div>
 {% endblock %}
 
@@ -491,12 +498,17 @@ document.addEventListener('DOMContentLoaded', function() {
     return true;
   }
 
+  const isMobile  = window.innerWidth <= 768;
+  const mobileView = 'listWeek';
+
   const calOpts = {
-    initialView: SAVED_VIEW,
+    initialView: isMobile && SAVED_VIEW === 'dayGridMonth' ? mobileView : SAVED_VIEW,
     headerToolbar: {
       left:   'prev,next today',
       center: 'title',
-      right:  'dayGridMonth,timeGridWeek,timeGridDay'
+      right:  isMobile
+                ? 'listWeek,timeGridDay'
+                : 'dayGridMonth,timeGridWeek,timeGridDay,listWeek'
     },
     initialDate: (shouldRestoreDate(SAVED_VIEW, SAVED_DATE) ? SAVED_DATE : undefined),
 

@@ -103,12 +103,13 @@
       padding-top: env(safe-area-inset-top, 0px);
     }
 
-    /* Mobile: sidebar hidden off-screen by default */
-    @media (max-width: 767px) {
-      #sidebar { transform: translateX(-100%); }
-      #sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,0.4); }
-    }
-
+    /* Mobile: sidebar hidden off-screen — applied via JS class on <body> */
+    body.is-mobile #sidebar { transform: translateX(-100%); }
+    body.is-mobile #sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,0.4); }
+    /* Landscape: sidebar slides out from right edge of left rail */
+    body.is-mobile-landscape #sidebar { transform: translateX(-100%); width: 220px; }
+    body.is-mobile-landscape #sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,0.4); }
+    body.is-mobile #main { margin-left: 0; }
     .sidebar-brand { padding: 0; border-bottom: 1px solid var(--sd-border); flex-shrink:0; }
     .sidebar-brand .brand-name { font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:1.1rem; color:var(--sd-accent); letter-spacing:-0.02em; }
     .sidebar-brand .brand-sub  { font-size:0.7rem; color:var(--sd-muted); text-transform:uppercase; letter-spacing:0.1em; margin-top:2px; }
@@ -141,9 +142,7 @@
       min-height: 100vh;
       transition: margin-left 0.25s;
     }
-    @media (max-width: 767px) {
-      #main { margin-left: 0; }
-    }
+    body.is-mobile #main { margin-left: 0; }
 
     /* ── Topbar ── */
     .topbar {
@@ -200,6 +199,105 @@
     @media (max-width: 575px) {
       .page-body { padding: 1rem 0.75rem; }
     }
+    /* Bottom nav spacing on mobile */
+    body.is-mobile .page-body {
+      padding-bottom: calc(70px + env(safe-area-inset-bottom, 0px));
+    }
+
+    /* ── Bottom navigation bar ── */
+    .bottom-nav { display: none; }
+    body.is-mobile .bottom-nav { display: flex; }
+    body.is-mobile .bottom-nav {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: calc(56px + env(safe-area-inset-bottom, 0px));
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+      background: var(--sd-surface);
+      border-top: 1px solid var(--sd-border);
+      z-index: 1000;
+      align-items: stretch;
+      justify-content: space-around;
+    }
+    .bn-item {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      text-decoration: none;
+      color: var(--sd-muted);
+      font-size: 0.65rem;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      padding: 6px 4px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      min-width: 44px;
+      min-height: 44px;
+      transition: color 0.15s;
+    }
+    .bn-item i { font-size: 1.25rem; line-height: 1; }
+    .bn-item.active, .bn-item:active { color: var(--sd-accent); }
+    .bn-item.bn-accent { color: var(--sd-accent); font-weight: 700; }
+    .bn-item.bn-accent i { font-size: 1.5rem; }
+    /* Hide hamburger on all mobile — no hamburger in either orientation */
+    body.is-mobile #hamburger,
+    body.is-mobile-landscape #hamburger { display: none !important; }
+    /* Landscape: hide bottom nav */
+    body.is-mobile-landscape .bottom-nav { display: none !important; }
+    body.is-mobile-landscape .page-body { padding-bottom: 1rem; }
+
+    /* ── Left rail — landscape mobile only ── */
+    .left-rail { display: none; }
+    body.is-mobile-landscape .left-rail {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      position: fixed;
+      top: 0; left: 0; bottom: 0;
+      width: calc(60px + env(safe-area-inset-left, 0px));
+      background: var(--sd-surface);
+      border-right: 1px solid var(--sd-border);
+      z-index: 1000;
+      padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px);
+    }
+    body.is-mobile-landscape #main { margin-left: calc(60px + env(safe-area-inset-left, 0px)); }
+    /* Also offset the landscape sidebar to match */
+    body.is-mobile-landscape #sidebar { left: calc(60px + env(safe-area-inset-left, 0px)); }
+    .lr-item {
+      flex: 0 0 auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      text-decoration: none;
+      color: var(--sd-muted);
+      font-size: 0.55rem;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      padding: 10px 4px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      width: 100%;
+      -webkit-tap-highlight-color: transparent;
+      min-height: 56px;
+      transition: color 0.15s, background 0.15s;
+    }
+    .lr-item i { font-size: 1.3rem; line-height: 1; }
+    .lr-item.active, .lr-item:active { color: var(--sd-accent); background: rgba(249,115,22,0.08); }
+    .lr-item.lr-accent { color: var(--sd-accent); }
+    .lr-item.lr-accent i { font-size: 1.5rem; }
+
+    /* Mobile-hidden table columns — portrait and landscape */
+    body.is-mobile .col-mobile-hide,
+    body.is-mobile-landscape .col-mobile-hide { display: none !important; }
 
     /* ── Cards ── */
     .sd-card { background: var(--sd-surface); border: 1px solid var(--sd-border); border-radius: 8px; overflow: hidden; }
@@ -367,6 +465,26 @@
   {% block head %}{% endblock %}
 </head>
 <body>
+<!-- Mobile class detection — runs immediately so no layout flash -->
+<script>
+(function() {
+  function applyMobile() {
+    var w = window.innerWidth;
+    var h = window.innerHeight;
+    var landscape = w > h;
+    // A device is "mobile" if either dimension is phone-sized (≤ 768px).
+    // This catches iPhone in both portrait (w≤768) and landscape (h≤768).
+    var isMobile = Math.min(w, h) <= 768;
+    document.body.classList.remove('is-mobile', 'is-mobile-landscape');
+    if (isMobile) {
+      document.body.classList.add(landscape ? 'is-mobile-landscape' : 'is-mobile');
+    }
+  }
+  applyMobile();
+  window.addEventListener('resize', applyMobile);
+  window.addEventListener('orientationchange', function() { setTimeout(applyMobile, 150); });
+})();
+</script>
 
 <!-- Sidebar overlay (tap to close on mobile) -->
 <div id="sidebar-overlay" onclick="closeSidebar()"></div>
@@ -661,5 +779,177 @@ document.getElementById('email-modal').addEventListener('close', function() {
   });
 })();
 </script>
+<!-- Email thread modal -->
+<dialog id="thread-modal"
+        style="background:var(--sd-surface); border:1px solid var(--sd-border);
+               border-radius:10px; padding:0; width:min(600px,95vw);
+               max-height:85vh; color:var(--sd-text); overflow:hidden;">
+  <div style="display:flex; align-items:center; justify-content:space-between;
+              padding:0.875rem 1.25rem; border-bottom:1px solid var(--sd-border);
+              background:var(--sd-surface2);">
+    <span style="font-weight:600; font-size:0.9rem;">
+      <i class="bi bi-chat-left-text" style="margin-right:0.4rem; color:var(--sd-muted);"></i>
+      <span id="thread-modal-title">Email Conversation</span>
+    </span>
+    <button onclick="document.getElementById('thread-modal').close()"
+            style="background:none; border:none; cursor:pointer; color:var(--sd-muted);
+                   font-size:1.1rem; padding:0.2rem 0.4rem; line-height:1;">
+      <i class="bi bi-x-lg"></i>
+    </button>
+  </div>
+  <div id="thread-modal-body"
+       style="overflow-y:auto; max-height:calc(85vh - 56px); padding:1rem;">
+    <div id="thread-modal-loading"
+         style="text-align:center; color:var(--sd-muted); padding:2rem;">
+      Loading…
+    </div>
+  </div>
+</dialog>
+
+<script>
+function openEmailThread(url, title) {
+  var modal = document.getElementById('thread-modal');
+  var body  = document.getElementById('thread-modal-body');
+  var ttl   = document.getElementById('thread-modal-title');
+  if (ttl) ttl.textContent = title || 'Email Conversation';
+  body.innerHTML = '<div style="text-align:center; color:var(--sd-muted); padding:2rem;">Loading…</div>';
+  modal.showModal();
+
+  fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(msgs) {
+      if (!msgs.length) {
+        body.innerHTML = '<div style="text-align:center; color:var(--sd-muted); padding:2rem;">No messages found.</div>';
+        return;
+      }
+      var html = '';
+      var lastRef = null;
+      msgs.forEach(function(m) {
+        var isOut  = m.direction === 'outbound';
+        var ts     = (m.ts || '').slice(0, 16).replace('T', ' ');
+        // Job reference divider (for customer multi-job view)
+        if (m.job_ref && m.job_ref !== lastRef) {
+          lastRef = m.job_ref;
+          html += '<div style="text-align:center; font-size:0.72rem; font-weight:700;' +
+                  'text-transform:uppercase; letter-spacing:0.08em; color:var(--sd-muted);' +
+                  'margin:0.75rem 0 0.5rem; padding:0.25rem 0;' +
+                  'border-top:1px solid var(--sd-border);">' +
+                  escHtmlThread(m.job_ref) + '</div>';
+        }
+        // Bubble
+        html += '<div style="display:flex; justify-content:' + (isOut ? 'flex-end' : 'flex-start') + '; margin-bottom:0.75rem;">' +
+          '<div style="max-width:82%; background:' +
+            (isOut ? 'rgba(234,88,12,0.12)' : 'var(--sd-slate)') +
+            '; border:1px solid ' +
+            (isOut ? 'rgba(234,88,12,0.25)' : 'var(--sd-border)') +
+            '; border-radius:' + (isOut ? '12px 12px 3px 12px' : '12px 12px 12px 3px') +
+            '; padding:0.6rem 0.85rem;">' +
+            '<div style="font-size:0.72rem; color:var(--sd-muted); margin-bottom:0.3rem; display:flex; gap:0.5rem; flex-wrap:wrap;">' +
+              '<span>' + escHtmlThread(m.from_addr || '') + '</span>' +
+              '<span style="margin-left:auto;">' + escHtmlThread(ts) + '</span>' +
+            '</div>' +
+            '<div style="font-size:0.8rem; font-weight:600; margin-bottom:0.25rem;">' +
+              escHtmlThread(m.subject || '') +
+            '</div>' +
+            '<div style="font-size:0.82rem; white-space:pre-wrap; word-break:break-word; color:var(--sd-text);">' +
+              (function() {
+                var stripped = stripEmailQuotes(m.body || '');
+                var preview  = stripped.slice(0, 800);
+                return escHtmlThread(preview) +
+                       (stripped.length > 800 ? '<span style="color:var(--sd-muted);">…</span>' : '');
+              })() +
+            '</div>' +
+          '</div></div>';
+      });
+      body.innerHTML = html;
+    })
+    .catch(function() {
+      body.innerHTML = '<div style="color:#f87171; padding:1rem;">Error loading conversation.</div>';
+    });
+}
+
+function escHtmlThread(s) {
+  return String(s || '')
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function stripEmailQuotes(text) {
+  if (!text) return '';
+  var lines = text.split('\n');
+  var out = [];
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+    var trimmed = line.trim();
+    // Only stop at quote delimiters if we've already captured some content
+    if (out.length > 0) {
+      if (/^_{3,}/.test(trimmed) ||          // ___ (Outlook)
+          /^-{3,}/.test(trimmed) ||          // ---
+          /^From:\s/i.test(trimmed) ||       // From: header in forwarded
+          /^On .{10,} wrote:/.test(trimmed)) // On ... wrote: (Gmail/Apple)
+      { break; }
+    }
+    // Skip lines that are quoted with >
+    if (/^>/.test(line)) { continue; }
+    out.push(line);
+  }
+  // Trim trailing blank lines
+  while (out.length && !out[out.length - 1].trim()) out.pop();
+  return out.join('\n');
+}
+
+document.getElementById('thread-modal').addEventListener('click', function(e) {
+  if (e.target === this) this.close();
+});
+</script>
+
+<!-- Left rail — landscape mobile only -->
+<nav class="left-rail">
+  <a href="{{ url_for('calendar.index') }}" class="lr-item {% if request.endpoint == 'calendar.index' %}active{% endif %}">
+    <i class="bi bi-calendar3"></i>
+    <span>Calendar</span>
+  </a>
+  <a href="{{ url_for('jobs.index') }}" class="lr-item {% if request.endpoint == 'jobs.index' %}active{% endif %}">
+    <i class="bi bi-list-ul"></i>
+    <span>Jobs</span>
+  </a>
+  <a href="{{ url_for('jobs.new_job') }}" class="lr-item lr-accent {% if request.endpoint == 'jobs.new_job' %}active{% endif %}">
+    <i class="bi bi-plus-circle-fill"></i>
+    <span>New Job</span>
+  </a>
+  <a href="{{ url_for('jobs.new_sale') }}" class="lr-item {% if request.endpoint == 'jobs.new_sale' %}active{% endif %}">
+    <i class="bi bi-cash-coin"></i>
+    <span>Cash Sale</span>
+  </a>
+  <button class="lr-item" onclick="toggleSidebar()" aria-label="Menu">
+    <i class="bi bi-grid-3x3-gap"></i>
+    <span>Menu</span>
+  </button>
+</nav>
+
+<!-- Bottom navigation — portrait mobile only -->
+<nav class="bottom-nav">
+  <a href="{{ url_for('calendar.index') }}" class="bn-item {% if request.endpoint == 'calendar.index' %}active{% endif %}">
+    <i class="bi bi-calendar3"></i>
+    <span>Calendar</span>
+  </a>
+  <a href="{{ url_for('jobs.index') }}" class="bn-item {% if request.endpoint == 'jobs.index' %}active{% endif %}">
+    <i class="bi bi-list-ul"></i>
+    <span>Jobs</span>
+  </a>
+  <a href="{{ url_for('jobs.new_job') }}" class="bn-item bn-accent {% if request.endpoint == 'jobs.new_job' %}active{% endif %}">
+    <i class="bi bi-plus-circle-fill"></i>
+    <span>New Job</span>
+  </a>
+  <a href="{{ url_for('jobs.new_sale') }}" class="bn-item {% if request.endpoint == 'jobs.new_sale' %}active{% endif %}">
+    <i class="bi bi-cash-coin"></i>
+    <span>Cash Sale</span>
+  </a>
+  <button class="bn-item" onclick="toggleSidebar()" aria-label="Menu">
+    <i class="bi bi-grid-3x3-gap"></i>
+    <span>Menu</span>
+  </button>
+</nav>
+
 </body>
 </html>
