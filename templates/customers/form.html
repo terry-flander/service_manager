@@ -19,6 +19,12 @@
   {% endif %}
 {% endblock %}
 
+{% block head %}
+<style>
+.row-link:hover { background: rgba(255,255,255,0.04); }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="row {% if is_edit %}g-3{% else %}justify-content-center{% endif %}">
 
@@ -108,15 +114,14 @@
             <th>Scheduled</th>
             <th>Status</th>
             <th style="text-align:right;">Total</th>
-            <th></th>
           </tr>
         </thead>
         <tbody>
           {% for job in jobs %}
-          <tr>
+          <tr class="row-link" style="cursor:pointer;"
+              onclick="window.location='{{ url_for('jobs.job_detail', job_id=job['id']) }}'">
             <td>
-              <a href="{{ url_for('jobs.job_detail', job_id=job['id']) }}"
-                 class="mono">{{ job['reference'] }}</a>
+              <span class="mono">{{ job['reference'] }}</span>
             </td>
             <td style="font-size:0.83rem; color:var(--sd-muted); max-width:220px;
                         overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
@@ -134,99 +139,16 @@
               {% if job['total'] %}${{ '%.2f'|format(job['total']) }}
               {% else %}<span style="color:var(--sd-muted);">—</span>{% endif %}
             </td>
-            <td>
-              <a href="{{ url_for('jobs.job_detail', job_id=job['id']) }}"
-                 class="btn-ghost" style="padding:0.25rem 0.6rem; font-size:0.8rem;">
-                View
-              </a>
-            </td>
           </tr>
           {% else %}
           <tr>
-            <td colspan="6" style="text-align:center; color:var(--sd-muted); padding:1.5rem;">
+            <td colspan="5" style="text-align:center; color:var(--sd-muted); padding:1.5rem;">
               No jobs for this customer yet.
             </td>
           </tr>
           {% endfor %}
         </tbody>
       </table></div>
-    </div>
-  </div>
-  {% endif %}
-
-  {# ── Email Thread ── #}
-  {% if is_edit and thread_emails is defined and thread_emails %}
-  <div class="col-12" style="margin-top:0.5rem;">
-    <div class="sd-card">
-      <div class="sd-card-header">
-        Email Thread
-        <span style="font-size:0.78rem; font-weight:400; color:var(--sd-muted);">
-          {{ thread_emails|length }} message{{ 's' if thread_emails|length != 1 }}
-        </span>
-      </div>
-      {% for em in thread_emails %}
-      <div style="padding:0.75rem 1.25rem;
-                  {% if not loop.last %}border-bottom:1px solid var(--sd-border);{% endif %}
-                  {% if em['direction'] == 'outbound' %}background:rgba(249,115,22,0.04);{% endif %}
-                  {% if em['body'] %}cursor:pointer;{% endif %}"
-           {% if em['body'] and em['direction'] == 'inbound' %}onclick="openEmailPopup('{{ url_for('jobs.email_message', import_id=em['id']) }}')"{% elif em['body'] and em['direction'] == 'outbound' %}onclick="openEmailPopup('{{ url_for('jobs.email_reply_message', reply_id=em['id']) }}')"{% endif %}>
-        <div style="display:flex; align-items:center; justify-content:space-between;
-                    gap:0.75rem; flex-wrap:wrap;">
-          <div style="display:flex; align-items:center; gap:0.6rem; min-width:0;">
-            <i class="bi bi-{{ 'reply-fill' if em['direction'] == 'outbound' else 'envelope-open' }}"
-               style="color:{{ 'var(--sd-accent)' if em['direction'] == 'outbound' else 'var(--sd-muted)' }};
-                      font-size:0.9rem; flex-shrink:0;"></i>
-            <div style="min-width:0;">
-              <div style="font-size:0.82rem; font-weight:500; white-space:nowrap;
-                          overflow:hidden; text-overflow:ellipsis;">
-                {% if em['direction'] == 'outbound' %}
-                  <span style="color:var(--sd-accent);">Sent</span>
-                  to {{ em['from_addr'] }}
-                {% else %}
-                  <span class="badge-status
-                    {% if em['status'] == 'ok' %}status-complete
-                    {% elif em['status'] == 'thread' %}status-scheduled
-                    {% else %}status-invoiced{% endif %}"
-                    style="font-size:0.65rem; margin-right:0.3rem;">
-                    {{ 'Booking' if em['status'] == 'ok' else 'Reply' }}
-                  </span>
-                  from {{ em['from_addr'] }}
-                {% endif %}
-              </div>
-              <div style="font-size:0.75rem; color:var(--sd-muted); margin-top:0.1rem;
-                          white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                {{ em['subject'] or '(no subject)' }}
-              </div>
-            </div>
-          </div>
-          <div style="display:flex; align-items:center; gap:0.6rem; flex-shrink:0;">
-            <a href="{{ url_for('jobs.job_detail', job_id=em['job_id']) }}"
-               class="mono" style="font-size:0.75rem; color:var(--sd-muted);">
-              {{ em['reference'] }}
-            </a>
-            <span class="mono" style="font-size:0.72rem; color:var(--sd-muted);">
-              {{ em['sent_at'][:16] }}
-            </span>
-            {% if em['body'] and em['direction'] == 'inbound' %}
-            <button onclick="event.stopPropagation(); openEmailPopup('{{ url_for('jobs.email_message', import_id=em['id']) }}')"
-                    class="btn-ghost" style="padding:0.15rem 0.5rem; font-size:0.72rem;">
-              <i class="bi bi-envelope-open"></i> View
-            </button>
-            {% elif em['body'] and em['direction'] == 'outbound' %}
-            <button onclick="event.stopPropagation(); openEmailPopup('{{ url_for('jobs.email_reply_message', reply_id=em['id']) }}')"
-                    class="btn-ghost" style="padding:0.15rem 0.5rem; font-size:0.72rem;">
-              <i class="bi bi-envelope-open"></i> View
-            </button>
-            {% endif %}
-          </div>
-        </div>
-        {% if em['body'] %}
-        <div style="margin-top:0.35rem; margin-left:1.6rem; font-size:0.78rem;
-                    color:var(--sd-muted); white-space:pre-wrap; max-height:2.8rem;
-                    overflow:hidden;">{{ em['body'][:180] }}{% if em['body']|length > 180 %}…{% endif %}</div>
-        {% endif %}
-      </div>
-      {% endfor %}
     </div>
   </div>
   {% endif %}

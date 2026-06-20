@@ -99,13 +99,18 @@ def create_app():
                         "SELECT value FROM settings WHERE key=?",
                         (f'status_color_{_s}',)).fetchone()
                     status_colors[_s] = _row['value'] if _row else _d
+                unread_email_count = _conn.execute(
+                    "SELECT COUNT(*) FROM email_imports WHERE read=1 OR read IS NULL"
+                ).fetchone()[0]
         except Exception:
             status_colors = dict(_defaults)
+            unread_email_count = 0
         return {
             'google_maps_api_key': app.config['GOOGLE_MAPS_API_KEY'],
             'current_user': g.get('user'),
             'theme': session.get('theme', 'dark'),
             'status_colors': status_colors,
+            'unread_email_count': unread_email_count,
         }
 
     # ── DB init + seed ────────────────────────────────────────────────────────

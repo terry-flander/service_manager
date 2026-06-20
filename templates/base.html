@@ -511,6 +511,11 @@
     </a>
     <a href="{{ url_for('jobs.email_imports') }}" class="sidebar-link {% if request.endpoint == 'jobs.email_imports' %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-envelope-arrow-down"></i> Email
+      {% if unread_email_count %}
+      <span style="margin-left:auto; background:var(--sd-accent); color:#fff;
+                   font-size:0.62rem; font-weight:700; border-radius:10px;
+                   padding:0.1rem 0.4rem; line-height:1.4;">{{ unread_email_count }}</span>
+      {% endif %}
     </a>
     <div class="nav-section-label" style="margin-top:0.5rem;">Customers</div>
     <a href="{{ url_for('customers.index') }}" class="sidebar-link {% if request.endpoint in ['customers.index','customers.edit_customer'] %}active{% endif %}" onclick="closeSidebar()">
