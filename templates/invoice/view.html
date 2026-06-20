@@ -3,8 +3,23 @@
 {% block topbar_title %}Invoice — {{ job['reference'] }}{% endblock %}
 {% block topbar_actions %}
   <a href="{{ url_for('jobs.job_detail', job_id=job['id']) }}" class="btn-ghost"><i class="bi bi-arrow-left"></i> Back to Job</a>
-  <a href="{{ url_for('invoice.pdf_invoice', job_id=job['id']) }}" class="btn-accent" target="_blank"><i class="bi bi-file-pdf"></i> PDF Invoice</a>
+  <button onclick="window.print()" class="btn-accent"><i class="bi bi-printer"></i> Print</button>
   <a href="{{ url_for('invoice.xero_csv', job_id=job['id']) }}" class="btn-ghost"><i class="bi bi-download"></i> Xero CSV</a>
+{% endblock %}
+
+{% block head %}
+<style>
+@media print {
+  #sidebar, .topbar, .bottom-nav, .left-rail, #hamburger { display: none !important; }
+  #main { margin-left: 0 !important; }
+  .page-body { padding: 0 !important; }
+  .col-lg-8 { width: 100% !important; max-width: 100% !important; flex: 0 0 100% !important; }
+  .sd-card { border: none !important; box-shadow: none !important; background: #fff !important; color: #000 !important; }
+  body { background: #fff !important; color: #000 !important; }
+  /* Ensure accent colour prints legibly */
+  [style*="color:var(--sd-accent)"] { color: #c2410c !important; }
+}
+</style>
 {% endblock %}
 
 {% block content %}

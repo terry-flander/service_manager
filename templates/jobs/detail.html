@@ -1,16 +1,35 @@
 {% extends "base.html" %}
 {% block title %}{{ job['reference'] }}{% endblock %}
 {% block topbar_title %}{{ job['reference'] }} — {{ job['customer_name'] }}{% endblock %}
-{% block topbar_actions %}
-  {% if job['job_type'] != 'sale' %}<button type="button" class="btn-ghost" onclick="openTypeModal()"><i class="bi bi-arrow-left-right"></i> Type</button>{% endif %}
-  <a href="{{ url_for('invoice.shop_ticket_print', job_id=job['id']) }}" class="btn-ghost" target="_blank"><i class="bi bi-printer"></i> Print Ticket</a>
-  <a href="{{ url_for('invoice.pdf_invoice', job_id=job['id']) }}" class="btn-ghost" target="_blank"><i class="bi bi-file-pdf"></i> Preview Invoice</a>
-  <a href="{{ url_for('invoice.xero_csv', job_id=job['id']) }}" class="btn-ghost"><i class="bi bi-download"></i> Xero CSV</a>
-  <a href="{{ url_for('email_replies.compose_reply', job_id=job['id']) }}" class="btn-ghost"><i class="bi bi-reply"></i> <span>Reply</span></a>
-{% endblock %}
+{% block topbar_actions %}{% endblock %}
 
 {% block head %}
 <style>
+/* Hide topbar on job detail — detail-controls is the only header */
+.topbar { display: none !important; }
+/* detail-controls must sit below the notch on mobile portrait */
+#detail-controls {
+  top: env(safe-area-inset-top, 0px) !important;
+}
+/* Remove page-body top padding — detail-controls replaces topbar */
+.page-body { padding-top: env(safe-area-inset-top, 0px) !important; }
+.detail-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 1rem;
+  font-size: 0.82rem;
+  color: var(--sd-text);
+  text-decoration: none;
+  background: none;
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.detail-menu-item:hover { background: rgba(255,255,255,0.06); }
+.detail-menu-item i { color: var(--sd-muted); font-size: 0.9rem; width: 1rem; text-align: center; }
 .jp-inline-input {
   background: transparent;
   border: 1px solid transparent;
@@ -40,6 +59,21 @@
   border-color: #34d399;
 }
 </style>
+<script>
+function toggleDetailMenu(e) {
+  e.stopPropagation();
+  var m = document.getElementById('detail-menu');
+  m.style.display = m.style.display === 'none' ? 'block' : 'none';
+}
+function closeDetailMenu() {
+  document.getElementById('detail-menu').style.display = 'none';
+}
+document.addEventListener('click', function(e) {
+  if (!document.getElementById('detail-menu-wrap').contains(e.target)) {
+    closeDetailMenu();
+  }
+});
+</script>
 {% endblock %}
 
 {% block content %}
@@ -51,7 +85,7 @@
       action="{{ url_for('jobs.job_detail', job_id=job['id']) }}">
   <input type="hidden" name="return_to" id="return-to-field" value="">
   <!-- Status & Payment hidden fields (merged into main save) -->
-  <input type="hidden" name="payment_type" id="payment-type-hidden" value="">
+  <input type="hidden" name="payment_type_quickpay" id="payment-type-hidden" value="">
 
   <!-- Sticky control bar — spans full width above grid -->
   <div id="detail-controls"
@@ -61,22 +95,73 @@
               display:flex; align-items:center; gap:0.5rem;
               margin-bottom:0.75rem;
               box-shadow:0 2px 8px rgba(0,0,0,0.25);">
+    <!-- Reference + Customer -->
+    <span class="mono" style="font-size:0.9rem; font-weight:600; color:var(--sd-accent); white-space:nowrap;">{{ job['reference'] }}</span>
+    <span style="font-size:0.82rem; color:var(--sd-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:180px;">{{ job['customer_name'] }}</span>
+    <!-- Delete -->
     <button type="button" class="btn-ghost"
             style="color:#f87171; border-color:rgba(248,113,113,0.35); padding:0.35rem 0.7rem; font-size:0.82rem;"
             onclick="confirmDelete()">
       <i class="bi bi-trash3"></i>
     </button>
     <div style="flex:1;"></div>
+    <!-- Close -->
     <button type="button" id="btn-cancel" class="btn-ghost"
             style="padding:0.35rem 0.85rem; font-size:0.82rem;"
             onclick="closeDetail()">
       <i class="bi bi-x-lg"></i> Close
     </button>
+    <!-- Save -->
     <button type="submit" id="btn-save" class="btn-ghost"
             style="padding:0.35rem 0.85rem; font-size:0.82rem;"
             onclick="document.getElementById('return-to-field').value=''">
       <i class="bi bi-floppy"></i> Save
     </button>
+    <!-- ... dropdown -->
+    <div style="position:relative;" id="detail-menu-wrap">
+      <button type="button" class="btn-ghost"
+              style="padding:0.35rem 0.7rem; font-size:0.82rem; position:relative;"
+              onclick="toggleDetailMenu(event)">
+        <i class="bi bi-three-dots"></i>
+        {% if unread_emails %}
+        <span style="position:absolute; top:2px; right:2px; width:8px; height:8px;
+                     background:var(--sd-accent); border-radius:50%; display:block;"></span>
+        {% endif %}
+      </button>
+      <div id="detail-menu"
+           style="display:none; position:absolute; right:0; top:calc(100% + 4px);
+                  background:var(--sd-surface); border:1px solid var(--sd-border);
+                  border-radius:8px; box-shadow:0 4px 20px rgba(0,0,0,0.4);
+                  min-width:190px; z-index:200; overflow:hidden;">
+        {% if job['job_type'] != 'sale' %}
+        <button type="button" class="detail-menu-item" onclick="closeDetailMenu(); openTypeModal()">
+          <i class="bi bi-arrow-left-right"></i> Type
+        </button>
+        {% endif %}
+        <a href="{{ url_for('invoice.shop_ticket_print', job_id=job['id']) }}" class="detail-menu-item" target="_blank" onclick="closeDetailMenu()">
+          <i class="bi bi-printer"></i> Print Ticket
+        </a>
+        <a href="{{ url_for('invoice.pdf_invoice', job_id=job['id']) }}" class="detail-menu-item" target="_blank" onclick="closeDetailMenu()">
+          <i class="bi bi-file-pdf"></i> Preview Invoice
+        </a>
+        <a href="{{ url_for('invoice.xero_csv', job_id=job['id']) }}" class="detail-menu-item" onclick="closeDetailMenu()">
+          <i class="bi bi-download"></i> Xero CSV
+        </a>
+        <div style="border-top:1px solid var(--sd-border); margin:0.25rem 0;"></div>
+        <a href="{{ url_for('email_replies.compose_reply', job_id=job['id']) }}" class="detail-menu-item" onclick="closeDetailMenu()">
+          <i class="bi bi-reply"></i> Reply
+        </a>
+        <button type="button" class="detail-menu-item"
+                onclick="closeDetailMenu(); openEmailThread('{{ url_for('jobs.email_thread_job', job_id=job['id']) }}', '{{ job['reference'] }} — Conversation')">
+          <i class="bi bi-chat-left-text"></i> Email Thread
+          {% if unread_emails %}
+          <span style="margin-left:auto; background:var(--sd-accent); color:#fff;
+                       font-size:0.65rem; font-weight:700; border-radius:10px;
+                       padding:0.1rem 0.45rem; line-height:1.4;">{{ unread_emails }}</span>
+          {% endif %}
+        </button>
+      </div>
+    </div>
   </div>
 
 <style>
@@ -94,7 +179,8 @@
   .detail-email { grid-area: email; margin-top: 0; }
 
   /* Mobile: single column stacking via JS body class */
-  body.is-mobile .detail-grid {
+  body.is-mobile .detail-grid,
+  body.is-mobile-landscape .detail-grid {
     grid-template-columns: 1fr;
     grid-template-areas:
       "left"
@@ -483,8 +569,11 @@
     {% endif %}{# end not is_sale #}
     <div class="sd-card mb-3">
       <div class="sd-card-header">
-        Parts Used
-        <span class="mono" style="font-size:0.85rem; color:var(--sd-text);">
+        <button type="button" class="btn-accent" onclick="openAddPartModal()"
+                style="padding:0.2rem 0.6rem; font-size:0.78rem;">
+          <i class="bi bi-plus-lg"></i> Add Part
+        </button>
+        <span class="mono" style="font-size:0.85rem; color:var(--sd-text); margin-left:auto;">
           {% if job_parts %}Total: ${{ '%.2f'|format(total) }}{% endif %}
         </span>
       </div>
@@ -539,54 +628,6 @@
       </table></div>
     </div>
 
-    <!-- Add part — live search + manual entry -->
-    <div class="sd-card">
-      <div class="sd-card-header">Add Part</div>
-      <div style="padding:1rem 1.25rem;">
-        <form method="post"
-              action="{{ url_for('jobs.add_part', job_id=job['id']) }}{% if request.args.get('from') %}?from={{ request.args.get('from') }}{% endif %}"
-              id="add-part-form">
-
-          <div class="row g-2 align-items-end">
-            <input type="hidden" name="part_id" id="part-id-hidden" value="">
-            <!-- Merged search + description — type to search, or enter new part name -->
-            <div class="col-md-4">
-              <label class="sd-label">Description *
-                <span style="font-weight:400;text-transform:none;letter-spacing:0;
-                             color:var(--sd-muted);font-size:0.7rem;margin-left:0.3rem;">
-                  — search or enter new
-                </span>
-              </label>
-              <input type="text" name="description" id="part-search"
-                     class="sd-input" required
-                     placeholder="Name or part number…"
-                     autocomplete="off" spellcheck="false">
-            </div>
-            <div class="col-md-3">
-              <label class="sd-label">Part Number</label>
-              <input type="text" name="part_number" id="part-number"
-                     class="sd-input" placeholder="Optional — saves to master list">
-            </div>
-            <div class="col-md-2">
-              <label class="sd-label">Qty</label>
-              <input type="number" name="quantity" id="part-qty"
-                     class="sd-input" value="1" min="0.01" step="any">
-            </div>
-            <div class="col-md-3">
-              <label class="sd-label">Unit Cost ($)</label>
-              <input type="number" name="unit_cost" id="part-cost"
-                     class="sd-input" value="0.00" step="0.01" min="0">
-            </div>
-          </div>
-          <div style="margin-top:0.75rem; display:flex; justify-content:flex-end;">
-            <button type="submit" class="btn-accent">
-              <i class="bi bi-plus-lg"></i> Add Part
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-
 
 
 
@@ -600,90 +641,83 @@
       action="{{ url_for('jobs.delete_job', job_id=job['id']) }}"
       style="display:none;"></form>
 
-<!-- Email Thread — full width below grid -->
-<div class="detail-email">
-    {% if thread_emails %}
-    <div class="sd-card" style="margin-top:0.75rem;">
-      <div class="sd-card-header" onclick="toggleThread()"
-           style="cursor:pointer; user-select:none;">
-        <span>
-          <i class="bi bi-envelope" style="margin-right:0.4rem; color:var(--sd-muted);"></i>
-          Email Thread
-          <span style="font-size:0.78rem; font-weight:400; color:var(--sd-muted);">
-            {{ thread_emails|length }} message{{ 's' if thread_emails|length != 1 }}
+<!-- ── Add Part Modal ──────────────────────────────────────────────────────── -->
+<div id="add-part-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6);
+            z-index:2000; align-items:flex-start; justify-content:center;
+            padding: calc(env(safe-area-inset-top, 0px) + 4rem) 1rem 1rem;"
+     onclick="if(event.target===this) closeAddPartModal()">
+  <div id="add-part-modal"
+       style="background:var(--sd-surface); border:1px solid var(--sd-border);
+              border-radius:12px; width:100%; max-width:520px;
+              padding:1.25rem;
+              box-shadow:0 8px 40px rgba(0,0,0,0.5);">
+    <!-- Header -->
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+      <span style="font-size:0.9rem; font-weight:600; color:var(--sd-text);">
+        <i class="bi bi-plus-circle" style="color:var(--sd-accent); margin-right:0.4rem;"></i>Add Part
+      </span>
+      <button type="button" onclick="closeAddPartModal()"
+              style="background:none; border:none; color:var(--sd-muted); font-size:1.2rem; cursor:pointer; line-height:1; padding:0.2rem;">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    <!-- Form -->
+    <form method="post"
+          action="{{ url_for('jobs.add_part', job_id=job['id']) }}{% if request.args.get('from') %}?from={{ request.args.get('from') }}{% endif %}"
+          id="add-part-form">
+      <input type="hidden" name="part_id" id="part-id-hidden" value="">
+      <!-- Description with dropdown anchored below it, inside relative wrapper -->
+      <div style="position:relative; margin-bottom:0.75rem;">
+        <label class="sd-label">Description *
+          <span style="font-weight:400; text-transform:none; letter-spacing:0;
+                       color:var(--sd-muted); font-size:0.7rem; margin-left:0.3rem;">
+            — search or enter new
           </span>
-        </span>
-        <div style="display:flex; align-items:center; gap:0.5rem;">
-          <button type="button" class="btn-ghost"
-                  style="padding:0.2rem 0.6rem; font-size:0.75rem;"
-                  onclick="event.stopPropagation();
-                           openEmailThread('{{ url_for('jobs.email_thread_job', job_id=job['id']) }}',
-                                           '{{ job['reference'] }} — Conversation')">
-            <i class="bi bi-chat-left-text"></i> View Conversation
-          </button>
-          <i class="bi bi-chevron-down" id="thread-chevron"
-             style="font-size:0.75rem; color:var(--sd-muted); transition:transform 0.2s;"></i>
+        </label>
+        <input type="text" name="description" id="part-search"
+               class="sd-input" required
+               placeholder="Name or part number…"
+               autocomplete="off" spellcheck="false">
+        <!-- Dropdown anchored inside this relative wrapper, always below input -->
+        <div id="part-dropdown"
+             style="display:none; position:absolute; left:0; right:0; top:100%; margin-top:2px;
+                    background:var(--sd-slate); border:1px solid var(--sd-border);
+                    border-radius:6px; box-shadow:0 6px 20px rgba(0,0,0,0.4);
+                    z-index:100; max-height:200px; overflow-y:auto;">
         </div>
       </div>
-          <div id="thread-body" style="display:none;">
-            {% for em in thread_emails %}
-            <div style="padding:0.875rem 1.25rem;
-                        {% if not loop.last %}border-bottom:1px solid var(--sd-border);{% endif %}
-                        {% if em['direction'] == 'outbound' %}background:rgba(249,115,22,0.04);{% endif %}
-                        {% if em['body'] %}cursor:pointer;{% endif %}"
-                 {% if em['body'] and em['direction'] == 'inbound' %}onclick="openEmailPopup('{{ url_for('jobs.email_message', import_id=em['id']) }}')"{% elif em['body'] and em['direction'] == 'outbound' %}onclick="openEmailPopup('{{ url_for('jobs.email_reply_message', reply_id=em['id']) }}')"{% endif %}>
-              <div style="display:flex; align-items:center; justify-content:space-between;
-                          gap:0.75rem; flex-wrap:wrap; margin-bottom:0.4rem;">
-                <div style="display:flex; align-items:center; gap:0.6rem;">
-                  <i class="bi bi-{{ 'reply-fill' if em['direction'] == 'outbound' else 'envelope-open' }}"
-                     style="color:{{ 'var(--sd-accent)' if em['direction'] == 'outbound' else 'var(--sd-muted)' }};
-                            font-size:0.9rem;"></i>
-                  <span style="font-size:0.82rem; font-weight:500;">
-                    {% if em['direction'] == 'outbound' %}
-                      <span style="color:var(--sd-accent);">Sent</span> to {{ em['from_addr'] }}
-                    {% else %}
-                      <span class="badge-status
-                        {% if em['status'] == 'ok' %}status-complete
-                        {% elif em['status'] == 'thread' %}status-scheduled
-                        {% else %}status-invoiced{% endif %}"
-                        style="font-size:0.65rem; margin-right:0.3rem;">
-                        {{ 'New Booking' if em['status'] == 'ok' else 'Reply' }}
-                      </span>
-                      from {{ em['from_addr'] }}
-                    {% endif %}
-                  </span>
-                </div>
-                <div style="display:flex; align-items:center; gap:0.75rem;">
-                  <span class="mono" style="font-size:0.75rem; color:var(--sd-muted);">
-                    {{ em['sent_at'][:16] }}
-                  </span>
-                  {% if em['body'] and em['direction'] == 'inbound' %}
-                  <button onclick="event.stopPropagation(); openEmailPopup('{{ url_for('jobs.email_message', import_id=em['id']) }}')"
-                          class="btn-ghost" style="padding:0.15rem 0.5rem; font-size:0.75rem;">
-                    <i class="bi bi-envelope-open"></i> View
-                  </button>
-                  {% elif em['body'] and em['direction'] == 'outbound' %}
-                  <button onclick="event.stopPropagation(); openEmailPopup('{{ url_for('jobs.email_reply_message', reply_id=em['id']) }}')"
-                          class="btn-ghost" style="padding:0.15rem 0.5rem; font-size:0.75rem;">
-                    <i class="bi bi-envelope-open"></i> View
-                  </button>
-                  {% endif %}
-                </div>
-              </div>
-              <div style="font-size:0.82rem; color:var(--sd-muted); margin-left:1.6rem;">
-                {{ em['subject'] or '(no subject)' }}
-              </div>
-              {% if em['body'] %}
-              <div style="margin-top:0.4rem; margin-left:1.6rem; font-size:0.8rem;
-                          color:var(--sd-muted); white-space:pre-wrap; max-height:3.5rem;
-                          overflow:hidden; position:relative;">{{ em['body'][:200] }}{% if em['body']|length > 200 %}…{% endif %}</div>
-              {% endif %}
-            </div>
-            {% endfor %}
-          </div><!-- /thread-body -->
-        </div><!-- /email thread card -->
-        {% endif %}
-</div><!-- /email thread wrapper, spans both cols -->
+      <!-- Part number + qty + cost -->
+      <div class="row g-2 align-items-end" style="margin-bottom:1rem;">
+        <div class="col-12 col-sm-5">
+          <label class="sd-label">Part Number</label>
+          <input type="text" name="part_number" id="part-number"
+                 class="sd-input" placeholder="Optional — saves to master list">
+        </div>
+        <div class="col-6 col-sm-3">
+          <label class="sd-label">Qty</label>
+          <input type="number" name="quantity" id="part-qty"
+                 class="sd-input" value="1" min="0.01" step="any">
+        </div>
+        <div class="col-6 col-sm-4">
+          <label class="sd-label">Unit Cost ($)</label>
+          <input type="number" name="unit_cost" id="part-cost"
+                 class="sd-input" value="0.00" step="0.01" min="0">
+        </div>
+      </div>
+      <div style="display:flex; gap:0.6rem; justify-content:flex-end;">
+        <button type="button" class="btn-ghost" onclick="closeAddPartModal()">Cancel</button>
+        <button type="submit" class="btn-accent">
+          <i class="bi bi-plus-lg"></i> Add Part
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Email Thread — full width below grid -->
+<div class="detail-email">
+</div><!-- /email thread wrapper -->
 {% endblock %}
 
 
@@ -734,24 +768,10 @@
   </div>
 </div>
 
-<!-- Part search dropdown — position:fixed keeps it above all clipping ancestors -->
-<div id="part-dropdown"
-     style="display:none; position:fixed;
-            background:var(--sd-slate); border:1px solid var(--sd-border);
-            border-radius:6px; box-shadow:0 6px 20px rgba(0,0,0,0.4);
-            z-index:9000; max-height:260px; overflow-y:auto; min-width:280px;">
-</div>
+<!-- Part search dropdown is now inside the Add Part modal -->
 <script>
 
 // ── Email thread toggle ────────────────────────────────────────────────────────
-function toggleThread() {
-  const body    = document.getElementById('thread-body');
-  const chevron = document.getElementById('thread-chevron');
-  if (!body) return;
-  const open = body.style.display !== 'none';
-  body.style.display      = open ? 'none' : 'block';
-  chevron.style.transform = open ? ''      : 'rotate(180deg)';
-}
 
 
 // ── Booking date mode toggle ─────────────────────────────────────────────────
@@ -825,26 +845,70 @@ function bookingModeChanged(mode) {
       window.location.href = returnUrl;
       return;
     }
-    // Dirty — offer Save & Close or just Close
-    const choice = window.confirm(
-      'You have unsaved changes.\n\nOK = Save & Close\nCancel = Discard & Close'
-    );
-    if (choice) {
-      // Save & Close: set return_to so the route navigates away
-      var f = document.getElementById('return-to-field');
-      if (f) f.value = fromParam || 'jobs';
-      document.getElementById('save-form').requestSubmit
-        ? document.getElementById('save-form').requestSubmit()
-        : document.getElementById('save-form').submit();
-    } else {
-      // Discard & Close
-      window.location.href = returnUrl;
-    }
+    showUnsavedModal(function (choice) {
+      // choice: 'yes' = save & close, 'no' = discard & close, 'cancel' = stay
+      if (choice === 'yes') {
+        var f = document.getElementById('return-to-field');
+        if (f) f.value = fromParam || 'jobs';
+        document.getElementById('save-form').requestSubmit
+          ? document.getElementById('save-form').requestSubmit()
+          : document.getElementById('save-form').submit();
+      } else if (choice === 'no') {
+        window.location.href = returnUrl;
+      }
+      // 'cancel' — do nothing, stay on page, still dirty
+    });
   };
 
   // Keep cancelDetail as alias for backwards compat with any other callers
   window.cancelDetail = window.closeDetail;
 })();
+
+// ── Custom Yes/No/Cancel modal for unsaved changes ───────────────────────────
+function showUnsavedModal(callback) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText =
+    'position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:3000;' +
+    'display:flex; align-items:center; justify-content:center; padding:1rem;';
+  overlay.innerHTML = `
+    <div style="background:var(--sd-surface); border:1px solid var(--sd-border);
+                border-radius:12px; max-width:380px; width:100%;
+                padding:1.5rem; box-shadow:0 8px 40px rgba(0,0,0,0.5);">
+      <div style="font-size:0.95rem; font-weight:600; margin-bottom:0.5rem; color:var(--sd-text);">
+        Unsaved Changes
+      </div>
+      <div style="font-size:0.85rem; color:var(--sd-muted); margin-bottom:1.25rem; line-height:1.4;">
+        There are unsaved changes. Do you want to save them?
+      </div>
+      <div style="display:flex; gap:0.5rem; justify-content:flex-end; flex-wrap:wrap;">
+        <button type="button" class="btn-ghost" data-choice="cancel">Cancel</button>
+        <button type="button" class="btn-ghost" data-choice="no">No</button>
+        <button type="button" class="btn-accent" data-choice="yes">Yes</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  function finish(choice) {
+    document.removeEventListener('keydown', onKey);
+    overlay.remove();
+    callback(choice);
+  }
+  function onKey(e) {
+    if (e.key === 'Escape') finish('cancel');
+    else if (e.key === 'Enter') finish('yes');
+  }
+  document.addEventListener('keydown', onKey);
+
+  overlay.querySelectorAll('[data-choice]').forEach(function (btn) {
+    btn.addEventListener('click', function () { finish(this.getAttribute('data-choice')); });
+  });
+  overlay.addEventListener('click', function (e) {
+    if (e.target === overlay) finish('cancel');
+  });
+
+  // Focus the primary action for keyboard users
+  setTimeout(() => overlay.querySelector('[data-choice="yes"]').focus(), 0);
+}
 
 
 // ── Auto-set end time to start + 1 hour when start changes ──────────────────
@@ -966,28 +1030,6 @@ document.addEventListener('DOMContentLoaded', function() {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  function positionDropdown() {
-    const rect = searchInput.getBoundingClientRect();
-    const ddH  = Math.min(260, dropdown.scrollHeight || 200);
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const spaceAbove = rect.top;
-
-    dropdown.style.left  = rect.left + 'px';
-    dropdown.style.width = rect.width + 'px';
-
-    if (spaceBelow >= ddH || spaceBelow >= spaceAbove) {
-      // Show below input
-      dropdown.style.top    = (rect.bottom + 2) + 'px';
-      dropdown.style.bottom = 'auto';
-      dropdown.style.maxHeight = Math.max(120, spaceBelow - 8) + 'px';
-    } else {
-      // Flip above input
-      dropdown.style.bottom = (window.innerHeight - rect.top + 2) + 'px';
-      dropdown.style.top    = 'auto';
-      dropdown.style.maxHeight = Math.max(120, spaceAbove - 8) + 'px';
-    }
-  }
-
   function closeDropdown() { dropdown.style.display = 'none'; }
 
   function fetchResults(q) {
@@ -1000,7 +1042,6 @@ document.addEventListener('DOMContentLoaded', function() {
           dropdown.innerHTML =
             '<div style="padding:0.6rem 1rem;font-size:0.82rem;color:var(--sd-muted);">' +
             'No match — will be added as new part</div>';
-          positionDropdown();
           dropdown.style.display = 'block';
           return;
         }
@@ -1021,11 +1062,17 @@ document.addEventListener('DOMContentLoaded', function() {
             '<span class="mono" style="font-size:0.82rem;color:var(--sd-accent);flex-shrink:0;">$' +
               parseFloat(p.unit_cost).toFixed(2) + '</span>';
           item.addEventListener('mousedown', function (e) { e.preventDefault(); selectPart(p); });
+          // Touch: only select if finger didn't move (i.e. not scrolling)
+          let touchStartY = 0;
+          item.addEventListener('touchstart', function (e) { touchStartY = e.touches[0].clientY; }, {passive:true});
+          item.addEventListener('touchend', function (e) {
+            const moved = Math.abs(e.changedTouches[0].clientY - touchStartY);
+            if (moved < 8) { e.preventDefault(); selectPart(p); }
+          }, {passive:false});
           item.addEventListener('mouseover', function () { this.style.background = 'var(--sd-surface2)'; });
           item.addEventListener('mouseout',  function () { this.style.background = ''; });
           dropdown.appendChild(item);
         });
-        positionDropdown();
         dropdown.style.display = 'block';
       })
       .catch(() => closeDropdown());
@@ -1085,10 +1132,35 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // ── Restore focus after add (page reloads to #add-part) ───────────────────
   if (window.location.hash === '#add-part') {
-    searchInput.focus();
-    searchInput.closest('.sd-card')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    openAddPartModal();
   }
 })();
+
+// ── Add Part modal open/close ─────────────────────────────────────────────────
+function openAddPartModal() {
+  const overlay = document.getElementById('add-part-overlay');
+  overlay.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  // Reset form
+  const form = document.getElementById('add-part-form');
+  document.getElementById('part-search').value  = '';
+  document.getElementById('part-id-hidden').value = '';
+  document.getElementById('part-number').value  = '';
+  document.getElementById('part-qty').value     = '1';
+  document.getElementById('part-cost').value    = '0.00';
+  document.getElementById('part-dropdown').style.display = 'none';
+  setTimeout(() => document.getElementById('part-search').focus(), 100);
+}
+function closeAddPartModal() {
+  document.getElementById('add-part-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+}
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') {
+    const overlay = document.getElementById('add-part-overlay');
+    if (overlay && overlay.style.display !== 'none') closeAddPartModal();
+  }
+});
 
 // ── Quick Pay ─────────────────────────────────────────────────────────────────
 (function () {
