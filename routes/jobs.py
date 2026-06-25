@@ -123,19 +123,29 @@ def new_sale():
                                    today=_date.today().isoformat())
 
         with get_db() as conn:
-            # Get or create Cash Sales customer
+            # Get or create Counter Sales customer (migrate legacy email if present)
             cust = conn.execute(
-                "SELECT id FROM customers WHERE email='cash.sales@flyingbike.internal'"
+                "SELECT id FROM customers WHERE email='counter.sales@flyingbike.internal'"
             ).fetchone()
             if not cust:
-                conn.execute("""
-                    INSERT INTO customers (name, email, phone, suburb, address)
-                    VALUES ('Cash Sales','cash.sales@flyingbike.internal','','','')
-                """)
-                conn.commit()
-                cust = conn.execute(
+                legacy = conn.execute(
                     "SELECT id FROM customers WHERE email='cash.sales@flyingbike.internal'"
                 ).fetchone()
+                if legacy:
+                    conn.execute(
+                        "UPDATE customers SET email='counter.sales@flyingbike.internal' WHERE id=?",
+                        (legacy['id'],))
+                    conn.commit()
+                    cust = legacy
+                else:
+                    conn.execute("""
+                        INSERT INTO customers (name, email, phone, suburb, address)
+                        VALUES ('Counter Sales','counter.sales@flyingbike.internal','','','')
+                    """)
+                    conn.commit()
+                    cust = conn.execute(
+                        "SELECT id FROM customers WHERE email='counter.sales@flyingbike.internal'"
+                    ).fetchone()
             cust_id = cust['id']
 
             ref = generate_reference('sale', conn)
@@ -144,8 +154,8 @@ def new_sale():
                     customer_email, customer_phone, suburb, address, description,
                     region_id, tax_inclusive, scheduled_date, status,
                     payment_type, paid_date, notes)
-                VALUES (?, 'sale', ?, 'Cash Sales',
-                    'cash.sales@flyingbike.internal', '', '', '', '',
+                VALUES (?, 'sale', ?, 'Counter Sales',
+                    'counter.sales@flyingbike.internal', '', '', '', '',
                     1, 1, ?, 'paid', ?, ?, ?)
             """, (ref, cust_id, sale_date, payment_type, sale_date, notes))
             conn.commit()
@@ -487,10 +497,15 @@ def job_detail(job_id):
         paid_date      = request.form.get('paid_date', '').strip() or None
         amount_paid_s  = request.form.get('amount_paid', '').strip()
         amount_paid    = float(amount_paid_s) if amount_paid_s else None
-        # payment_type: prefer hidden field set by Quick Pay JS, fall back to radio
+        # payment_type: prefer the SALE radio button / Quick Pay hidden field,
+        # fall back to legacy display field. These no longer share a form name.
         payment_type   = (request.form.get('payment_type', '').strip()
+                          or request.form.get('payment_type_quickpay', '').strip()
                           or request.form.get('_payment_display', '').strip()
                           or None)
+
+        add_to_calendar = 1 if request.form.get('add_to_calendar') else 0
+        referral_source = request.form.get('referral_source', '').strip() or None
 
         svc_types = ''  # only set for workshop below
         if jt == 'booking':
@@ -525,6 +540,8 @@ def job_detail(job_id):
                     region_id=?, tax_inclusive=?, notes=?,
                     status=?, invoice_number=?,
                     paid_date=?, amount_paid=?, payment_type=?,
+                    add_to_calendar=?,
+                    referral_source=COALESCE(?, referral_source),
                     service_types=CASE WHEN job_type='workshop'
                                        THEN ? ELSE service_types END
                 WHERE id=?
@@ -533,6 +550,8 @@ def job_detail(job_id):
                   region_id, tax_incl, notes,
                   new_status, invoice_number,
                   paid_date, amount_paid, payment_type,
+                  add_to_calendar,
+                  referral_source,
                   svc_types if jt == 'workshop' else '',
                   job_id))
             if jt == 'sale':
@@ -542,6 +561,39 @@ def job_detail(job_id):
             wconn.commit()
             if jt == 'sale':
                 _recalc_sale_total(wconn, job_id)
+
+            # ── Google Calendar sync — booking/rental only ──────────────────
+            if jt in ('booking', 'rental'):
+                gcal_enabled_row = wconn.execute(
+                    "SELECT value FROM settings WHERE key='gcal_enabled'").fetchone()
+                gcal_enabled = gcal_enabled_row and gcal_enabled_row['value'] == '1'
+                if gcal_enabled:
+                    try:
+                        fresh = wconn.execute(
+                            "SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
+                        if add_to_calendar:
+                            from gcal_sync import upsert_calendar_event
+                            new_event_id = upsert_calendar_event(fresh)
+                            if new_event_id:
+                                wconn.execute(
+                                    "UPDATE jobs SET gcal_event_id=? WHERE id=?",
+                                    (new_event_id, job_id))
+                                wconn.commit()
+                            else:
+                                flash('Job saved — calendar sync failed, please retry.', 'warning')
+                        elif fresh['gcal_event_id']:
+                            from gcal_sync import delete_calendar_event
+                            if delete_calendar_event(fresh['gcal_event_id']):
+                                wconn.execute(
+                                    "UPDATE jobs SET gcal_event_id=NULL WHERE id=?",
+                                    (job_id,))
+                                wconn.commit()
+                            else:
+                                flash('Job saved — could not remove calendar event, please retry.', 'warning')
+                    except Exception as _gcal_err:
+                        import logging
+                        logging.getLogger('gcal_sync').error(f"Sync error for job {job_id}: {_gcal_err}")
+                        flash('Job saved — calendar sync failed, please retry.', 'warning')
 
         flash('Job updated.', 'success')
         return_to = request.form.get('return_to', '').strip()
@@ -573,6 +625,9 @@ def job_detail(job_id):
             FROM email_replies WHERE job_id=?
             ORDER BY sent_at ASC
         """, (job_id, job_id)).fetchall()
+        unread_emails = conn.execute(
+            "SELECT COUNT(*) FROM email_imports WHERE job_id=? AND (read=1 OR read IS NULL)",
+            (job_id,)).fetchone()[0]
         # All region dates for this job's region (to detect manual vs region date)
         region_dates_list = [r['date'] for r in conn.execute(
             "SELECT date FROM region_dates WHERE region_id=?",
@@ -583,11 +638,20 @@ def job_detail(job_id):
             ORDER BY name
         """).fetchall()
 
+        is_repeat_customer = False
+        if job['customer_id']:
+            prior = conn.execute(
+                "SELECT 1 FROM jobs WHERE customer_id=? AND id!=? LIMIT 1",
+                (job['customer_id'], job_id)).fetchone()
+            is_repeat_customer = bool(prior)
+
     return render_template('jobs/detail.html', job=job, job_parts=job_parts,
                            parts=parts, total=total, regions=regions,
                            thread_emails=thread_emails,
+                           unread_emails=unread_emails,
                            region_dates_list=region_dates_list,
                            SR_PARTS=sr_parts,
+                           is_repeat_customer=is_repeat_customer,
                            TIME_SLOTS=TIME_SLOTS, TIME_LABELS=TIME_LABELS,
                            JOB_TYPES=JOB_TYPES)
 
@@ -793,9 +857,16 @@ def remove_part(job_id, jp_id):
 def delete_job(job_id):
     with get_db() as conn:
         job = conn.execute(
-            "SELECT reference FROM jobs WHERE id=?", (job_id,)).fetchone()
+            "SELECT reference, gcal_event_id FROM jobs WHERE id=?", (job_id,)).fetchone()
         if not job:
             return "Job not found", 404
+        if job['gcal_event_id']:
+            try:
+                from gcal_sync import delete_calendar_event
+                delete_calendar_event(job['gcal_event_id'])
+            except Exception as _e:
+                import logging
+                logging.getLogger('gcal_sync').error(f"Delete cleanup failed for job {job_id}: {_e}")
         conn.execute("DELETE FROM email_imports WHERE job_id=?", (job_id,))
         conn.execute("DELETE FROM job_parts WHERE job_id=?", (job_id,))
         conn.execute("DELETE FROM jobs WHERE id=?", (job_id,))
@@ -813,6 +884,7 @@ def update_status(job_id):
     amount_paid    = request.form.get('amount_paid', '').strip()
     amount_paid    = float(amount_paid) if amount_paid else None
     invoice_number = request.form.get('invoice_number', '').strip() or None
+    referral_source = request.form.get('referral_source', '').strip() or None
 
     # Payment type set — server only forces status=paid
     if payment_type:
@@ -821,10 +893,30 @@ def update_status(job_id):
     with get_db() as conn:
         conn.execute(
             "UPDATE jobs SET status=?, paid_date=?, amount_paid=?, "
-            "payment_type=?, invoice_number=? WHERE id=?",
+            "payment_type=?, invoice_number=?, "
+            "referral_source=COALESCE(?, referral_source) WHERE id=?",
             (new_status, paid_date, amount_paid, payment_type or None,
-             invoice_number, job_id))
+             invoice_number, referral_source, job_id))
         conn.commit()
+
+        # ── Google Calendar colour sync — booking/rental only ───────────────
+        fresh = conn.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
+        if fresh and fresh['job_type'] in ('booking', 'rental') and fresh['add_to_calendar']:
+            gcal_enabled_row = conn.execute(
+                "SELECT value FROM settings WHERE key='gcal_enabled'").fetchone()
+            if gcal_enabled_row and gcal_enabled_row['value'] == '1':
+                try:
+                    from gcal_sync import upsert_calendar_event
+                    new_event_id = upsert_calendar_event(fresh)
+                    if new_event_id and new_event_id != fresh['gcal_event_id']:
+                        conn.execute(
+                            "UPDATE jobs SET gcal_event_id=? WHERE id=?",
+                            (new_event_id, job_id))
+                        conn.commit()
+                except Exception as _gcal_err:
+                    import logging
+                    logging.getLogger('gcal_sync').error(
+                        f"Status-change sync error for job {job_id}: {_gcal_err}")
     msg = f'Paid via {payment_type}.' if payment_type else f'Status updated to {new_status}.'
     flash(msg, 'success')
     return_to = request.form.get('return_to', '').strip()
@@ -1104,6 +1196,77 @@ def status_colors():
     return render_template('jobs/status_colors.html',
                            statuses=statuses, colors_map=colors_map,
                            defaults=defaults)
+
+
+@jobs_bp.route('/settings/calendar-sync', methods=['GET', 'POST'])
+def calendar_settings():
+    """Admin page to configure Google Calendar sync."""
+    with get_db() as conn:
+        if request.method == 'POST':
+            if 'test_connection' in request.form:
+                from gcal_sync import test_connection
+                ok, err = test_connection()
+                if ok:
+                    flash('Test event created and removed successfully — connection working.', 'success')
+                else:
+                    flash(f'Calendar connection test failed: {err}', 'danger')
+                return redirect(url_for('jobs.calendar_settings'))
+
+            enabled = '1' if request.form.get('gcal_enabled') else '0'
+            conn.execute(
+                "INSERT INTO settings (key,value) VALUES ('gcal_enabled', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (enabled,))
+            conn.commit()
+            flash('Calendar sync settings saved.', 'success')
+            return redirect(url_for('jobs.calendar_settings'))
+
+        row = conn.execute(
+            "SELECT value FROM settings WHERE key='gcal_enabled'").fetchone()
+        gcal_enabled = (row['value'] == '1') if row else False
+
+    import os as _os
+    calendar_id = (_os.environ.get('GCAL_CALENDAR_ID', '').strip()
+                  or _os.environ.get('GMAIL_USER', '').strip())
+
+    return render_template('jobs/calendar_settings.html',
+                           gcal_enabled=gcal_enabled,
+                           calendar_id=calendar_id)
+
+
+@jobs_bp.route('/settings/feedback', methods=['GET', 'POST'])
+def feedback_settings():
+    """Admin page to configure the customer feedback email link/template."""
+    with get_db() as conn:
+        if request.method == 'POST':
+            url_template  = request.form.get('feedback_form_url_template', '').strip()
+            tmpl_name     = request.form.get('feedback_email_template_name', '').strip() or 'Thank You'
+            conn.execute(
+                "INSERT INTO settings (key,value) VALUES ('feedback_form_url_template', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (url_template,))
+            conn.execute(
+                "INSERT INTO settings (key,value) VALUES ('feedback_email_template_name', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (tmpl_name,))
+            conn.commit()
+            flash('Feedback settings saved.', 'success')
+            return redirect(url_for('jobs.feedback_settings'))
+
+        url_row = conn.execute(
+            "SELECT value FROM settings WHERE key='feedback_form_url_template'").fetchone()
+        name_row = conn.execute(
+            "SELECT value FROM settings WHERE key='feedback_email_template_name'").fetchone()
+        url_template = url_row['value'] if url_row else ''
+        tmpl_name    = name_row['value'] if name_row else 'Thank You'
+
+        templates = [row['name'] for row in conn.execute(
+            "SELECT name FROM email_templates ORDER BY name").fetchall()]
+
+    return render_template('jobs/feedback_settings.html',
+                           url_template=url_template,
+                           tmpl_name=tmpl_name,
+                           templates=templates)
 
 
 @jobs_bp.route('/jobs/email-imports/clear-search', methods=['POST'])

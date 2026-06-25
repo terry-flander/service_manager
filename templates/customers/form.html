@@ -33,7 +33,7 @@
     <div class="sd-card">
       <div class="sd-card-header">Customer Details</div>
       <div style="padding:1.5rem;">
-        <form method="post">
+        <form method="post" id="customer-form">
           <div class="row g-3">
             <div class="col-12">
               <label class="sd-label">Name *</label>
@@ -84,8 +84,8 @@
           </div>
           <hr class="divider">
           <div style="display:flex; justify-content:flex-end; gap:0.75rem;">
-            <a href="{{ url_for('customers.index') }}" class="btn-ghost">Cancel</a>
-            <button type="submit" class="btn-accent">
+            <button type="button" id="customer-cancel-btn" class="btn-ghost" onclick="handleCustomerCancel()">Cancel</button>
+            <button type="submit" id="customer-save-btn" class="btn-accent" disabled>
               <i class="bi bi-check-lg"></i>
               {{ 'Save Changes' if is_edit else 'Create Customer' }}
             </button>
@@ -154,4 +154,38 @@
   {% endif %}
 
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const form     = document.getElementById('customer-form');
+  const saveBtn  = document.getElementById('customer-save-btn');
+  let isDirty = false;
+
+  function setDirty(val) {
+    isDirty = val;
+    saveBtn.disabled = !val;
+  }
+
+  form.addEventListener('input',  function () { setDirty(true); });
+  form.addEventListener('change', function () { setDirty(true); });
+
+  window.handleCustomerCancel = function () {
+    const exitUrl = '{{ url_for("customers.index") }}';
+    if (!isDirty) {
+      window.location.href = exitUrl;
+      return;
+    }
+    showUnsavedModal(function (choice) {
+      if (choice === 'yes') {
+        form.submit();
+      } else if (choice === 'no') {
+        window.location.href = exitUrl;
+      }
+      // 'cancel' — stay on page, still dirty
+    });
+  };
+})();
+</script>
 {% endblock %}

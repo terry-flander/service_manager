@@ -17,6 +17,7 @@ def create_app():
     app = Flask(__name__)
     app.config['SECRET_KEY']          = os.environ.get('SECRET_KEY', 'dev-secret-CHANGE-in-production')
     app.config['GOOGLE_MAPS_API_KEY'] = os.environ.get('GOOGLE_MAPS_API_KEY', '')
+    app.config['BASE_URL']            = os.environ.get('BASE_URL', 'https://3.27.91.236')
     app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=8)
 
     # ── Blueprints ────────────────────────────────────────────────────────────

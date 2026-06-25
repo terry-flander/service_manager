@@ -14,6 +14,14 @@ with get_db() as conn:
     except: pass
     try: conn.execute('ALTER TABLE jobs ADD COLUMN reconciled_eftpos TEXT')
     except: pass
+    try: conn.execute('ALTER TABLE jobs ADD COLUMN gcal_event_id TEXT')
+    except: pass
+    try: conn.execute('ALTER TABLE jobs ADD COLUMN add_to_calendar INTEGER NOT NULL DEFAULT 0')
+    except: pass
+    try: conn.execute('ALTER TABLE region_dates ADD COLUMN gcal_event_id TEXT')
+    except: pass
+    try: conn.execute('ALTER TABLE jobs ADD COLUMN referral_source TEXT')
+    except: pass
 
     # ── EFTPOS transactions table ────────────────────────────────────────────
     try:

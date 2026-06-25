@@ -100,17 +100,28 @@ def _seed_regions(conn):
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def _seed_cash_sales_customer(conn):
-    """Ensure the locked Cash Sales customer record exists."""
+    """Ensure the locked Counter Sales customer record exists (migrates legacy email)."""
     existing = conn.execute(
+        "SELECT id FROM customers WHERE email='counter.sales@flyingbike.internal'"
+    ).fetchone()
+    if existing:
+        return
+    legacy = conn.execute(
         "SELECT id FROM customers WHERE email='cash.sales@flyingbike.internal'"
     ).fetchone()
-    if not existing:
-        conn.execute("""
-            INSERT INTO customers (name, email, phone, suburb, address)
-            VALUES ('Cash Sales', 'cash.sales@flyingbike.internal', '', '', '')
-        """)
+    if legacy:
+        conn.execute(
+            "UPDATE customers SET email='counter.sales@flyingbike.internal' WHERE id=?",
+            (legacy['id'],))
         conn.commit()
-        print("  Cash Sales customer created")
+        print("  Counter Sales customer migrated from legacy email")
+        return
+    conn.execute("""
+        INSERT INTO customers (name, email, phone, suburb, address)
+        VALUES ('Counter Sales', 'counter.sales@flyingbike.internal', '', '', '')
+    """)
+    conn.commit()
+    print("  Counter Sales customer created")
 
 
 def seed_data():

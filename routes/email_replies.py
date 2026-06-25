@@ -4,6 +4,7 @@ routes/email_replies.py — Email template management and job reply compose/send
 import re
 import uuid
 import time
+import urllib.parse
 from flask import (Blueprint, render_template, request, redirect,
                    url_for, flash, session, jsonify)
 from models import get_db
@@ -44,6 +45,33 @@ def _fmt_time_range(start, end):
     if start_fmt and end_fmt:
         return f"{start_fmt} to {end_fmt}"
     return start_fmt or end_fmt
+
+
+def _build_feedback_link(job, full_name):
+    """Build a pre-filled Google Form feedback link for this job/customer,
+    using a URL template stored in settings (key 'feedback_form_url_template').
+
+    The template should contain {name} and {reference} placeholders matching
+    the entry.XXXXXXX query params from the Form's pre-filled link, e.g.:
+      https://docs.google.com/forms/d/e/FORM_ID/viewform?usp=pp_url&entry.111={name}&entry.222={reference}
+
+    Returns '' if no template has been configured yet.
+    """
+    try:
+        from models import get_db
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT value FROM settings WHERE key='feedback_form_url_template'"
+            ).fetchone()
+        if not row or not row['value']:
+            return ''
+        template = row['value']
+        return template.format(
+            name=urllib.parse.quote_plus(full_name or ''),
+            reference=urllib.parse.quote_plus(job['reference'] or ''),
+        )
+    except Exception:
+        return ''
 
 
 def _substitute(text, job, customer=None, totals=None):
@@ -104,6 +132,7 @@ def _substitute(text, job, customer=None, totals=None):
         'invoice_pdf':               '[Invoice PDF attached]',
         'job_total':                 _fmt_money(totals.get('job_total', 0)),
         'amount_due':                _fmt_money(totals.get('amount_due', 0)),
+        'feedback_link':             _build_feedback_link(job, full_name),
     }
 
     def replacer(m):
@@ -408,4 +437,62 @@ def preview_fields():
         'invoice_pdf',               # attaches the PDF invoice
         'job_total',                 # e.g. $150.00
         'amount_due',                # e.g. $150.00 (total minus any payment)
+        'feedback_link',             # pre-filled Google Form link (if configured)
     ])
+
+
+@email_replies_bp.route('/jobs/<int:job_id>/send-feedback-email', methods=['POST'])
+def send_feedback_email(job_id):
+    """One-click send of the 'Thank You' template (or whichever template
+    name is configured) — no preview step, used from the mark-as-paid flow.
+    """
+    with get_db() as conn:
+        job = conn.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
+        if not job:
+            return jsonify({'ok': False, 'error': 'Job not found'}), 404
+
+        tmpl_row = conn.execute(
+            "SELECT value FROM settings WHERE key='feedback_email_template_name'"
+        ).fetchone()
+        tmpl_name = (tmpl_row['value'] if tmpl_row else None) or 'Thank You'
+
+        tmpl = conn.execute(
+            "SELECT * FROM email_templates WHERE name=?", (tmpl_name,)).fetchone()
+        if not tmpl:
+            return jsonify({
+                'ok': False,
+                'error': f"No email template named '{tmpl_name}' found. "
+                         f"Create one in Email Templates first."
+            }), 400
+
+        if not job['customer_email']:
+            return jsonify({'ok': False, 'error': 'Customer has no email address on file'}), 400
+
+        subject = _substitute(tmpl['subject'], job)
+        body    = _substitute(tmpl['body'], job)
+
+        in_reply_to, references = _get_thread_refs(conn, job_id)
+
+    try:
+        from email_sender import send_reply
+        msg_id = send_reply(
+            to_address  = job['customer_email'],
+            subject     = subject,
+            body_text   = body,
+            in_reply_to = in_reply_to,
+            references  = references,
+        )
+    except Exception as e:
+        return jsonify({'ok': False, 'error': f'Send failed: {e}'}), 500
+
+    with get_db() as conn:
+        conn.execute("""
+            INSERT INTO email_replies
+                (job_id, message_id, in_reply_to, subject,
+                 to_address, body, sent_by, template_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (job_id, msg_id, in_reply_to, subject,
+              job['customer_email'], body, session.get('user_id'), tmpl['id']))
+        conn.commit()
+
+    return jsonify({'ok': True})

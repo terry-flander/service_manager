@@ -6,7 +6,7 @@
     <i class="bi bi-list-ul"></i><span> Jobs</span>
   </a>
   <a href="{{ url_for('jobs.new_sale') }}" class="btn-ghost hide-mobile">
-    <i class="bi bi-cash-coin"></i><span> Cash Sale</span>
+    <i class="bi bi-cash-coin"></i><span> Counter Sale</span>
   </a>
   <a href="{{ url_for('jobs.new_job') }}" class="btn-accent">
     <i class="bi bi-plus-lg"></i> New Job
@@ -43,6 +43,9 @@
   .legend-item { display: flex; align-items: center; gap: 0.4rem; }
   .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
   .fc-event-dragging { opacity: 0.75; box-shadow: 0 4px 16px rgba(0,0,0,0.35); }
+  /* Google-external events — read-only, not editable in ServiceDesk */
+  .gcal-external-event { opacity: 0.55; cursor: pointer; font-style: italic; }
+  .gcal-external-event:hover { opacity: 0.8; }
 
   /* Toast */
   #drag-toast {
@@ -127,6 +130,26 @@
     <a id="popup-link" href="#" class="btn-accent" style="font-size:0.78rem; padding:0.3rem 0.75rem;">
       View Job
     </a>
+  </div>
+</div>
+
+<!-- Google-external event popup — read-only -->
+<div id="gcal-popup" style="display:none; position:absolute; z-index:1500;
+     background:var(--sd-surface); border:1px solid var(--sd-border);
+     border-radius:8px; box-shadow:0 6px 24px rgba(0,0,0,0.4);
+     padding:0.9rem 1rem; max-width:280px; font-size:0.85rem;">
+  <button class="popup-close" onclick="document.getElementById('gcal-popup').style.display='none'">×</button>
+  <div style="font-weight:600; margin-bottom:0.4rem; padding-right:1rem;">
+    <i class="bi bi-globe2" style="color:var(--sd-muted); margin-right:0.3rem;"></i>
+    <span id="gcal-popup-title"></span>
+  </div>
+  <div id="gcal-popup-time" style="color:var(--sd-muted); font-size:0.78rem; margin-bottom:0.3rem;"></div>
+  <div id="gcal-popup-location" style="color:var(--sd-muted); font-size:0.78rem; margin-bottom:0.3rem; display:none;">
+    <i class="bi bi-geo-alt" style="font-size:0.72rem;"></i> <span></span>
+  </div>
+  <div id="gcal-popup-desc" style="color:var(--sd-text); font-size:0.8rem; margin-top:0.4rem; white-space:pre-wrap; display:none;"></div>
+  <div style="font-size:0.7rem; color:var(--sd-muted); margin-top:0.6rem; font-style:italic;">
+    Managed in Google Calendar
   </div>
 </div>
 
@@ -482,6 +505,63 @@ document.addEventListener('DOMContentLoaded', function() {
     jobPopup.style.display = 'block';
   }
 
+  // ── Google-external event popup (read-only) ─────────────────────────────────
+  const gcalPopup = document.getElementById('gcal-popup');
+
+  function showGcalExternalPopup(info) {
+    const p = info.event.extendedProps;
+    // Title already has the 🌐 prefix from the server — strip it for the popup
+    // heading since the icon is shown separately there.
+    const cleanTitle = info.event.title.replace(/^🌐\s*/, '');
+    document.getElementById('gcal-popup-title').textContent = cleanTitle;
+
+    const timeEl = document.getElementById('gcal-popup-time');
+    if (info.event.allDay) {
+      timeEl.textContent = 'All day';
+    } else {
+      const opts = { hour: 'numeric', minute: '2-digit' };
+      const startStr = info.event.start ? info.event.start.toLocaleTimeString([], opts) : '';
+      const endStr   = info.event.end   ? ' – ' + info.event.end.toLocaleTimeString([], opts) : '';
+      timeEl.textContent = startStr + endStr;
+    }
+
+    const locRow = document.getElementById('gcal-popup-location');
+    if (p.address) {
+      locRow.querySelector('span').textContent = p.address;
+      locRow.style.display = '';
+    } else {
+      locRow.style.display = 'none';
+    }
+
+    const descEl = document.getElementById('gcal-popup-desc');
+    if (p.description) {
+      // Description may contain basic HTML from Google — render as plain text
+      const tmp = document.createElement('div');
+      tmp.innerHTML = p.description;
+      descEl.textContent = tmp.textContent || tmp.innerText || '';
+      descEl.style.display = '';
+    } else {
+      descEl.style.display = 'none';
+    }
+
+    const rect = info.el.getBoundingClientRect();
+    const popW = 280;
+    let left = rect.left + window.scrollX;
+    let top  = rect.bottom + window.scrollY + 4;
+    if (left + popW > window.innerWidth - 8)
+      left = window.innerWidth - popW - 8 + window.scrollX;
+    gcalPopup.style.left    = left + 'px';
+    gcalPopup.style.top     = top  + 'px';
+    gcalPopup.style.display = 'block';
+  }
+
+  document.addEventListener('click', function (e) {
+    if (!gcalPopup.contains(e.target) && gcalPopup.style.display === 'block') {
+      // Don't close if the click was the event itself opening the popup
+      if (!e.target.closest('.fc-event')) gcalPopup.style.display = 'none';
+    }
+  });
+
   // ── Calendar init ──────────────────────────────────────────────────────────
   const SAVED_VIEW = {{ cal_view | tojson }};
   const SAVED_DATE = {{ cal_date | tojson }};
@@ -574,6 +654,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
       if (p.type === 'region_date') {
         openDelRegionDate(p.region_date_id, p.region, info.event.startStr.slice(0,10));
+        return;
+      }
+
+      if (p.type === 'gcal_external') {
+        showGcalExternalPopup(info);
         return;
       }
 
