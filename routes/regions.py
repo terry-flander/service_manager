@@ -493,6 +493,27 @@ def add_region_date():
         new_id = conn.execute(
             "SELECT id FROM region_dates WHERE region_id=? AND date=?",
             (region_id, date)).fetchone()['id']
+
+        # ── Google Calendar sync — Banana, all-day ──────────────────────────
+        gcal_enabled_row = conn.execute(
+            "SELECT value FROM settings WHERE key='gcal_enabled'").fetchone()
+        if gcal_enabled_row and gcal_enabled_row['value'] == '1':
+            try:
+                region = conn.execute(
+                    "SELECT name FROM regions WHERE id=?", (region_id,)).fetchone()
+                if region:
+                    from gcal_sync import upsert_region_date_event
+                    event_id = upsert_region_date_event(region['name'], date)
+                    if event_id:
+                        conn.execute(
+                            "UPDATE region_dates SET gcal_event_id=? WHERE id=?",
+                            (event_id, new_id))
+                        conn.commit()
+            except Exception as _gcal_err:
+                import logging
+                logging.getLogger('gcal_sync').error(
+                    f"Region date sync error for region_date {new_id}: {_gcal_err}")
+
     return jsonify({'ok': True, 'created': True, 'id': new_id})
 
 
@@ -502,9 +523,17 @@ def delete_region_date(date_id):
     from flask import jsonify
     with get_db() as conn:
         rd = conn.execute(
-            "SELECT id FROM region_dates WHERE id=?", (date_id,)).fetchone()
+            "SELECT id, gcal_event_id FROM region_dates WHERE id=?", (date_id,)).fetchone()
         if not rd:
             return jsonify({'ok': False, 'error': 'Not found'}), 404
+        if rd['gcal_event_id']:
+            try:
+                from gcal_sync import delete_calendar_event
+                delete_calendar_event(rd['gcal_event_id'])
+            except Exception as _gcal_err:
+                import logging
+                logging.getLogger('gcal_sync').error(
+                    f"Region date delete cleanup failed for {date_id}: {_gcal_err}")
         conn.execute("DELETE FROM region_dates WHERE id=?", (date_id,))
         conn.commit()
     return jsonify({'ok': True})

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Calendar Sync{% endblock %}
+{% block topbar_title %}Calendar Sync{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <div class="sd-card">
+      <div class="sd-card-header">Google Calendar Integration</div>
+      <div style="padding:1.5rem;">
+
+        <div style="font-size:0.82rem; color:var(--sd-muted); margin-bottom:1.25rem; line-height:1.5;">
+          Pushes Booking and Rental jobs to Google Calendar when the
+          <strong>Add to Calendar</strong> checkbox is ticked on a job.
+          Uses the same Google account credentials as the Gmail import
+          (refresh token must include Calendar access).
+        </div>
+
+        <div style="margin-bottom:1.25rem;">
+          <label class="sd-label">Calendar</label>
+          <div class="sd-input mono" style="background:rgba(255,255,255,0.03); color:var(--sd-muted);">
+            {{ calendar_id or '— not configured (set GMAIL_USER or GCAL_CALENDAR_ID) —' }}
+          </div>
+        </div>
+
+        <form method="post">
+          <div style="margin-bottom:1.25rem;">
+            <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-size:0.9rem;">
+              <input type="checkbox" name="gcal_enabled" value="1"
+                     {% if gcal_enabled %}checked{% endif %}
+                     style="accent-color:var(--sd-accent); width:16px; height:16px;">
+              Enable Google Calendar sync
+            </label>
+            <div style="font-size:0.75rem; color:var(--sd-muted); margin-top:0.35rem; margin-left:1.5rem;">
+              When off, no job will be pushed to or removed from Calendar,
+              even if "Add to Calendar" is checked on individual jobs.
+            </div>
+          </div>
+          <div style="display:flex; justify-content:flex-end; gap:0.75rem;">
+            <button type="submit" class="btn-accent">
+              <i class="bi bi-check-lg"></i> Save
+            </button>
+          </div>
+        </form>
+
+        <hr class="divider">
+
+        <form method="post">
+          <input type="hidden" name="test_connection" value="1">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem;">
+            <div style="font-size:0.8rem; color:var(--sd-muted);">
+              Creates a throwaway test event far in the future, then deletes
+              it immediately — confirms credentials and Calendar ID are working.
+            </div>
+            <button type="submit" class="btn-ghost" style="flex-shrink:0;">
+              <i class="bi bi-plug"></i> Test Connection
+            </button>
+          </div>
+        </form>
+
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

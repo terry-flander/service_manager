@@ -467,6 +467,21 @@ document.addEventListener('click', function(e) {
             </div>
             {% endif %}
 
+            <!-- Add to Calendar — booking and rental only -->
+            {% if job['job_type'] in ('booking', 'rental') %}
+            <div class="col-12">
+              <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-size:0.875rem;">
+                <input type="checkbox" name="add_to_calendar" value="1"
+                       {% if job['add_to_calendar'] %}checked{% endif %}
+                       style="accent-color:var(--sd-accent); width:16px; height:16px;">
+                Add to Calendar
+                {% if job['gcal_event_id'] %}
+                <i class="bi bi-check-circle-fill" style="color:var(--sd-accent); font-size:0.8rem;" title="Synced to Google Calendar"></i>
+                {% endif %}
+              </label>
+            </div>
+            {% endif %}
+
             <!-- Tax Treatment -->
             <div class="col-md-6">
               <label class="sd-label">Tax Treatment</label>
@@ -641,7 +656,56 @@ document.addEventListener('click', function(e) {
       action="{{ url_for('jobs.delete_job', job_id=job['id']) }}"
       style="display:none;"></form>
 
+<!-- ── Referral Source Modal — booking jobs, on mark-as-paid ────────────────── -->
+<div id="referral-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6);
+            z-index:2500; align-items:center; justify-content:center; padding:1rem;">
+  <div style="background:var(--sd-surface); border:1px solid var(--sd-border);
+              border-radius:12px; max-width:380px; width:100%;
+              padding:1.5rem; box-shadow:0 8px 40px rgba(0,0,0,0.5);">
+    <div style="font-size:0.95rem; font-weight:600; margin-bottom:0.75rem; color:var(--sd-text);">
+      How did the customer hear about us?
+    </div>
+    <select id="referral-select" class="sd-input" style="margin-bottom:0.75rem;">
+      <option value="">— Select —</option>
+      <option value="Google">Google</option>
+      <option value="Referral">Referral</option>
+      <option value="Drove past">Drove past</option>
+      <option value="Social media">Social media</option>
+      <option value="Repeat Customer">Repeat Customer</option>
+      <option value="Other">Other</option>
+    </select>
+    <input type="text" id="referral-other" class="sd-input" placeholder="Please specify…"
+           style="display:none; margin-bottom:0.75rem;">
+    <div style="display:flex; gap:0.5rem; justify-content:flex-end;">
+      <button type="button" class="btn-ghost" onclick="skipReferral()">Skip</button>
+      <button type="button" class="btn-accent" onclick="confirmReferral()">Continue</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Feedback Email Modal — booking jobs, on mark-as-paid ──────────────────── -->
+<div id="feedback-email-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6);
+            z-index:2500; align-items:center; justify-content:center; padding:1rem;">
+  <div style="background:var(--sd-surface); border:1px solid var(--sd-border);
+              border-radius:12px; max-width:380px; width:100%;
+              padding:1.5rem; box-shadow:0 8px 40px rgba(0,0,0,0.5);">
+    <div style="font-size:0.95rem; font-weight:600; margin-bottom:0.5rem; color:var(--sd-text);">
+      Send feedback email?
+    </div>
+    <div style="font-size:0.85rem; color:var(--sd-muted); margin-bottom:1.25rem; line-height:1.4;">
+      Sends the customer a thank-you email with a link to share feedback.
+    </div>
+    <div style="display:flex; gap:0.5rem; justify-content:flex-end;">
+      <button type="button" class="btn-ghost" onclick="finishPaidFlow(false)">No</button>
+      <button type="button" class="btn-accent" onclick="finishPaidFlow(true)">Yes, send it</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Add Part Modal ──────────────────────────────────────────────────────── -->
+
 <div id="add-part-overlay"
      style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6);
             z-index:2000; align-items:flex-start; justify-content:center;
@@ -865,50 +929,110 @@ function bookingModeChanged(mode) {
 })();
 
 // ── Custom Yes/No/Cancel modal for unsaved changes ───────────────────────────
-function showUnsavedModal(callback) {
-  const overlay = document.createElement('div');
-  overlay.style.cssText =
-    'position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:3000;' +
-    'display:flex; align-items:center; justify-content:center; padding:1rem;';
-  overlay.innerHTML = `
-    <div style="background:var(--sd-surface); border:1px solid var(--sd-border);
-                border-radius:12px; max-width:380px; width:100%;
-                padding:1.5rem; box-shadow:0 8px 40px rgba(0,0,0,0.5);">
-      <div style="font-size:0.95rem; font-weight:600; margin-bottom:0.5rem; color:var(--sd-text);">
-        Unsaved Changes
-      </div>
-      <div style="font-size:0.85rem; color:var(--sd-muted); margin-bottom:1.25rem; line-height:1.4;">
-        There are unsaved changes. Do you want to save them?
-      </div>
-      <div style="display:flex; gap:0.5rem; justify-content:flex-end; flex-wrap:wrap;">
-        <button type="button" class="btn-ghost" data-choice="cancel">Cancel</button>
-        <button type="button" class="btn-ghost" data-choice="no">No</button>
-        <button type="button" class="btn-accent" data-choice="yes">Yes</button>
-      </div>
-    </div>`;
-  document.body.appendChild(overlay);
+// showUnsavedModal() is now defined globally in base.html
 
-  function finish(choice) {
-    document.removeEventListener('keydown', onKey);
-    overlay.remove();
-    callback(choice);
-  }
-  function onKey(e) {
-    if (e.key === 'Escape') finish('cancel');
-    else if (e.key === 'Enter') finish('yes');
-  }
-  document.addEventListener('keydown', onKey);
 
-  overlay.querySelectorAll('[data-choice]').forEach(function (btn) {
-    btn.addEventListener('click', function () { finish(this.getAttribute('data-choice')); });
-  });
-  overlay.addEventListener('click', function (e) {
-    if (e.target === overlay) finish('cancel');
+// ── Mark-as-paid flow: referral source + feedback email — booking jobs only ──
+(function () {
+  const JOB_TYPE      = {{ job['job_type']|tojson }};
+  const JOB_ID         = {{ job['id']|tojson }};
+  const ORIGINAL_STATUS = {{ job['status']|tojson }};
+  const HAS_REFERRAL    = {{ (job['referral_source'] or '')|tojson }} !== '';
+  const CUSTOMER_EMAIL  = {{ (job['customer_email'] or '')|tojson }};
+  const IS_REPEAT_CUSTOMER = {{ is_repeat_customer|tojson }};
+
+  const saveForm   = document.getElementById('save-form');
+  const statusSel  = document.querySelector('select[name="status"]');
+  if (!saveForm || !statusSel) return;
+
+  let paidFlowDone = false;   // set true once both modals have been resolved
+  let referralValue = null;   // captured answer, or '' if skipped
+
+  function isBookingGoingToPaid() {
+    return JOB_TYPE === 'booking' &&
+           statusSel.value === 'paid' &&
+           ORIGINAL_STATUS !== 'paid' &&
+           !HAS_REFERRAL;
+  }
+
+  saveForm.addEventListener('submit', function (e) {
+    if (paidFlowDone) return; // already resolved — let it submit normally
+    if (!isBookingGoingToPaid()) return; // nothing to intercept
+
+    e.preventDefault();
+    openReferralModal();
   });
 
-  // Focus the primary action for keyboard users
-  setTimeout(() => overlay.querySelector('[data-choice="yes"]').focus(), 0);
-}
+  function openReferralModal() {
+    document.getElementById('referral-select').value =
+      IS_REPEAT_CUSTOMER ? 'Repeat Customer' : '';
+    document.getElementById('referral-other').value = '';
+    document.getElementById('referral-other').style.display = 'none';
+    document.getElementById('referral-overlay').style.display = 'flex';
+  }
+
+  document.getElementById('referral-select').addEventListener('change', function () {
+    document.getElementById('referral-other').style.display =
+      this.value === 'Other' ? 'block' : 'none';
+  });
+
+  window.skipReferral = function () {
+    referralValue = '';
+    document.getElementById('referral-overlay').style.display = 'none';
+    proceedToFeedbackStep();
+  };
+
+  window.confirmReferral = function () {
+    const sel = document.getElementById('referral-select').value;
+    const other = document.getElementById('referral-other').value.trim();
+    referralValue = (sel === 'Other' && other) ? other : sel;
+    document.getElementById('referral-overlay').style.display = 'none';
+    proceedToFeedbackStep();
+  };
+
+  function proceedToFeedbackStep() {
+    if (CUSTOMER_EMAIL) {
+      document.getElementById('feedback-email-overlay').style.display = 'flex';
+    } else {
+      finishPaidFlow(false);
+    }
+  }
+
+  window.finishPaidFlow = function (sendFeedback) {
+    document.getElementById('feedback-email-overlay').style.display = 'none';
+
+    // Inject referral_source as a hidden field so it submits with the form
+    if (referralValue) {
+      let hidden = document.getElementById('referral-source-hidden');
+      if (!hidden) {
+        hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = 'referral_source';
+        hidden.id = 'referral-source-hidden';
+        saveForm.appendChild(hidden);
+      }
+      hidden.value = referralValue;
+    }
+
+    paidFlowDone = true;
+
+    if (sendFeedback) {
+      fetch(`/jobs/${JOB_ID}/send-feedback-email`, { method: 'POST' })
+        .then(r => r.json())
+        .then(res => {
+          if (!res.ok) {
+            console.error('Feedback email failed:', res.error);
+          }
+        })
+        .catch(function (err) { console.error('Feedback email request failed:', err); })
+        .finally(function () {
+          saveForm.requestSubmit ? saveForm.requestSubmit() : saveForm.submit();
+        });
+    } else {
+      saveForm.requestSubmit ? saveForm.requestSubmit() : saveForm.submit();
+    }
+  };
+})();
 
 
 // ── Auto-set end time to start + 1 hour when start changes ──────────────────
@@ -1134,6 +1258,13 @@ document.addEventListener('DOMContentLoaded', function() {
   if (window.location.hash === '#add-part') {
     openAddPartModal();
   }
+  {% if not job_parts %}
+  // No parts logged yet — open Add Part automatically on first load only.
+  // ESC / Cancel close it without reopening (no further auto-trigger).
+  else if (window.location.hash !== '#add-part') {
+    openAddPartModal();
+  }
+  {% endif %}
 })();
 
 // ── Add Part modal open/close ─────────────────────────────────────────────────

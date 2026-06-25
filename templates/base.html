@@ -354,6 +354,10 @@
       -webkit-tap-highlight-color: transparent;
     }
     .btn-accent:hover { background: var(--sd-accent-dim); color: #fff; }
+    .btn-accent:disabled, .btn-ghost:disabled {
+      opacity: 0.4; cursor: not-allowed; pointer-events: none;
+    }
+    .btn-accent:disabled:hover { background: var(--sd-accent); }
 
     .btn-ghost {
       background: transparent; color: var(--sd-muted);
@@ -504,7 +508,7 @@
       <i class="bi bi-plus-circle"></i> New Job
     </a>
     <a href="{{ url_for('jobs.new_sale') }}" class="sidebar-link {% if request.endpoint == 'jobs.new_sale' %}active{% endif %}" onclick="closeSidebar()">
-      <i class="bi bi-cash-coin"></i> Cash Sale
+      <i class="bi bi-cash-coin"></i> Counter Sale
     </a>
     <a href="{{ url_for('calendar.index') }}" class="sidebar-link {% if request.endpoint == 'calendar.index' %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-calendar3"></i> Calendar
@@ -569,6 +573,12 @@
         </a>
         <a href="{{ url_for('jobs.status_colors') }}" class="sidebar-link {% if request.endpoint == 'jobs.status_colors' %}active{% endif %}" onclick="closeSidebar()" style="padding-left:2rem;">
           <i class="bi bi-palette"></i> Status Colours
+        </a>
+        <a href="{{ url_for('jobs.calendar_settings') }}" class="sidebar-link {% if request.endpoint == 'jobs.calendar_settings' %}active{% endif %}" onclick="closeSidebar()" style="padding-left:2rem;">
+          <i class="bi bi-calendar-check"></i> Calendar Sync
+        </a>
+        <a href="{{ url_for('jobs.feedback_settings') }}" class="sidebar-link {% if request.endpoint == 'jobs.feedback_settings' %}active{% endif %}" onclick="closeSidebar()" style="padding-left:2rem;">
+          <i class="bi bi-star"></i> Feedback Settings
         </a>
         <a href="{{ url_for('jobs.backup_db') }}" class="sidebar-link" onclick="closeSidebar()" style="padding-left:2rem;">
           <i class="bi bi-download"></i> Backup DB
@@ -906,6 +916,52 @@ function stripEmailQuotes(text) {
 document.getElementById('thread-modal').addEventListener('click', function(e) {
   if (e.target === this) this.close();
 });
+
+// ── Shared Yes/No/Cancel modal for unsaved changes — used by job detail and
+//    customer form pages. Callback receives 'yes' | 'no' | 'cancel'.
+function showUnsavedModal(callback) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText =
+    'position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:3000;' +
+    'display:flex; align-items:center; justify-content:center; padding:1rem;';
+  overlay.innerHTML = `
+    <div style="background:var(--sd-surface); border:1px solid var(--sd-border);
+                border-radius:12px; max-width:380px; width:100%;
+                padding:1.5rem; box-shadow:0 8px 40px rgba(0,0,0,0.5);">
+      <div style="font-size:0.95rem; font-weight:600; margin-bottom:0.5rem; color:var(--sd-text);">
+        Unsaved Changes
+      </div>
+      <div style="font-size:0.85rem; color:var(--sd-muted); margin-bottom:1.25rem; line-height:1.4;">
+        There are unsaved changes. Do you want to save them?
+      </div>
+      <div style="display:flex; gap:0.5rem; justify-content:flex-end; flex-wrap:wrap;">
+        <button type="button" class="btn-ghost" data-choice="cancel">Cancel</button>
+        <button type="button" class="btn-ghost" data-choice="no">No</button>
+        <button type="button" class="btn-accent" data-choice="yes">Yes</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+
+  function finish(choice) {
+    document.removeEventListener('keydown', onKey);
+    overlay.remove();
+    callback(choice);
+  }
+  function onKey(e) {
+    if (e.key === 'Escape') finish('cancel');
+    else if (e.key === 'Enter') finish('yes');
+  }
+  document.addEventListener('keydown', onKey);
+
+  overlay.querySelectorAll('[data-choice]').forEach(function (btn) {
+    btn.addEventListener('click', function () { finish(this.getAttribute('data-choice')); });
+  });
+  overlay.addEventListener('click', function (e) {
+    if (e.target === overlay) finish('cancel');
+  });
+
+  setTimeout(() => overlay.querySelector('[data-choice="yes"]').focus(), 0);
+}
 </script>
 
 <!-- Left rail — landscape mobile only -->
@@ -924,7 +980,7 @@ document.getElementById('thread-modal').addEventListener('click', function(e) {
   </a>
   <a href="{{ url_for('jobs.new_sale') }}" class="lr-item {% if request.endpoint == 'jobs.new_sale' %}active{% endif %}">
     <i class="bi bi-cash-coin"></i>
-    <span>Cash Sale</span>
+    <span>Counter Sale</span>
   </a>
   <button class="lr-item" onclick="toggleSidebar()" aria-label="Menu">
     <i class="bi bi-grid-3x3-gap"></i>
@@ -948,7 +1004,7 @@ document.getElementById('thread-modal').addEventListener('click', function(e) {
   </a>
   <a href="{{ url_for('jobs.new_sale') }}" class="bn-item {% if request.endpoint == 'jobs.new_sale' %}active{% endif %}">
     <i class="bi bi-cash-coin"></i>
-    <span>Cash Sale</span>
+    <span>Counter Sale</span>
   </a>
   <button class="bn-item" onclick="toggleSidebar()" aria-label="Menu">
     <i class="bi bi-grid-3x3-gap"></i>

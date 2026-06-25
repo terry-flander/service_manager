@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Feedback Settings{% endblock %}
+{% block topbar_title %}Feedback Settings{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-6">
+    <div class="sd-card">
+      <div class="sd-card-header">Customer Feedback Email</div>
+      <div style="padding:1.5rem;">
+
+        <div style="font-size:0.82rem; color:var(--sd-muted); margin-bottom:1.25rem; line-height:1.5;">
+          When a booking job is marked Paid, ServiceDesk can offer to send
+          the customer a thank-you / feedback email with a pre-filled link
+          to your Google Form.
+        </div>
+
+        <form method="post">
+          <div style="margin-bottom:1.25rem;">
+            <label class="sd-label">Email template to send</label>
+            <select name="feedback_email_template_name" class="sd-input">
+              {% for t in templates %}
+              <option value="{{ t }}" {% if t == tmpl_name %}selected{% endif %}>
+                {{ t }}
+              </option>
+              {% endfor %}
+              {% if tmpl_name not in templates %}
+              <option value="{{ tmpl_name }}" selected>{{ tmpl_name }} (not found — create it in Email Templates)</option>
+              {% endif %}
+            </select>
+            <div style="font-size:0.72rem; color:var(--sd-muted); margin-top:0.35rem;">
+              Manage templates under Email Templates. Use
+              <code style="color:var(--sd-accent);">{{'{{'}}feedback_link{{'}}'}}</code>
+              in the body wherever you want the form link to appear.
+            </div>
+          </div>
+
+          <div style="margin-bottom:1.25rem;">
+            <label class="sd-label">Google Form pre-filled link template</label>
+            <textarea name="feedback_form_url_template" class="sd-input mono"
+                      rows="3" style="font-size:0.8rem;"
+                      placeholder="https://docs.google.com/forms/d/e/FORM_ID/viewform?usp=pp_url&entry.111={name}&entry.222={reference}">{{ url_template }}</textarea>
+            <div style="font-size:0.72rem; color:var(--sd-muted); margin-top:0.35rem; line-height:1.4;">
+              Paste the "Get pre-filled link" URL from Google Forms, then
+              replace the sample values you typed with
+              <code style="color:var(--sd-accent);">{name}</code> and
+              <code style="color:var(--sd-accent);">{reference}</code>
+              in place of the matching <code>entry.XXXXXXX=</code> values.
+            </div>
+          </div>
+
+          <div style="display:flex; justify-content:flex-end; gap:0.75rem;">
+            <button type="submit" class="btn-accent">
+              <i class="bi bi-check-lg"></i> Save
+            </button>
+          </div>
+        </form>
+
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

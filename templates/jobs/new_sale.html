@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block title %}New Cash Sale{% endblock %}
-{% block topbar_title %}New Cash Sale{% endblock %}
+{% block title %}New Counter Sale{% endblock %}
+{% block topbar_title %}New Counter Sale{% endblock %}
 {% block topbar_actions %}
   <a href="{{ url_for('jobs.index') }}" class="btn-ghost">
     <i class="bi bi-arrow-left"></i> Jobs
@@ -13,9 +13,9 @@
     <div class="sd-card">
       <div class="sd-card-header">
         <i class="bi bi-cash-coin" style="color:var(--sd-accent);"></i>
-        Cash Sale
+        Counter Sale
         <span style="font-size:0.75rem; font-weight:400; color:var(--sd-muted);">
-          CS-NNNN — Cash Sales customer
+          CS-NNNN — Counter Sales customer
         </span>
       </div>
       <form method="post">

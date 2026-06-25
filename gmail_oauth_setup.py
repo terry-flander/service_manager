@@ -21,13 +21,15 @@ Google Cloud Console setup (one-time):
   1. Go to https://console.cloud.google.com
   2. Create a project (or select existing)
   3. APIs & Services → Enable APIs → search "Gmail API" → Enable
+     Also enable "Google Calendar API" the same way.
   4. APIs & Services → Credentials → Create Credentials → OAuth client ID
      - Application type: Desktop app
      - Name: ServiceDesk
   5. Download the JSON — copy client_id and client_secret into .env
   6. APIs & Services → OAuth consent screen
      - User Type: External (or Internal if Workspace)
-     - Add scope: https://mail.google.com/
+     - Add scopes: https://mail.google.com/
+                   https://www.googleapis.com/auth/calendar.events
      - Add your email as a Test user (if External)
 """
 import os
@@ -135,7 +137,7 @@ Get them from:
         sys.exit(1)
 
     redirect_uri = 'http://localhost:8765/callback'
-    scope        = 'https://mail.google.com/'
+    scope        = 'https://mail.google.com/ https://www.googleapis.com/auth/calendar.events'
     verifier, challenge = make_pkce()
     state        = secrets.token_urlsafe(16)
 
@@ -233,6 +235,7 @@ To force a new one:
 Success!
 ========
 Refresh token saved to .env as GMAIL_REFRESH_TOKEN.
+This token now covers both Gmail and Google Calendar (calendar.events) access.
 
 Also add these to your .env if not already set:
   GMAIL_USER=info@theflyingbike.com.au
@@ -241,7 +244,8 @@ Also add these to your .env if not already set:
   GMAIL_LABEL=Booking Email/Open Bookings
   GMAIL_POLL_MINUTES=5
 
-Your ServiceDesk will now automatically import booking emails.
+Your ServiceDesk will now automatically import booking emails,
+and can also create/update/delete events on your Google Calendar.
 """)
 
 if __name__ == '__main__':

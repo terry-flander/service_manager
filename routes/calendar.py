@@ -135,20 +135,25 @@ def events():
         location = job['address'] or job['suburb'] or ''
 
         if job['job_type'] == 'rental':
-            # Rental: two all-day markers — start date and end date
-            label = f"{job['reference']} — {job['customer_name']}"
-            for marker_date, suffix in [
-                (job['scheduled_date'], 'Start'),
-                (job['end_date'],       'End'),
-            ]:
-                if not marker_date:
-                    continue
+            # Rental: single multi-day all-day event spanning Start -> End,
+            # matching how it appears on Google Calendar.
+            if job['scheduled_date']:
+                label = f"{job['reference']} — {job['customer_name']}"
+                end_date = job['end_date'] or job['scheduled_date']
+                # FullCalendar's end date is exclusive (same convention as
+                # Google Calendar) — add 1 day so the event visually spans
+                # through the end date inclusive.
+                from datetime import datetime as _dt, timedelta as _td1
+                end_exclusive = (_dt.strptime(end_date, '%Y-%m-%d')
+                                 + _td1(days=1)).strftime('%Y-%m-%d')
                 result.append({
-                    'id':     f"rental|{job['id']}|{suffix.lower()}",
-                    'title':  f"{label} ({suffix})",
-                    'start':  marker_date,
+                    'id':     f"rental|{job['id']}",
+                    'title':  label,
+                    'start':  job['scheduled_date'],
+                    'end':    end_exclusive,
                     'allDay': True,
                     'color':  color,
+                    'editable': False,
                     'url':    f"/jobs/{job['id']}?from=calendar",
                     'extendedProps': {
                         'type':    'rental',
@@ -156,7 +161,6 @@ def events():
                         'address': job['address'] or '',
                         'suburb':  job['suburb']  or '',
                         'phone':   job['customer_phone'] or '',
-                        'marker':  suffix,
                     }
                 })
         else:
@@ -216,6 +220,56 @@ def events():
                 'event_id':    ev['id'],
             }
         })
+    # ── Google Calendar-only events (recurring series, manual entries made
+    #    directly in Google) — read-only display layer ──────────────────────
+    with get_db() as conn:
+        gcal_enabled_row = conn.execute(
+            "SELECT value FROM settings WHERE key='gcal_enabled'").fetchone()
+        gcal_enabled = bool(gcal_enabled_row and gcal_enabled_row['value'] == '1')
+
+    if gcal_enabled:
+        try:
+            with get_db() as conn:
+                known_ids = set()
+                for row in conn.execute(
+                        "SELECT gcal_event_id FROM jobs WHERE gcal_event_id IS NOT NULL"):
+                    known_ids.add(row['gcal_event_id'])
+                for row in conn.execute(
+                        "SELECT gcal_event_id FROM region_dates WHERE gcal_event_id IS NOT NULL"):
+                    known_ids.add(row['gcal_event_id'])
+
+            # Use the same window the in-app calendar is requesting, if
+            # provided by FullCalendar; otherwise default to a wide window.
+            start_param = request.args.get('start')
+            end_param   = request.args.get('end')
+            time_min = start_param or f"{today}T00:00:00Z"
+            from datetime import timedelta as _td
+            time_max = end_param or (
+                _date.today() + _td(days=90)).isoformat() + "T00:00:00Z"
+
+            from gcal_sync import list_calendar_events
+            for gev in list_calendar_events(time_min, time_max):
+                if gev['id'] in known_ids:
+                    continue  # this is one of ours — already shown above
+                result.append({
+                    'id':     f"gcal|{gev['id']}",
+                    'title':  f"🌐 {gev['summary']}",
+                    'start':  gev['start'],
+                    'end':    gev['end'],
+                    'allDay': gev['all_day'],
+                    'color':  gev['color_hex'],
+                    'editable': False,
+                    'classNames': ['gcal-external-event'],
+                    'extendedProps': {
+                        'type':        'gcal_external',
+                        'description': gev['description'],
+                        'address':     gev['location'],
+                    }
+                })
+        except Exception as _gcal_err:
+            import logging
+            logging.getLogger('gcal_sync').error(f"List events error: {_gcal_err}")
+
     return jsonify(result)
 
 

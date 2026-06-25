@@ -63,6 +63,7 @@ def init_db():
                 region_id INTEGER NOT NULL REFERENCES regions(id) ON DELETE CASCADE,
                 date      TEXT NOT NULL,
                 status    TEXT NOT NULL DEFAULT 'open',
+                gcal_event_id TEXT,
                 UNIQUE(region_id, date)
             );
 
@@ -111,7 +112,10 @@ def init_db():
                 service_types  TEXT,
                 payment_type   TEXT,
                 bike_description TEXT,
-                reconciled_eftpos TEXT
+                reconciled_eftpos TEXT,
+                gcal_event_id     TEXT,
+                add_to_calendar   INTEGER NOT NULL DEFAULT 0,
+                referral_source   TEXT
             );
 
             CREATE TABLE IF NOT EXISTS eftpos_transactions (
