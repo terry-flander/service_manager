@@ -75,10 +75,28 @@ def _new_message_id(from_addr):
     return f"<{int(time.time())}.{uuid.uuid4().hex[:12]}@{domain}>"
 
 
+def _html_to_plain_fallback(html_body):
+    """Build a plain-text fallback from an HTML body, for the
+    multipart/alternative plain-text part. Reuses the same converter
+    the inbound poller uses for HTML emails."""
+    try:
+        from email_poller import _html_to_text
+        return _html_to_text(html_body)
+    except Exception:
+        # Fallback if email_poller isn't importable for some reason —
+        # crude tag-strip so sending never hard-fails over this.
+        import re
+        return re.sub(r'<[^>]+>', '', html_body).strip()
+
+
 def send_reply(to_address, subject, body_text,
                in_reply_to=None, references=None,
-               message_id_out=None):
-    """Send a plain-text reply. Returns the Message-ID."""
+               message_id_out=None, body_html=None):
+    """Send a reply. If body_html is provided, sends as
+    multipart/alternative (plain text + HTML) so email clients that
+    prefer HTML render the rich version, while plain-text-only clients
+    still get a readable fallback. If body_html is omitted, sends
+    plain-text only (unchanged behaviour). Returns the Message-ID."""
     from_addr = os.environ.get('GMAIL_USER', '')
     if not from_addr:
         raise RuntimeError("GMAIL_USER not set")
@@ -86,7 +104,13 @@ def send_reply(to_address, subject, body_text,
     if not message_id_out:
         message_id_out = _new_message_id(from_addr)
 
-    msg = email.mime.text.MIMEText(body_text, 'plain', 'utf-8')
+    if body_html:
+        msg = email.mime.multipart.MIMEMultipart('alternative')
+        msg.attach(email.mime.text.MIMEText(body_text, 'plain', 'utf-8'))
+        msg.attach(email.mime.text.MIMEText(body_html, 'html', 'utf-8'))
+    else:
+        msg = email.mime.text.MIMEText(body_text, 'plain', 'utf-8')
+
     msg['From']       = from_addr
     msg['To']         = to_address
     msg['Subject']    = subject
@@ -111,8 +135,11 @@ def send_reply_with_attachment(to_address, subject, body_text,
                                 attachment_bytes, attachment_filename,
                                 attachment_mimetype='application/pdf',
                                 in_reply_to=None, references=None,
-                                message_id_out=None):
-    """Send a reply with a binary attachment. Returns the Message-ID."""
+                                message_id_out=None, body_html=None):
+    """Send a reply with a binary attachment. If body_html is provided,
+    the text body becomes multipart/alternative (plain + HTML) nested
+    inside the outer multipart/mixed that carries the attachment.
+    Returns the Message-ID."""
     from_addr = os.environ.get('GMAIL_USER', '')
     if not from_addr:
         raise RuntimeError("GMAIL_USER not set")
@@ -134,8 +161,14 @@ def send_reply_with_attachment(to_address, subject, body_text,
             refs = refs + ' ' + in_reply_to
         outer['References'] = refs.strip()
 
-    # Plain text body
-    outer.attach(email.mime.text.MIMEText(body_text, 'plain', 'utf-8'))
+    # Body — plain only, or plain+HTML alternative
+    if body_html:
+        body_part = email.mime.multipart.MIMEMultipart('alternative')
+        body_part.attach(email.mime.text.MIMEText(body_text, 'plain', 'utf-8'))
+        body_part.attach(email.mime.text.MIMEText(body_html, 'html', 'utf-8'))
+        outer.attach(body_part)
+    else:
+        outer.attach(email.mime.text.MIMEText(body_text, 'plain', 'utf-8'))
 
     # PDF attachment
     part = email.mime.base.MIMEBase(*attachment_mimetype.split('/'))

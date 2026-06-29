@@ -112,8 +112,7 @@
           </div>
           <div class="col-12">
             <label class="sd-label">Body</label>
-            <textarea name="body" class="sd-input" rows="16" required
-                      style="font-family:'IBM Plex Mono',monospace; font-size:0.82rem;">{{ preview.body }}</textarea>
+            <textarea name="body" id="preview-body-input" class="sd-input" rows="16" required>{{ preview.body }}</textarea>
           </div>
           {% if invoice_url %}
           <div class="col-12">
@@ -166,14 +165,31 @@ const TEMPLATES = {
   {% endfor %}
 };
 
+let composeEditor = null;
+
+document.addEventListener('DOMContentLoaded', function () {
+  // Step 1 — template picker (only present when not in preview mode)
+  let pickEditor = null;
+  if (document.getElementById('body-input')) {
+    composeEditor = pickEditor = initRichTextEditor('body-input', { minHeight: '260px' });
+    const pickForm = document.getElementById('pick-form');
+    if (pickForm) pickForm.addEventListener('submit', function () { pickEditor.sync(); });
+  }
+  // Step 2 — preview & edit
+  if (document.getElementById('preview-body-input')) {
+    const previewEditor = initRichTextEditor('preview-body-input', { minHeight: '300px' });
+    const sendForm = document.getElementById('send-form');
+    if (sendForm) sendForm.addEventListener('submit', function () { previewEditor.sync(); });
+  }
+});
+
 function loadTemplate(id) {
-  const bodyInput = document.getElementById('body-input');
-  if (!bodyInput) return;
+  if (!composeEditor) return;
   if (!id || !TEMPLATES[id]) {
-    if (!id) bodyInput.value = '';
+    if (!id) composeEditor.setContent('');
     return;
   }
-  bodyInput.value = TEMPLATES[id].body;
+  composeEditor.setContent(TEMPLATES[id].body);
 }
 </script>
 {% endblock %}

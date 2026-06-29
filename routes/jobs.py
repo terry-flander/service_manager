@@ -170,21 +170,56 @@ def new_sale():
                            today=_date.today().isoformat())
 
 
-def _recalc_sale_total(conn, job_id):
-    """After adding/removing parts on a sale job, update amount_paid to parts total."""
+def recalc_job_totals(conn, job_id):
+    """The single source of truth for a job's subtotal/gst/total.
+
+    Reads the job's current tax_inclusive + payment_type and all its
+    job_parts, computes the correct figures (handling the Cash-payment
+    and GST-Exempt special cases exactly as the rest of the app already
+    did at each of its previously-duplicated call sites), and writes
+    subtotal/gst/total back to the jobs row.
+
+    Call this after ANY job_parts mutation (add/update/remove), and
+    after any jobs save that could change tax_inclusive or payment_type
+    — those are the only two job-level fields the calculation depends
+    on, besides the parts themselves.
+
+    For 'sale' jobs specifically, also keeps amount_paid in sync with
+    the parts total and stamps paid_date if not already set — this
+    folds in what the old sale-only recalc_job_totals() did, since a
+    counter sale's "amount paid" is defined as its parts total, not a
+    separately entered figure.
+    """
     job = conn.execute(
-        "SELECT job_type, payment_type, scheduled_date FROM jobs WHERE id=?",
-        (job_id,)).fetchone()
-    if not job or job['job_type'] != 'sale':
+        "SELECT job_type, payment_type, tax_inclusive, scheduled_date "
+        "FROM jobs WHERE id=?", (job_id,)).fetchone()
+    if not job:
         return
+
     parts = conn.execute(
         "SELECT quantity, unit_cost FROM job_parts WHERE job_id=?",
         (job_id,)).fetchall()
-    total = round(sum(p['quantity'] * p['unit_cost'] for p in parts), 2)
-    conn.execute(
-        "UPDATE jobs SET amount_paid=?, paid_date=coalesce(paid_date, scheduled_date) "
-        "WHERE id=?",
-        (total, job_id))
+
+    tax_raw   = job['tax_inclusive'] or 0
+    is_cash   = (job['payment_type'] or '').lower() == 'cash'
+    is_exempt = (tax_raw == 2)
+
+    if is_cash or is_exempt:
+        raw = round(sum(p['quantity'] * p['unit_cost'] for p in parts), 2)
+        subtotal, gst, total = raw, 0.0, raw
+    else:
+        from routes.invoice import calc_totals
+        subtotal, gst, total = calc_totals(parts, bool(tax_raw))
+
+    if job['job_type'] == 'sale':
+        conn.execute(
+            "UPDATE jobs SET subtotal=?, gst=?, total=?, amount_paid=?, "
+            "paid_date=coalesce(paid_date, scheduled_date) WHERE id=?",
+            (subtotal, gst, total, total, job_id))
+    else:
+        conn.execute(
+            "UPDATE jobs SET subtotal=?, gst=?, total=? WHERE id=?",
+            (subtotal, gst, total, job_id))
     conn.commit()
 
 
@@ -192,8 +227,11 @@ def _recalc_sale_total(conn, job_id):
 def index():
     import json as _json
     from flask import session as _sess
+    from job_queries import resolve_query_filters, query_row_to_dict
     user_id   = _sess.get('user_id')
     PREFS_KEY = f'job_filter_{user_id}'
+
+    query_id = request.args.get('query_id', '').strip()
 
     status       = request.args.get('status', '')
     job_type     = request.args.get('job_type', '')
@@ -222,32 +260,58 @@ def index():
     if sort not in SORT_MAP:
         sort = 'paid'
 
-    has_params = bool(request.args)
-
+    saved_query = None
     with get_db() as conn:
-        if has_params:
-            prefs = {'status': status, 'job_type': job_type,
-                     'payment_type': payment_type,
-                     'date_from': date_from, 'date_to': date_to,
-                     'search': search, 'gross_min': gross_min,
-                     'gross_max': gross_max, 'sort': sort}
-            conn.execute(
-                "INSERT INTO settings (key,value) VALUES (?,?) "
-                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                (PREFS_KEY, _json.dumps(prefs)))
-            conn.commit()
-        else:
+        if query_id:
             row = conn.execute(
-                "SELECT value FROM settings WHERE key=?",
-                (PREFS_KEY,)).fetchone()
-            if row:
-                try:
-                    prefs = _json.loads(row['value'])
-                    params = {k: v for k, v in prefs.items() if v}
-                    if params:
-                        return redirect(url_for('jobs.index', **params))
-                except Exception:
-                    pass
+                "SELECT * FROM job_queries WHERE id=?", (query_id,)).fetchone()
+            saved_query = query_row_to_dict(row)
+            if saved_query:
+                # Saved query drives the filters — remember the selection
+                # itself (not the individual field values) as the user's
+                # last-used view.
+                conn.execute(
+                    "INSERT INTO settings (key,value) VALUES (?,?) "
+                    "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    (PREFS_KEY, _json.dumps({'query_id': query_id, 'sort': sort})))
+                conn.commit()
+                gross_min = saved_query.get('gross_min')
+                gross_max = saved_query.get('gross_max')
+                gross_min = str(gross_min) if gross_min not in (None, '') else ''
+                gross_max = str(gross_max) if gross_max not in (None, '') else ''
+        else:
+            is_clear = request.args.get('clear') == '1'
+            has_params = bool(request.args) and not (is_clear and len(request.args) == 1)
+            if is_clear:
+                conn.execute("DELETE FROM settings WHERE key=?", (PREFS_KEY,))
+                conn.commit()
+            elif has_params:
+                prefs = {'status': status, 'job_type': job_type,
+                         'payment_type': payment_type,
+                         'date_from': date_from, 'date_to': date_to,
+                         'search': search, 'gross_min': gross_min,
+                         'gross_max': gross_max, 'sort': sort}
+                conn.execute(
+                    "INSERT INTO settings (key,value) VALUES (?,?) "
+                    "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    (PREFS_KEY, _json.dumps(prefs)))
+                conn.commit()
+            else:
+                row = conn.execute(
+                    "SELECT value FROM settings WHERE key=?",
+                    (PREFS_KEY,)).fetchone()
+                if row:
+                    try:
+                        prefs = _json.loads(row['value'])
+                        if 'query_id' in prefs and prefs['query_id']:
+                            return redirect(url_for('jobs.index',
+                                                     query_id=prefs['query_id'],
+                                                     sort=prefs.get('sort', 'paid')))
+                        params = {k: v for k, v in prefs.items() if v}
+                        if params:
+                            return redirect(url_for('jobs.index', **params))
+                    except Exception:
+                        pass
 
     with get_db() as conn:
         query = """
@@ -258,30 +322,61 @@ def index():
             LEFT JOIN customers c ON j.customer_id = c.id
             WHERE 1=1
         """
-        if job_type != 'lost' and status != 'lost':
-            query += " AND j.status != 'lost'"
         params = []
-        if status:
-            query += " AND j.status = ?"
-            params.append(status)
-        if job_type:
-            query += " AND j.job_type = ?"
-            params.append(job_type)
-        if payment_type:
-            query += " AND j.payment_type = ?"
-            params.append(payment_type)
-        if date_from:
-            query += " AND j.scheduled_date >= ?"
-            params.append(date_from)
-        if date_to:
-            query += " AND j.scheduled_date <= ?"
-            params.append(date_to)
-        if search:
-            query += " AND (j.customer_name LIKE ? OR j.customer_phone LIKE ?)"
-            params.extend([f'%{search}%', f'%{search}%'])
-        # ORDER BY
-        if sort in ('gross', 'total'):
-            query += " ORDER BY coalesce(j.paid_date, j.scheduled_date) ASC, j.id DESC"
+
+        if saved_query is not None:
+            statuses_selected = saved_query.get('statuses') or []
+            if not statuses_selected:
+                query += " AND j.status != 'lost'"
+            frag, frag_params = resolve_query_filters(saved_query, table_alias='j',
+                                                       date_column='j.scheduled_date')
+            if frag:
+                query += " AND " + frag
+                params.extend(frag_params)
+        else:
+            if job_type != 'lost' and status != 'lost':
+                query += " AND j.status != 'lost'"
+            if status:
+                query += " AND j.status = ?"
+                params.append(status)
+            if job_type:
+                query += " AND j.job_type = ?"
+                params.append(job_type)
+            if payment_type:
+                query += " AND j.payment_type = ?"
+                params.append(payment_type)
+            if date_from:
+                query += " AND j.scheduled_date >= ?"
+                params.append(date_from)
+            if date_to:
+                query += " AND j.scheduled_date <= ?"
+                params.append(date_to)
+            if search:
+                query += " AND (j.customer_name LIKE ? OR j.customer_phone LIKE ?)"
+                params.extend([f'%{search}%', f'%{search}%'])
+            if gross_min:
+                query += " AND j.total >= ?"
+                params.append(float(gross_min))
+            if gross_max:
+                query += " AND j.total <= ?"
+                params.append(float(gross_max))
+
+        # ORDER BY — a saved query's own sort spec overrides any default.
+        sort_sql_frag = ''
+        needs_python_sort = False
+        if saved_query is not None:
+            from job_queries import resolve_sort_clause
+            sort_sql_frag, needs_python_sort = resolve_sort_clause(saved_query, table_alias='j')
+
+        if sort_sql_frag:
+            query += f" ORDER BY {sort_sql_frag}, j.id DESC"
+        elif needs_python_sort:
+            # Sort happens fully in Python below (gross is one of the
+            # requested fields, via the legacy Python-sort path) — keep
+            # a stable base order from the DB so ties are deterministic.
+            query += " ORDER BY j.id DESC"
+        elif sort in ('gross', 'total'):
+            query += " ORDER BY j.total DESC, j.id DESC"
         elif sort == 'paid':
             query += " ORDER BY j.paid_date ASC, j.scheduled_date ASC, j.id DESC"
         else:
@@ -289,43 +384,37 @@ def index():
             query += f" ORDER BY {order_col} ASC, j.id DESC"
         jobs_raw = conn.execute(query, params).fetchall()
 
-        if jobs_raw:
-            job_ids   = [j['id'] for j in jobs_raw]
-            ph        = ','.join('?' * len(job_ids))
-            parts_map = {}
-            for p in conn.execute(
-                f"SELECT * FROM job_parts WHERE job_id IN ({ph})", job_ids
-            ).fetchall():
-                parts_map.setdefault(p['job_id'], []).append(p)
+        # subtotal/gst/total are now stored directly on the jobs row —
+        # no more per-row calc_totals() call needed here.
+        jobs = [(j, j['total'] or 0.0) for j in jobs_raw]
 
-        from routes.invoice import calc_totals
-        jobs = []
-        gmin = float(gross_min) if gross_min else None
-        gmax = float(gross_max) if gross_max else None
-        for j in jobs_raw:
-            j_parts = parts_map.get(j['id'], []) if jobs_raw else []
-            if (j['payment_type'] or '').lower() == 'cash':
-                total = round(sum(p['quantity'] * p['unit_cost'] for p in j_parts), 2)
-            else:
-                _, _, total = calc_totals(j_parts, bool(j['tax_inclusive']))
-            # Gross range filter (post-query)
-            if gmin is not None and total < gmin:
-                continue
-            if gmax is not None and total > gmax:
-                continue
-            jobs.append((j, total))
-
-        if sort in ('gross', 'total'):
-            jobs.sort(key=lambda x: x[1] or 0, reverse=True)
+        if needs_python_sort:
+            from job_queries import apply_python_sort
+            jobs = apply_python_sort(jobs, saved_query, gross_key=lambda item: item[1])
+        elif sort_sql_frag:
+            pass  # already correctly ordered by the DB query above
         elif sort == 'amount':
             jobs.sort(key=lambda x: x[0]['amount_paid'] or 0, reverse=True)
+
+        # Resolve which columns to show, per layout. Falls back to the
+        # hardcoded default for any layout the linked set (if any)
+        # doesn't specify.
+        from job_queries import get_query_visibility_set, resolve_columns, COLUMN_CATALOG
+        vis_set = get_query_visibility_set(conn, saved_query) if saved_query else None
+        columns_desktop   = resolve_columns(vis_set, 'desktop')
+        columns_landscape = resolve_columns(vis_set, 'landscape')
+        columns_portrait  = resolve_columns(vis_set, 'portrait')
 
     return render_template('jobs/index.html', jobs=jobs,
                            status=status, job_type=job_type,
                            payment_type=payment_type,
                            date_from=date_from, date_to=date_to,
                            search=search, gross_min=gross_min, gross_max=gross_max,
-                           sort=sort,
+                           sort=sort, query_id=query_id, saved_query=saved_query,
+                           columns_desktop=columns_desktop,
+                           columns_landscape=columns_landscape,
+                           columns_portrait=columns_portrait,
+                           COLUMN_CATALOG=COLUMN_CATALOG,
                            TIME_LABELS=TIME_LABELS, JOB_TYPES=JOB_TYPES)
 
 
@@ -424,6 +513,7 @@ def new_job():
                                  part['part_number'] or '', part['unit_cost']))
 
                     conn.commit()
+                    recalc_job_totals(conn, job_id)
                     break  # success
                 except _sqlite3.IntegrityError as e:
                     if 'reference' in str(e) and _attempt < 4:
@@ -559,8 +649,10 @@ def job_detail(job_id):
                     "UPDATE jobs SET paid_date=coalesce(paid_date, scheduled_date) WHERE id=?",
                     (job_id,))
             wconn.commit()
-            if jt == 'sale':
-                _recalc_sale_total(wconn, job_id)
+            # Recalculate stored subtotal/gst/total — tax_inclusive and/or
+            # payment_type may have just changed, both of which affect
+            # the figures regardless of job type.
+            recalc_job_totals(wconn, job_id)
 
             # ── Google Calendar sync — booking/rental only ──────────────────
             if jt in ('booking', 'rental'):
@@ -799,7 +891,7 @@ def add_part(job_id):
                   float(request.form.get('quantity', 1)),
                   float(request.form.get('unit_cost') or part['unit_cost'])))
             conn.commit()
-            _recalc_sale_total(conn, job_id)
+            recalc_job_totals(conn, job_id)
     else:
         description = request.form.get('description', '').strip()
         part_number = request.form.get('part_number', '').strip()
@@ -832,7 +924,7 @@ def add_part(job_id):
             """, (job_id, master_part_id, description, part_number, quantity, unit_cost))
 
             conn.commit()
-            _recalc_sale_total(conn, job_id)
+            recalc_job_totals(conn, job_id)
     flash('Part added.', 'success')
     # Preserve the ?from= param so return_to still works after adding a part
     from_param = request.args.get('from', '')
@@ -846,7 +938,7 @@ def remove_part(job_id, jp_id):
         conn.execute(
             "DELETE FROM job_parts WHERE id=? AND job_id=?", (jp_id, job_id))
         conn.commit()
-        _recalc_sale_total(conn, job_id)
+        recalc_job_totals(conn, job_id)
     flash('Part removed.', 'success')
     from_param = request.args.get('from', '')
     suffix = ('?from=' + from_param) if from_param else ''
@@ -898,6 +990,9 @@ def update_status(job_id):
             (new_status, paid_date, amount_paid, payment_type or None,
              invoice_number, referral_source, job_id))
         conn.commit()
+        # payment_type may have just changed (e.g. to/from Cash), which
+        # affects whether GST is applied — recalculate stored totals.
+        recalc_job_totals(conn, job_id)
 
         # ── Google Calendar colour sync — booking/rental only ───────────────
         fresh = conn.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()

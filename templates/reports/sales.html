@@ -1,90 +1,81 @@
 {% extends "base.html" %}
 {% block title %}Sales Report{% endblock %}
 {% block topbar_title %}Sales Report{% endblock %}
+{% block topbar_actions %}
+  {% if ran and rows %}
+    {% if saved_query %}
+    <a href="{{ url_for('reports.sales_csv', query_id=query_id) }}" class="btn-ghost">
+      <i class="bi bi-download"></i> <span>CSV</span>
+    </a>
+    <a href="{{ url_for('reports.sales_pdf', query_id=query_id) }}" class="btn-accent" target="_blank">
+      <i class="bi bi-file-pdf"></i> <span>PDF</span>
+    </a>
+    {% else %}
+    <a href="{{ url_for('reports.sales_csv', date_from=date_from, date_to=date_to, job_types=job_types) }}" class="btn-ghost">
+      <i class="bi bi-download"></i> <span>CSV</span>
+    </a>
+    <a href="{{ url_for('reports.sales_pdf', date_from=date_from, date_to=date_to, job_types=job_types) }}" class="btn-accent" target="_blank">
+      <i class="bi bi-file-pdf"></i> <span>PDF</span>
+    </a>
+    {% endif %}
+  {% endif %}
+{% endblock %}
 
 {% block content %}
 
-<!-- Filter form -->
-<div class="sd-card mb-3">
-  <div class="sd-card-header">Report Parameters</div>
-  <form method="post" id="report-form">
-    <div style="padding:1rem 1.25rem; display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap;">
+<!-- Saved query selector -->
+<div class="sd-card mb-3" style="padding:0.75rem 1.25rem; display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
+  <i class="bi bi-bookmark-star" style="color:var(--sd-muted);"></i>
+  <select id="saved-query-select" class="sd-input" style="max-width:260px; flex:1; min-width:160px;">
+    <option value="">— No saved query —</option>
+  </select>
+  <button type="button" class="btn-ghost" id="edit-query-btn" disabled onclick="openQueryBuilder(currentQueryId)">
+    <i class="bi bi-pencil"></i> Edit
+  </button>
+  <button type="button" class="btn-ghost" onclick="openQueryBuilder(null)">
+    <i class="bi bi-plus-lg"></i> Add
+  </button>
+  {% if saved_query %}
+  <span style="font-size:0.78rem; color:var(--sd-muted); margin-left:auto;">
+    <i class="bi bi-info-circle"></i> Showing saved query
+    <strong style="color:var(--sd-text);">{{ saved_query.name }}</strong>
+  </span>
+  {% endif %}
+</div>
 
-      <div>
-        <label class="sd-label">From</label>
-        <input type="date" name="date_from" class="sd-input" style="width:160px;"
-               value="{{ date_from }}">
-      </div>
-      <div>
-        <label class="sd-label">To</label>
-        <input type="date" name="date_to" class="sd-input" style="width:160px;"
-               value="{{ date_to }}">
-      </div>
-      <div>
-        <label class="sd-label">Job Type</label>
-        <div style="display:flex; gap:1rem; padding-top:0.25rem;">
-          {% for key, label in JOB_TYPE_OPTIONS %}
-          {% if label %}
-          <label style="display:flex; align-items:center; gap:0.4rem;
-                         font-size:0.875rem; color:var(--sd-text); cursor:pointer;">
-            <input type="checkbox" name="job_types" value="{{ key }}"
-                   {% if key in job_types %}checked{% endif %}
-                   style="accent-color:var(--sd-accent); width:14px; height:14px;">
-            {{ label }}
-          </label>
-          {% endif %}
-          {% endfor %}
-        </div>
-      </div>
+<!-- Display preferences — independent of the saved query -->
+<div class="sd-card mb-3" style="padding:0.6rem 1.25rem;">
+  <form method="post" id="display-prefs-form" style="display:flex; gap:1.25rem; align-items:center; flex-wrap:wrap;">
+    <input type="hidden" name="display_prefs" value="1">
+    {% if query_id %}<input type="hidden" name="query_id" value="{{ query_id }}">{% endif %}
 
-      <label style="display:flex; align-items:center; gap:0.4rem;
-                     font-size:0.875rem; color:var(--sd-text); cursor:pointer;">
-        <input type="checkbox" name="show_daily"
-               {% if show_daily %}checked{% endif %}
-               style="accent-color:var(--sd-accent); width:14px; height:14px;">
-        Daily subtotals
+    <label style="display:flex; align-items:center; gap:0.4rem;
+                   font-size:0.85rem; color:var(--sd-text); cursor:pointer;">
+      <input type="checkbox" name="show_daily" onchange="this.form.submit()"
+             {% if show_daily %}checked{% endif %}
+             style="accent-color:var(--sd-accent); width:14px; height:14px;">
+      Daily subtotals
+    </label>
+
+    <div style="display:flex; gap:0.5rem; align-items:center; font-size:0.85rem; color:var(--sd-text);">
+      <span style="color:var(--sd-muted);">Sort by:</span>
+      {% for val, lbl in [('paid','Date Paid'),('scheduled','Scheduled')] %}
+      <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
+        <input type="radio" name="sort_by" value="{{ val }}" onchange="this.form.submit()"
+               {% if sort_by == val %}checked{% endif %}
+               style="accent-color:var(--sd-accent); width:13px; height:13px;">
+        {{ lbl }}
       </label>
-
-      <div style="display:flex; gap:0.5rem; align-items:center; font-size:0.875rem; color:var(--sd-text);">
-        <span style="color:var(--sd-muted);">Sort by:</span>
-        {% for val, lbl in [('paid','Date Paid'),('scheduled','Scheduled')] %}
-        <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
-          <input type="radio" name="sort_by" value="{{ val }}"
-                 {% if sort_by == val %}checked{% endif %}
-                 style="accent-color:var(--sd-accent); width:13px; height:13px;">
-          {{ lbl }}
-        </label>
-        {% endfor %}
-      </div>
-
-      <button type="submit" class="btn-accent">
-        <i class="bi bi-bar-chart"></i> Run Report
-      </button>
-      <span style="font-size:0.78rem; color:var(--sd-muted); align-self:center;">
-        {% if show_cash %}
-          <i class="bi bi-cash-coin" style="color:var(--sd-accent);"></i> Cash payments included
-        {% else %}
-          Cash payments excluded
-        {% endif %}
-      </span>
-
-      {% if ran and rows %}
-      <div style="margin-left:auto; display:flex; gap:0.5rem;">
-        <a href="{{ url_for('reports.sales_csv',
-                   date_from=date_from, date_to=date_to,
-                   job_types=job_types) }}"
-           class="btn-ghost">
-          <i class="bi bi-download"></i> CSV
-        </a>
-        <a href="{{ url_for('reports.sales_pdf',
-                   date_from=date_from, date_to=date_to,
-                   job_types=job_types) }}"
-           class="btn-accent" target="_blank">
-          <i class="bi bi-file-pdf"></i> PDF
-        </a>
-      </div>
-      {% endif %}
+      {% endfor %}
     </div>
+
+    <span style="font-size:0.78rem; color:var(--sd-muted); margin-left:auto;">
+      {% if show_cash %}
+        <i class="bi bi-cash-coin" style="color:var(--sd-accent);"></i> Cash payments included
+      {% else %}
+        Cash payments excluded
+      {% endif %}
+    </span>
   </form>
 </div>
 
@@ -256,4 +247,25 @@
   {% endif %}
 {% endif %}
 
-{% endblock %}ase.html" %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentQueryId = {{ query_id|tojson }} || '';
+
+window.onQuerySelected = function (queryId) {
+  if (!queryId) {
+    window.location = '{{ url_for("reports.sales") }}?clear=1';
+    return;
+  }
+  window.location = '?query_id=' + encodeURIComponent(queryId) + '&run=1';
+};
+
+document.addEventListener('DOMContentLoaded', function () {
+  populateSavedQueryDropdown(currentQueryId, 'saved-query-select');
+  document.getElementById('saved-query-select').addEventListener('change', function () {
+    window.onQuerySelected(this.value);
+  });
+});
+</script>
+{% endblock %}

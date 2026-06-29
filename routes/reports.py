@@ -24,10 +24,20 @@ JOB_TYPE_OPTIONS = [
 ]
 
 
-def _get_report_data(date_from, date_to, job_types, show_cash=False, sort_by='paid'):
+def _get_report_data(date_from, date_to, job_types, show_cash=False, sort_by='paid',
+                      saved_query=None):
     """
     Fetch all jobs in range, calculate financials per job.
     Returns list of row dicts ordered by paid_date.
+
+    If saved_query is provided, its statuses/payment_types/search filters
+    are applied via the shared resolve_query_filters() helper, and its
+    Status selection REPLACES the old hardcoded invoiced/paid restriction
+    (an explicit decision — a saved query's Status filter should mean
+    something on this report, not be silently overridden). If the saved
+    query has no statuses selected, the invoiced/paid default still applies
+    so an empty Status filter doesn't accidentally show pending/lost jobs
+    in a financial report.
     """
     # sale always travels with workshop
     if 'workshop' in job_types and 'sale' not in job_types:
@@ -46,11 +56,41 @@ def _get_report_data(date_from, date_to, job_types, show_cash=False, sort_by='pa
     order_clause = 'j.scheduled_date ASC' if sort_by == 'scheduled' else \
                    'coalesce(j.paid_date, j.scheduled_date) ASC'
 
+    # Status: saved query's own selection wins if it has one, otherwise
+    # default to invoiced/paid (financial report default).
+    extra_clause = ''
+    if saved_query and saved_query.get('statuses'):
+        statuses = saved_query['statuses']
+        ph = ','.join('?' * len(statuses))
+        extra_clause += f" AND j.status IN ({ph})"
+        params.extend(statuses)
+    else:
+        extra_clause += " AND j.status IN ('invoiced', 'paid')"
+
+    if saved_query and saved_query.get('payment_types'):
+        pts = saved_query['payment_types']
+        ph = ','.join('?' * len(pts))
+        extra_clause += f" AND j.payment_type IN ({ph})"
+        params.extend(pts)
+
+    search = (saved_query or {}).get('search', '').strip() if saved_query else ''
+    if search:
+        extra_clause += " AND (j.customer_name LIKE ? OR j.customer_phone LIKE ?)"
+        params.extend([f'%{search}%', f'%{search}%'])
+
+    if saved_query and saved_query.get('gross_min') not in (None, ''):
+        extra_clause += " AND j.total >= ?"
+        params.append(float(saved_query['gross_min']))
+    if saved_query and saved_query.get('gross_max') not in (None, ''):
+        extra_clause += " AND j.total <= ?"
+        params.append(float(saved_query['gross_max']))
+
     with get_db() as conn:
         jobs = conn.execute(f"""
             SELECT j.id, j.reference, j.invoice_number, j.job_type, j.customer_name,
-                   j.scheduled_date, j.paid_date, j.status, j.tax_inclusive,
+                   j.scheduled_date, j.paid_date, j.status,
                    j.amount_paid, j.payment_type,
+                   j.subtotal, j.gst, j.total,
                    coalesce(j.paid_date, j.scheduled_date) as report_date
             FROM jobs j
             WHERE (
@@ -59,24 +99,16 @@ def _get_report_data(date_from, date_to, job_types, show_cash=False, sort_by='pa
                 (j.scheduled_date IS NULL AND j.paid_date BETWEEN ? AND ?)
             )
               AND j.job_type IN ({jt_ph})
-              AND j.status IN ('invoiced', 'paid')
+              {extra_clause}
               {cash_clause}
             ORDER BY {order_clause}, j.id ASC
-        """.format(order_clause=order_clause, jt_ph=jt_ph, cash_clause=cash_clause), params).fetchall()
+        """.format(order_clause=order_clause, jt_ph=jt_ph, extra_clause=extra_clause,
+                   cash_clause=cash_clause), params).fetchall()
 
+        # subtotal/gst/total are now stored directly on the jobs row —
+        # no more per-row parts fetch + calc_totals() call needed here.
         rows = []
         for job in jobs:
-            parts = conn.execute(
-                "SELECT * FROM job_parts WHERE job_id=?",
-                (job['id'],)).fetchall()
-            tax_raw = job['tax_inclusive'] or 0
-            is_cash = (job['payment_type'] or '').lower() == 'cash'
-            is_exempt = (tax_raw == 2)
-            if is_cash or is_exempt:
-                raw = round(sum(p['quantity'] * p['unit_cost'] for p in parts), 2)
-                subtotal, gst, total = raw, 0.0, raw
-            else:
-                subtotal, gst, total = calc_totals(parts, tax_raw)
             rows.append({
                 'id':             job['id'],
                 'reference':      job['reference'],
@@ -86,12 +118,13 @@ def _get_report_data(date_from, date_to, job_types, show_cash=False, sort_by='pa
                 'paid_date':      job['paid_date'] or '',
                 'scheduled_date': job['scheduled_date'] or '',
                 'status':         job['status'],
-                'gross':          total,
-                'gst':            gst,
-                'net':            subtotal,
+                'gross':          job['total'] or 0.0,
+                'gst':            job['gst'] or 0.0,
+                'net':            job['subtotal'] or 0.0,
                 'amount_paid':    float(job['amount_paid'] or 0),
                 'payment_type':   job['payment_type'] or '',
             })
+
     return rows
 
 
@@ -155,52 +188,103 @@ def _grand_totals(rows):
 def sales():
     import json as _json
     from flask import session as _sess
+    from job_queries import query_row_to_dict, get_resolved_date_range
     user_id = _sess.get('user_id')
     today          = date.today()
     first_of_month = today.replace(day=1).isoformat()
     default_to     = today.isoformat()
 
+    DISPLAY_PREFS_KEY = f'report_display_prefs_{user_id}'
+
+    query_id = request.args.get('query_id', '').strip() or request.form.get('query_id', '').strip()
+    saved_query = None
+
     with get_db() as conn:
-        if request.method == 'POST':
+        # ── Display preferences (Sort By / Daily subtotals) — independent
+        #    of which (if any) saved query is active. A dedicated small
+        #    form on the report posts just these two fields.
+        if 'display_prefs' in request.form:
+            show_daily = 'show_daily' in request.form
+            sort_by    = request.form.get('sort_by', 'paid')
+            conn.execute(
+                "INSERT INTO settings (key,value) VALUES (?,?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (DISPLAY_PREFS_KEY, _json.dumps({'show_daily': show_daily, 'sort_by': sort_by})))
+            conn.commit()
+        else:
+            row = conn.execute(
+                "SELECT value FROM settings WHERE key=?", (DISPLAY_PREFS_KEY,)).fetchone()
+            try:
+                display_prefs = _json.loads(row['value']) if row else {}
+            except Exception:
+                display_prefs = {}
+            show_daily = display_prefs.get('show_daily', False)
+            sort_by    = display_prefs.get('sort_by', 'paid')
+
+        if query_id:
+            row = conn.execute(
+                "SELECT * FROM job_queries WHERE id=?", (query_id,)).fetchone()
+            saved_query = query_row_to_dict(row)
+
+        if saved_query:
+            date_from, date_to = get_resolved_date_range(saved_query)
+            # "All Time" (or any preset with no bound) -> wide-open range,
+            # not a silent fallback to "this month" which would be wrong.
+            date_from = date_from or '1900-01-01'
+            date_to   = date_to   or today.isoformat()
+            job_types  = saved_query.get('job_types') or ['booking', 'workshop', 'sale']
+            from job_queries import get_report_sort_by
+            query_sort_by = get_report_sort_by(saved_query)
+            if query_sort_by:
+                sort_by = query_sort_by
+            conn.execute(
+                "INSERT INTO settings (key,value) VALUES (?,?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (f'report_prefs_{user_id}', _json.dumps({'query_id': query_id})))
+            conn.commit()
+        elif request.method == 'POST' and 'display_prefs' not in request.form:
             date_from = request.form.get('date_from', first_of_month)
             date_to   = request.form.get('date_to',   default_to)
             job_types  = request.form.getlist('job_types') or ['booking', 'workshop', 'sale']
-            show_daily = 'show_daily' in request.form
-            sort_by    = request.form.get('sort_by', 'paid')
             # Save to settings
             prefs = {'date_from': date_from, 'date_to': date_to,
-                     'job_types': job_types,
-                     'show_daily': show_daily, 'sort_by': sort_by}
+                     'job_types': job_types}
             conn.execute(
                 "INSERT INTO settings (key,value) VALUES (?,?) "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                 (f'report_prefs_{user_id}', _json.dumps(prefs)))
             conn.commit()
         else:
-            # Restore saved prefs if available
-            row = conn.execute(
-                "SELECT value FROM settings WHERE key=?",
-                (f'report_prefs_{user_id}',)).fetchone()
-            if row:
-                try:
-                    prefs     = _json.loads(row['value'])
-                    date_from = prefs.get('date_from', first_of_month)
-                    date_to   = prefs.get('date_to',   default_to)
-                    job_types  = prefs.get('job_types',  ['booking', 'workshop', 'sale'])
-                    show_daily = prefs.get('show_daily', False)
-                    sort_by    = prefs.get('sort_by', 'paid')
-                except Exception:
-                    date_from  = first_of_month
-                    date_to    = default_to
-                    job_types  = ['booking', 'workshop', 'sale']
-                    show_daily = False
-                    sort_by    = 'paid'
-            else:
+            is_clear = request.args.get('clear') == '1'
+            if is_clear:
+                conn.execute(
+                    "DELETE FROM settings WHERE key=?", (f'report_prefs_{user_id}',))
+                conn.commit()
                 date_from  = first_of_month
                 date_to    = default_to
                 job_types  = ['booking', 'workshop', 'sale']
-                show_daily = False
-                sort_by    = 'paid'
+            else:
+                # Restore saved prefs if available
+                row = conn.execute(
+                    "SELECT value FROM settings WHERE key=?",
+                    (f'report_prefs_{user_id}',)).fetchone()
+                if row:
+                    try:
+                        prefs = _json.loads(row['value'])
+                        if prefs.get('query_id'):
+                            return redirect(url_for('reports.sales', query_id=prefs['query_id'], run='1'))
+                        date_from = prefs.get('date_from', first_of_month)
+                        date_to   = prefs.get('date_to',   default_to)
+                        job_types  = prefs.get('job_types',  ['booking', 'workshop', 'sale'])
+                    except Exception:
+                        date_from  = first_of_month
+                        date_to    = default_to
+                        job_types  = ['booking', 'workshop', 'sale']
+                else:
+                    date_from  = first_of_month
+                    date_to    = default_to
+                    job_types  = ['booking', 'workshop', 'sale']
+                    sort_by    = 'paid'
 
     ran = bool(request.method == 'POST' or request.args.get('run'))
 
@@ -213,7 +297,8 @@ def sales():
     except Exception:
         show_cash = False
 
-    rows    = _get_report_data(date_from, date_to, job_types, show_cash, sort_by) if ran else []
+    rows    = _get_report_data(date_from, date_to, job_types, show_cash, sort_by,
+                               saved_query=saved_query) if ran else []
     months  = _group_by_month(rows, sort_by) if ran else {}
     totals  = _grand_totals(rows) if ran else {}
 
@@ -224,20 +309,35 @@ def sales():
                            show_cash=show_cash,
                            JOB_TYPE_OPTIONS=JOB_TYPE_OPTIONS,
                            months=months, rows=rows, totals=totals,
-                           ran=ran)
+                           ran=ran, query_id=query_id, saved_query=saved_query)
 
 
 # ── CSV export ────────────────────────────────────────────────────────────────
 
 @reports_bp.route('/reports/sales/csv')
 def sales_csv():
-    date_from = request.args.get('date_from', date.today().replace(day=1).isoformat())
-    date_to   = request.args.get('date_to',   date.today().isoformat())
-    job_types = request.args.getlist('job_types') or ['booking', 'workshop']
-    statuses  = ['invoiced', 'paid']
+    from job_queries import query_row_to_dict, get_resolved_date_range
+    query_id = request.args.get('query_id', '').strip()
+    saved_query = None
+    if query_id:
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT * FROM job_queries WHERE id=?", (query_id,)).fetchone()
+            saved_query = query_row_to_dict(row)
+
+    if saved_query:
+        date_from, date_to = get_resolved_date_range(saved_query)
+        date_from = date_from or '1900-01-01'
+        date_to   = date_to   or date.today().isoformat()
+        job_types = saved_query.get('job_types') or ['booking', 'workshop', 'sale']
+    else:
+        date_from = request.args.get('date_from', date.today().replace(day=1).isoformat())
+        date_to   = request.args.get('date_to',   date.today().isoformat())
+        job_types = request.args.getlist('job_types') or ['booking', 'workshop']
 
     show_cash = False
-    rows = _get_report_data(date_from, date_to, job_types, show_cash)
+    rows = _get_report_data(date_from, date_to, job_types, show_cash,
+                            saved_query=saved_query)
 
     buf = io.StringIO()
     writer = csv.writer(buf)
@@ -307,12 +407,29 @@ def sales_csv():
 
 @reports_bp.route('/reports/sales/pdf')
 def sales_pdf():
-    date_from = request.args.get('date_from', date.today().replace(day=1).isoformat())
-    date_to   = request.args.get('date_to',   date.today().isoformat())
-    job_types = request.args.getlist('job_types') or ['booking', 'workshop']
+    from job_queries import query_row_to_dict, get_resolved_date_range
+    query_id = request.args.get('query_id', '').strip()
+    saved_query = None
+    if query_id:
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT * FROM job_queries WHERE id=?", (query_id,)).fetchone()
+            saved_query = query_row_to_dict(row)
+
+    if saved_query:
+        date_from, date_to = get_resolved_date_range(saved_query)
+        date_from = date_from or '1900-01-01'
+        date_to   = date_to   or date.today().isoformat()
+        job_types = saved_query.get('job_types') or ['booking', 'workshop', 'sale']
+    else:
+        date_from = request.args.get('date_from', date.today().replace(day=1).isoformat())
+        date_to   = request.args.get('date_to',   date.today().isoformat())
+        job_types = request.args.getlist('job_types') or ['booking', 'workshop']
+
     statuses  = ['invoiced', 'paid']
 
-    rows   = _get_report_data(date_from, date_to, job_types, show_cash=False)
+    rows   = _get_report_data(date_from, date_to, job_types, show_cash=False,
+                              saved_query=saved_query)
     months = _group_by_month(rows)
     totals = _grand_totals(rows)
 
@@ -404,7 +521,13 @@ def _build_pdf(date_from, date_to, job_types, statuses, months, totals):
 
     page_num = 1
 
-    for month_label, month_rows, sub in months:
+    for month_label, day_groups, sub in months:
+        # Flatten the day-groups structure into a plain list of row dicts,
+        # in date order — day_groups is [(day_label, day_rows, day_sub), ...]
+        month_rows = []
+        for _day_label, day_rows, _day_sub in day_groups:
+            month_rows.extend(day_rows)
+
         # Month header band
         if y < MIN_Y + ROW_H * 3:
             c.showPage(); page_num += 1
@@ -550,7 +673,6 @@ def parts_usage():
 @reports_bp.route('/reports/unreconciled-eftpos')
 def unreconciled_eftpos():
     from models import get_db
-    from routes.invoice import calc_totals
     import json as _json
     from flask import session as _sess
     user_id   = _sess.get('user_id')
@@ -594,20 +716,17 @@ def unreconciled_eftpos():
         jobs = conn.execute(f"""
             SELECT j.id, j.reference, j.job_type, j.customer_name,
                    j.scheduled_date, j.paid_date, j.amount_paid,
-                   j.payment_type, j.tax_inclusive
+                   j.payment_type, j.total
             FROM jobs j
             WHERE {' AND '.join(where)}
             ORDER BY coalesce(j.paid_date, j.scheduled_date) ASC, j.id ASC
         """, params).fetchall()
 
-        # Compute gross total per job (for display)
+        # Gross total per job (for display) — read directly, no
+        # per-row parts fetch + calc_totals() needed any more.
         rows = []
         for job in jobs:
-            parts = conn.execute(
-                "SELECT * FROM job_parts WHERE job_id=?", (job['id'],)
-            ).fetchall()
-            _, _, total = calc_totals(parts, job['tax_inclusive'] or 1)
-            rows.append({'job': dict(job), 'total': total})
+            rows.append({'job': dict(job), 'total': job['total'] or 0.0})
 
     return render_template('reports/unreconciled_eftpos.html',
                            rows=rows, date_from=date_from, date_to=date_to)

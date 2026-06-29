@@ -13,7 +13,7 @@
     <div class="sd-card">
       <div class="sd-card-header">Template Details</div>
       <div style="padding:1.5rem;">
-        <form method="post">
+        <form method="post" id="template-form">
           <div class="row g-3">
 
             <div class="col-12">
@@ -32,7 +32,7 @@
 
             <div class="col-12">
               <label class="sd-label">Body *</label>
-              <textarea name="body" class="sd-input" rows="14" required
+              <textarea name="body" id="body-textarea" class="sd-input" rows="14" required
                         placeholder="Hi {{customer_name}},&#10;&#10;Thanks for your booking request...">{{ tmpl['body'] if tmpl else '' }}</textarea>
               <div style="font-size:0.72rem; color:var(--sd-muted); margin-top:0.35rem;">
                 Use <code style="color:var(--sd-accent);">{{'{{'}}field{{'}}'}}</code> for auto-substitution.
@@ -76,4 +76,14 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const editor = initRichTextEditor('body-textarea', { minHeight: '320px' });
+  const form = document.getElementById('template-form');
+  if (form && editor) form.addEventListener('submit', function () { editor.sync(); });
+});
+</script>
 {% endblock %}

@@ -299,6 +299,11 @@
     body.is-mobile .col-mobile-hide,
     body.is-mobile-landscape .col-mobile-hide { display: none !important; }
 
+    /* Column Visibility — independent per-layout hide rules, driven by
+       Jobs List / Sales Report query column sets */
+    body.is-mobile .col-hide-portrait,
+    body.is-mobile-landscape .col-hide-landscape { display: none !important; }
+
     /* ── Cards ── */
     .sd-card { background: var(--sd-surface); border: 1px solid var(--sd-border); border-radius: 8px; overflow: hidden; }
     .sd-card-header {
@@ -962,7 +967,779 @@ function showUnsavedModal(callback) {
 
   setTimeout(() => overlay.querySelector('[data-choice="yes"]').focus(), 0);
 }
+
+// ── Shared rich-text editor — used by Email Templates and Reply Compose ──────
+// Turns a hidden <textarea name="X"> into a toolbar + contenteditable area.
+// The textarea keeps the HTML in sync on every edit, so normal form
+// submission needs no changes wherever this is used.
+function initRichTextEditor(textareaId, options) {
+  options = options || {};
+  const textarea = document.getElementById(textareaId);
+  if (!textarea) return null;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'rte-wrap';
+  wrap.style.cssText = 'border:1px solid var(--sd-border); border-radius:6px; overflow:hidden;';
+
+  const toolbar = document.createElement('div');
+  toolbar.className = 'rte-toolbar';
+  toolbar.style.cssText =
+    'display:flex; gap:0.15rem; padding:0.4rem; background:var(--sd-surface2);' +
+    'border-bottom:1px solid var(--sd-border); flex-wrap:wrap;';
+
+  const buttons = [
+    { cmd: 'bold',          icon: 'bi-type-bold',      title: 'Bold' },
+    { cmd: 'italic',        icon: 'bi-type-italic',    title: 'Italic' },
+    { cmd: 'underline',     icon: 'bi-type-underline', title: 'Underline' },
+    { sep: true },
+    { cmd: 'insertUnorderedList', icon: 'bi-list-ul',   title: 'Bullet list' },
+    { cmd: 'insertOrderedList',   icon: 'bi-list-ol',   title: 'Numbered list' },
+    { sep: true },
+    { cmd: 'createLink',   icon: 'bi-link-45deg',     title: 'Insert link', needsArg: true },
+    { cmd: 'unlink',       icon: 'bi-link',           title: 'Remove link' },
+    { sep: true },
+    { cmd: 'removeFormat', icon: 'bi-eraser',         title: 'Clear formatting' },
+  ];
+
+  buttons.forEach(function (b) {
+    if (b.sep) {
+      const divider = document.createElement('div');
+      divider.style.cssText = 'width:1px; background:var(--sd-border); margin:0.1rem 0.25rem;';
+      toolbar.appendChild(divider);
+      return;
+    }
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.title = b.title;
+    btn.innerHTML = `<i class="bi ${b.icon}"></i>`;
+    btn.style.cssText =
+      'background:none; border:none; color:var(--sd-text); padding:0.35rem 0.5rem;' +
+      'border-radius:4px; cursor:pointer; font-size:0.9rem;';
+    btn.addEventListener('mousedown', function (e) { e.preventDefault(); }); // keep editor focus
+    btn.addEventListener('click', function () {
+      editor.focus();
+      if (b.needsArg) {
+        const url = prompt('Link URL:', 'https://');
+        if (url) document.execCommand(b.cmd, false, url);
+      } else {
+        document.execCommand(b.cmd, false, null);
+      }
+      sync();
+    });
+    btn.addEventListener('mouseover', function () { this.style.background = 'var(--sd-surface)'; });
+    btn.addEventListener('mouseout',  function () { this.style.background = 'none'; });
+    toolbar.appendChild(btn);
+  });
+
+  const editor = document.createElement('div');
+  editor.className = 'rte-editor sd-input';
+  editor.contentEditable = 'true';
+  editor.style.cssText =
+    'min-height:' + (options.minHeight || '220px') + '; padding:0.75rem;' +
+    'background:var(--sd-surface); color:var(--sd-text); font-size:0.875rem;' +
+    'line-height:1.55; overflow-y:auto; border:none; border-radius:0;';
+  editor.innerHTML = textarea.value || '';
+
+  function sync() { textarea.value = editor.innerHTML; }
+  editor.addEventListener('input', sync);
+  editor.addEventListener('blur', sync);
+
+  textarea.style.display = 'none';
+  textarea.parentNode.insertBefore(wrap, textarea);
+  wrap.appendChild(toolbar);
+  wrap.appendChild(editor);
+  wrap.appendChild(textarea);
+
+  return {
+    setContent: function (html) { editor.innerHTML = html || ''; sync(); },
+    getContent: function () { return editor.innerHTML; },
+    sync: sync,
+  };
+}
+
+// ── Shared Job Query Builder — used by Jobs List and Sales Report ───────────
+// Pages using this must define a global `currentQueryId` variable and a
+// `populateSavedQueryDropdown()`-friendly <select id="saved-query-select">,
+// plus implement window.onQuerySelected(queryId) to actually re-run their
+// list/report with the chosen query.
+
+const JOB_TYPE_CHOICES = [
+  ['booking',  'Booking'],
+  ['rental',   'Rental'],
+  ['workshop', 'Workshop'],
+  ['sale',     'Counter Sale'],
+];
+const STATUS_CHOICES = [
+  ['pending',     'Pending'],
+  ['scheduled',   'Scheduled'],
+  ['in_progress', 'In Progress'],
+  ['complete',    'Complete'],
+  ['invoiced',    'Invoiced'],
+  ['paid',        'Paid'],
+  ['lost',        'Lost'],
+];
+const PAYMENT_TYPE_CHOICES = ['EFTPOS', 'Cash', 'Transfer', 'VISA', 'MASTERCARD', 'AMEX'];
+const SORT_FIELD_CHOICES = [
+  ['', '— None —'],
+  ['reference',      'Reference'],
+  ['customer_name',  'Customer Name'],
+  ['customer_phone', 'Customer Phone'],
+  ['job_type',       'Job Type'],
+  ['status',         'Status'],
+  ['payment_type',   'Payment Type'],
+  ['scheduled_date', 'Scheduled Date'],
+  ['paid_date',      'Paid Date'],
+  ['invoice_number', 'Invoice Number'],
+  ['amount_paid',    'Amount Paid'],
+  ['total',          'Total'],
+  ['gross',          'Gross'],
+];
+
+let DATE_PRESETS_CACHE = null;
+
+function _qbCheckboxGroup(containerId, choices, selectedValues) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  choices.forEach(function (choice) {
+    const value = Array.isArray(choice) ? choice[0] : choice;
+    const label = Array.isArray(choice) ? choice[1] : choice;
+    const id = containerId + '-' + value;
+    const wrap = document.createElement('label');
+    wrap.style.cssText = 'display:flex; align-items:center; gap:0.4rem; font-size:0.82rem; padding:0.25rem 0; cursor:pointer;';
+    wrap.innerHTML =
+      `<input type="checkbox" id="${id}" value="${value}" style="accent-color:var(--sd-accent); width:15px; height:15px;" ${selectedValues.includes(value) ? 'checked' : ''}>` +
+      `<span>${label}</span>`;
+    container.appendChild(wrap);
+  });
+}
+
+function _qbGetChecked(containerId) {
+  return Array.from(document.querySelectorAll('#' + containerId + ' input[type="checkbox"]:checked'))
+    .map(function (el) { return el.value; });
+}
+
+function openQueryBuilder(queryId) {
+  const overlay = document.getElementById('query-builder-overlay');
+  document.getElementById('qb-error').style.display = 'none';
+  document.getElementById('qb-delete-btn').style.display = queryId ? 'inline-flex' : 'none';
+  document.getElementById('qb-title').textContent = queryId ? 'Edit Query' : 'New Query';
+  document.getElementById('qb-name').value = '';
+  document.getElementById('qb-search').value = '';
+  document.getElementById('qb-gross-min').value = '';
+  document.getElementById('qb-gross-max').value = '';
+  document.getElementById('qb-date-from').value = '';
+  document.getElementById('qb-date-to').value = '';
+  document.getElementById('qb-form').dataset.editingId = queryId || '';
+
+  function populateChoicesAndShow(query) {
+    _qbCheckboxGroup('qb-job-types', JOB_TYPE_CHOICES, (query && query.job_types) || []);
+    _qbCheckboxGroup('qb-statuses', STATUS_CHOICES, (query && query.statuses) || []);
+    _qbCheckboxGroup('qb-payment-types', PAYMENT_TYPE_CHOICES, (query && query.payment_types) || []);
+
+    for (let i = 1; i <= 3; i++) {
+      const fieldSel = document.getElementById('qb-sort' + i + '-field');
+      fieldSel.innerHTML = '';
+      SORT_FIELD_CHOICES.forEach(function (choice) {
+        const opt = document.createElement('option');
+        opt.value = choice[0];
+        opt.textContent = choice[1];
+        fieldSel.appendChild(opt);
+      });
+      fieldSel.value = (query && query['sort' + i + '_field']) || '';
+      document.getElementById('qb-sort' + i + '-dir').value =
+        (query && query['sort' + i + '_dir']) || 'asc';
+    }
+
+    if (query) {
+      document.getElementById('qb-name').value = query.name || '';
+      document.getElementById('qb-search').value = query.search || '';
+      document.getElementById('qb-gross-min').value = query.gross_min != null ? query.gross_min : '';
+      document.getElementById('qb-gross-max').value = query.gross_max != null ? query.gross_max : '';
+      document.getElementById('qb-date-from').value = query.date_from || '';
+      document.getElementById('qb-date-to').value = query.date_to || '';
+    }
+
+    populateColumnVisibilityDropdown(query ? query.column_visibility_id : '');
+
+    function setDatePreset(presetValue) {
+      const presetSel = document.getElementById('qb-date-preset');
+      presetSel.value = presetValue || 'all_time';
+      toggleCustomDateFields();
+    }
+    setDatePreset(query ? query.date_preset : 'all_time');
+
+    overlay.style.display = 'flex';
+  }
+
+  function loadPresetsThenShow(query) {
+    if (DATE_PRESETS_CACHE) {
+      _qbFillPresetSelect(DATE_PRESETS_CACHE);
+      populateChoicesAndShow(query);
+      return;
+    }
+    fetch('/job-queries/presets').then(r => r.json()).then(function (presets) {
+      DATE_PRESETS_CACHE = presets;
+      _qbFillPresetSelect(presets);
+      populateChoicesAndShow(query);
+    });
+  }
+
+  if (queryId) {
+    fetch('/job-queries/' + queryId).then(r => r.json()).then(function (res) {
+      if (res.ok) loadPresetsThenShow(res.query);
+    });
+  } else {
+    loadPresetsThenShow(null);
+  }
+}
+
+function _qbFillPresetSelect(presets) {
+  const sel = document.getElementById('qb-date-preset');
+  sel.innerHTML = '';
+  presets.forEach(function (p) {
+    const opt = document.createElement('option');
+    opt.value = p.value;
+    opt.textContent = p.label;
+    sel.appendChild(opt);
+  });
+}
+
+function toggleCustomDateFields() {
+  const isCustom = document.getElementById('qb-date-preset').value === 'custom';
+  document.getElementById('qb-custom-dates').style.display = isCustom ? 'flex' : 'none';
+}
+
+function closeQueryBuilder() {
+  document.getElementById('query-builder-overlay').style.display = 'none';
+}
+
+function saveQueryBuilder() {
+  const name = document.getElementById('qb-name').value.trim();
+  if (!name) {
+    const err = document.getElementById('qb-error');
+    err.textContent = 'Name is required.';
+    err.style.display = 'block';
+    return;
+  }
+  const datePreset = document.getElementById('qb-date-preset').value;
+  const isCustom = datePreset === 'custom';
+
+  const payload = {
+    name: name,
+    job_types: _qbGetChecked('qb-job-types'),
+    statuses: _qbGetChecked('qb-statuses'),
+    payment_types: _qbGetChecked('qb-payment-types'),
+    search: document.getElementById('qb-search').value.trim(),
+    gross_min: document.getElementById('qb-gross-min').value || null,
+    gross_max: document.getElementById('qb-gross-max').value || null,
+    date_mode: isCustom ? 'custom' : 'preset',
+    date_preset: isCustom ? null : datePreset,
+    date_from: isCustom ? document.getElementById('qb-date-from').value : null,
+    date_to: isCustom ? document.getElementById('qb-date-to').value : null,
+    sort1_field: document.getElementById('qb-sort1-field').value || null,
+    sort1_dir: document.getElementById('qb-sort1-dir').value || 'asc',
+    sort2_field: document.getElementById('qb-sort2-field').value || null,
+    sort2_dir: document.getElementById('qb-sort2-dir').value || 'asc',
+    sort3_field: document.getElementById('qb-sort3-field').value || null,
+    sort3_dir: document.getElementById('qb-sort3-dir').value || 'asc',
+    column_visibility_id: document.getElementById('qb-column-visibility').value || null,
+  };
+
+  const editingId = document.getElementById('qb-form').dataset.editingId;
+  const url = editingId ? '/job-queries/' + editingId : '/job-queries';
+  const method = editingId ? 'PUT' : 'POST';
+
+  fetch(url, {
+    method: method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+    .then(r => r.json())
+    .then(function (res) {
+      if (!res.ok) {
+        const err = document.getElementById('qb-error');
+        err.textContent = res.error || 'Save failed.';
+        err.style.display = 'block';
+        return;
+      }
+      closeQueryBuilder();
+      const newId = editingId || res.id;
+      window.onQuerySelected(newId);
+    })
+    .catch(function () {
+      const err = document.getElementById('qb-error');
+      err.textContent = 'Save failed — network error.';
+      err.style.display = 'block';
+    });
+}
+
+function deleteQueryBuilder() {
+  const editingId = document.getElementById('qb-form').dataset.editingId;
+  if (!editingId) return;
+  if (!confirm('Delete this saved query? This cannot be undone.')) return;
+  fetch('/job-queries/' + editingId, { method: 'DELETE' })
+    .then(r => r.json())
+    .then(function (res) {
+      if (res.ok) {
+        closeQueryBuilder();
+        window.onQuerySelected('');
+      }
+    });
+}
+
+function populateSavedQueryDropdown(selectedId, selectElId) {
+  const sel = document.getElementById(selectElId || 'saved-query-select');
+  fetch('/job-queries').then(r => r.json()).then(function (list) {
+    sel.innerHTML = '<option value="">— No saved query —</option>';
+    list.forEach(function (q) {
+      const opt = document.createElement('option');
+      opt.value = q.id;
+      opt.textContent = q.name;
+      if (String(q.id) === String(selectedId)) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    document.getElementById('edit-query-btn').disabled = !selectedId;
+  });
+}
+
+// ── Column Visibility — dropdown in the Query Builder, plus the
+//    separate "Manage Column Sets" dialog for creating/editing sets ────────
+
+function populateColumnVisibilityDropdown(selectedId) {
+  const sel = document.getElementById('qb-column-visibility');
+  fetch('/column-visibility').then(r => r.json()).then(function (list) {
+    sel.innerHTML = '<option value="">— Default columns —</option>';
+    list.forEach(function (s) {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.name;
+      if (selectedId && String(s.id) === String(selectedId)) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  });
+}
+
+let COLUMN_CATALOG_CACHE = null;
+let csCurrentSetId = null;
+let csLayoutLists = { desktop: [], landscape: [], portrait: [] };
+let csActiveLayout = 'desktop';
+let csLastSavedId = null;  // most recently created/edited set, for auto-select on manager close
+
+function openColumnSetManager() {
+  csLastSavedId = null;
+  document.getElementById('cs-manager-overlay').style.display = 'flex';
+  refreshColumnSetList();
+}
+
+function closeColumnSetManager() {
+  document.getElementById('cs-manager-overlay').style.display = 'none';
+  // Re-populate the Query Builder's dropdown in case sets changed.
+  // Prefer auto-selecting whatever was just created/edited in this
+  // manager session; otherwise preserve whatever was already selected.
+  const current = document.getElementById('qb-column-visibility').value;
+  populateColumnVisibilityDropdown(csLastSavedId || current);
+  csLastSavedId = null;
+}
+
+function refreshColumnSetList() {
+  fetch('/column-visibility').then(r => r.json()).then(function (list) {
+    const container = document.getElementById('cs-set-list');
+    container.innerHTML = '';
+    if (!list.length) {
+      container.innerHTML = '<div style="color:var(--sd-muted); font-size:0.82rem; padding:0.5rem;">No column sets yet.</div>';
+      return;
+    }
+    list.forEach(function (s) {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; align-items:center; gap:0.5rem; padding:0.4rem 0.2rem; border-bottom:1px solid var(--sd-border);';
+      row.innerHTML =
+        `<span style="flex:1; font-size:0.85rem;">${s.name}</span>` +
+        `<button type="button" class="btn-ghost" style="padding:0.2rem 0.55rem; font-size:0.78rem;" onclick="editColumnSet(${s.id})"><i class="bi bi-pencil"></i></button>` +
+        `<button type="button" class="btn-ghost" style="padding:0.2rem 0.55rem; font-size:0.78rem; color:#f87171;" onclick="deleteColumnSet(${s.id})"><i class="bi bi-trash3"></i></button>`;
+      container.appendChild(row);
+    });
+  });
+}
+
+function deleteColumnSet(setId) {
+  if (!confirm('Delete this column set? Any queries using it will revert to default columns.')) return;
+  fetch('/column-visibility/' + setId, { method: 'DELETE' })
+    .then(r => r.json())
+    .then(function (res) { if (res.ok) refreshColumnSetList(); });
+}
+
+function newColumnSet() {
+  csCurrentSetId = null;
+  csLayoutLists = { desktop: [], landscape: [], portrait: [] };
+  document.getElementById('cs-edit-name').value = '';
+  document.getElementById('cs-edit-error').style.display = 'none';
+  loadCatalogThenShowEditor();
+}
+
+function editColumnSet(setId) {
+  fetch('/column-visibility/' + setId).then(r => r.json()).then(function (res) {
+    if (!res.ok) return;
+    csCurrentSetId = setId;
+    csLayoutLists = {
+      desktop:   res.set.desktop   || [],
+      landscape: res.set.landscape || [],
+      portrait:  res.set.portrait  || [],
+    };
+    document.getElementById('cs-edit-name').value = res.set.name || '';
+    document.getElementById('cs-edit-error').style.display = 'none';
+    loadCatalogThenShowEditor();
+  });
+}
+
+function loadCatalogThenShowEditor() {
+  function showEditor() {
+    csActiveLayout = 'desktop';
+    setColumnSetLayoutTab('desktop');
+    document.getElementById('cs-editor-overlay').style.display = 'flex';
+  }
+  if (COLUMN_CATALOG_CACHE) { showEditor(); return; }
+  fetch('/column-visibility/catalog').then(r => r.json()).then(function (cat) {
+    COLUMN_CATALOG_CACHE = cat;
+    showEditor();
+  });
+}
+
+function closeColumnSetEditor() {
+  document.getElementById('cs-editor-overlay').style.display = 'none';
+}
+
+function setColumnSetLayoutTab(layout) {
+  csActiveLayout = layout;
+  ['desktop', 'landscape', 'portrait'].forEach(function (l) {
+    const btn = document.getElementById('cs-tab-' + l);
+    if (btn) {
+      btn.style.background = (l === layout) ? 'var(--sd-accent)' : 'none';
+      btn.style.color = (l === layout) ? '#fff' : 'var(--sd-text)';
+    }
+  });
+  renderColumnSetLayoutEditor();
+}
+
+function renderColumnSetLayoutEditor() {
+  const selected = csLayoutLists[csActiveLayout] || [];
+  const available = COLUMN_CATALOG_CACHE.filter(function (c) { return selected.indexOf(c.key) === -1; });
+
+  // Selected list — draggable, ordered
+  const selWrap = document.getElementById('cs-selected-list');
+  selWrap.innerHTML = '';
+  if (!selected.length) {
+    selWrap.innerHTML = '<div style="color:var(--sd-muted); font-size:0.78rem; padding:0.5rem;">No columns selected — default columns will be used for this layout.</div>';
+  }
+  selected.forEach(function (key, idx) {
+    const col = COLUMN_CATALOG_CACHE.find(function (c) { return c.key === key; });
+    if (!col) return;
+    const item = document.createElement('div');
+    item.draggable = true;
+    item.dataset.key = key;
+    item.style.cssText =
+      'display:flex; align-items:center; gap:0.5rem; padding:0.4rem 0.6rem;' +
+      'background:var(--sd-surface2); border:1px solid var(--sd-border); border-radius:6px;' +
+      'margin-bottom:0.3rem; cursor:grab; font-size:0.82rem;';
+    item.innerHTML =
+      '<i class="bi bi-grip-vertical" style="color:var(--sd-muted);"></i>' +
+      `<span style="flex:1;">${col.label}</span>` +
+      `<button type="button" onclick="removeColumnFromSet('${key}')" style="background:none; border:none; color:var(--sd-muted); cursor:pointer;"><i class="bi bi-x-lg"></i></button>`;
+    item.addEventListener('dragstart', function (e) {
+      e.dataTransfer.setData('text/plain', key);
+      item.style.opacity = '0.4';
+    });
+    item.addEventListener('dragend', function () { item.style.opacity = '1'; });
+    item.addEventListener('dragover', function (e) { e.preventDefault(); });
+    item.addEventListener('drop', function (e) {
+      e.preventDefault();
+      const draggedKey = e.dataTransfer.getData('text/plain');
+      reorderColumnInSet(draggedKey, key);
+    });
+    selWrap.appendChild(item);
+  });
+
+  // Available list — click to add
+  const availWrap = document.getElementById('cs-available-list');
+  availWrap.innerHTML = '';
+  available.forEach(function (col) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = col.label;
+    btn.style.cssText =
+      'padding:0.3rem 0.65rem; font-size:0.8rem; border-radius:6px;' +
+      'border:1px solid var(--sd-border); background:none; color:var(--sd-text);' +
+      'cursor:pointer;';
+    btn.onclick = function () { addColumnToSet(col.key); };
+    availWrap.appendChild(btn);
+  });
+}
+
+function addColumnToSet(key) {
+  if (csLayoutLists[csActiveLayout].indexOf(key) === -1) {
+    csLayoutLists[csActiveLayout].push(key);
+    renderColumnSetLayoutEditor();
+  }
+}
+
+function removeColumnFromSet(key) {
+  csLayoutLists[csActiveLayout] = csLayoutLists[csActiveLayout].filter(function (k) { return k !== key; });
+  renderColumnSetLayoutEditor();
+}
+
+function reorderColumnInSet(draggedKey, targetKey) {
+  const list = csLayoutLists[csActiveLayout];
+  const fromIdx = list.indexOf(draggedKey);
+  const toIdx = list.indexOf(targetKey);
+  if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
+  list.splice(fromIdx, 1);
+  list.splice(toIdx, 0, draggedKey);
+  renderColumnSetLayoutEditor();
+}
+
+function saveColumnSet() {
+  const name = document.getElementById('cs-edit-name').value.trim();
+  if (!name) {
+    const err = document.getElementById('cs-edit-error');
+    err.textContent = 'Name is required.';
+    err.style.display = 'block';
+    return;
+  }
+  const payload = {
+    name: name,
+    desktop: csLayoutLists.desktop,
+    landscape: csLayoutLists.landscape,
+    portrait: csLayoutLists.portrait,
+  };
+  const url = csCurrentSetId ? '/column-visibility/' + csCurrentSetId : '/column-visibility';
+  const method = csCurrentSetId ? 'PUT' : 'POST';
+  fetch(url, {
+    method: method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+    .then(r => r.json())
+    .then(function (res) {
+      if (!res.ok) {
+        const err = document.getElementById('cs-edit-error');
+        err.textContent = res.error || 'Save failed.';
+        err.style.display = 'block';
+        return;
+      }
+      csLastSavedId = csCurrentSetId || res.id;
+      closeColumnSetEditor();
+      refreshColumnSetList();
+    });
+}
 </script>
+
+<!-- ── Job Query Builder dialog — shared by Jobs List and Sales Report ──────── -->
+<div id="query-builder-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6);
+            z-index:2500; align-items:flex-start; justify-content:center;
+            padding: calc(env(safe-area-inset-top, 0px) + 2rem) 1rem 2rem; overflow-y:auto;"
+     onclick="if(event.target===this) closeQueryBuilder()">
+  <div style="background:var(--sd-surface); border:1px solid var(--sd-border);
+              border-radius:12px; width:100%; max-width:640px;
+              padding:1.5rem; box-shadow:0 8px 40px rgba(0,0,0,0.5);">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+      <span id="qb-title" style="font-size:1rem; font-weight:600;">New Query</span>
+      <button type="button" onclick="closeQueryBuilder()"
+              style="background:none; border:none; color:var(--sd-muted); font-size:1.2rem; cursor:pointer;">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+
+    <div id="qb-error" style="display:none; background:rgba(248,113,113,0.1); color:#f87171;
+         border:1px solid rgba(248,113,113,0.3); border-radius:6px; padding:0.5rem 0.75rem;
+         font-size:0.82rem; margin-bottom:1rem;"></div>
+
+    <form id="qb-form" onsubmit="event.preventDefault(); saveQueryBuilder();">
+      <div style="margin-bottom:1rem;">
+        <label class="sd-label">Query Name *</label>
+        <input type="text" id="qb-name" class="sd-input" placeholder="e.g. Unpaid Bookings This Month" required>
+      </div>
+
+      <div class="row g-3" style="margin-bottom:0.5rem;">
+        <div class="col-6 col-md-3">
+          <label class="sd-label">Job Type</label>
+          <div id="qb-job-types" style="max-height:160px; overflow-y:auto; border:1px solid var(--sd-border); border-radius:6px; padding:0.4rem 0.6rem;"></div>
+        </div>
+        <div class="col-6 col-md-3">
+          <label class="sd-label">Status</label>
+          <div id="qb-statuses" style="max-height:160px; overflow-y:auto; border:1px solid var(--sd-border); border-radius:6px; padding:0.4rem 0.6rem;"></div>
+        </div>
+        <div class="col-6 col-md-3">
+          <label class="sd-label">Payment Type</label>
+          <div id="qb-payment-types" style="max-height:160px; overflow-y:auto; border:1px solid var(--sd-border); border-radius:6px; padding:0.4rem 0.6rem;"></div>
+        </div>
+        <div class="col-6 col-md-3">
+          <label class="sd-label">Gross $</label>
+          <input type="number" id="qb-gross-min" class="sd-input" placeholder="Min" step="0.01" min="0" style="margin-bottom:0.4rem;">
+          <input type="number" id="qb-gross-max" class="sd-input" placeholder="Max" step="0.01" min="0">
+        </div>
+      </div>
+
+      <div style="margin-bottom:1rem;">
+        <label class="sd-label">Customer Name / Phone</label>
+        <input type="text" id="qb-search" class="sd-input" placeholder="Search text…">
+      </div>
+
+      <div style="margin-bottom:1rem;">
+        <label class="sd-label">Date Range</label>
+        <select id="qb-date-preset" class="sd-input" onchange="toggleCustomDateFields()" style="margin-bottom:0.5rem;"></select>
+        <div id="qb-custom-dates" style="display:none; gap:0.5rem;">
+          <input type="date" id="qb-date-from" class="sd-input" style="flex:1;">
+          <input type="date" id="qb-date-to" class="sd-input" style="flex:1;">
+        </div>
+      </div>
+
+      <div style="margin-bottom:1rem;">
+        <label class="sd-label">Sort By
+          <span style="font-weight:400; text-transform:none; letter-spacing:0; color:var(--sd-muted); font-size:0.7rem; margin-left:0.3rem;">
+            — overrides any default sort. Leave blank for no override.
+          </span>
+        </label>
+        {% for i in [1, 2, 3] %}
+        <div style="display:flex; gap:0.5rem; margin-bottom:0.4rem;">
+          <select id="qb-sort{{ i }}-field" class="sd-input" style="flex:2;"></select>
+          <select id="qb-sort{{ i }}-dir" class="sd-input" style="flex:1; max-width:110px;">
+            <option value="asc">Ascending</option>
+            <option value="desc">Descending</option>
+          </select>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div style="margin-bottom:1rem;">
+        <label class="sd-label">Column Visibility (Jobs List only)
+          <span style="font-weight:400; text-transform:none; letter-spacing:0; color:var(--sd-muted); font-size:0.7rem; margin-left:0.3rem;">
+            — leave blank to show the default columns
+          </span>
+        </label>
+        <div style="display:flex; gap:0.5rem;">
+          <select id="qb-column-visibility" class="sd-input" style="flex:1;">
+            <option value="">— Default columns —</option>
+          </select>
+          <button type="button" class="btn-ghost" onclick="openColumnSetManager()">
+            <i class="bi bi-table"></i> Manage
+          </button>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1.25rem;">
+        <button type="button" id="qb-delete-btn" class="btn-ghost"
+                style="color:#f87171; border-color:rgba(248,113,113,0.35); display:none;"
+                onclick="deleteQueryBuilder()">
+          <i class="bi bi-trash3"></i> Delete
+        </button>
+        <div style="display:flex; gap:0.5rem; margin-left:auto;">
+          <button type="button" class="btn-ghost" onclick="closeQueryBuilder()">Cancel</button>
+          <button type="submit" class="btn-accent"><i class="bi bi-check-lg"></i> Save</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── Column Set Manager — list of saved Column Visibility sets ────────────── -->
+<div id="cs-manager-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6);
+            z-index:2600; align-items:center; justify-content:center; padding:1rem;"
+     onclick="if(event.target===this) closeColumnSetManager()">
+  <div style="background:var(--sd-surface); border:1px solid var(--sd-border);
+              border-radius:12px; width:100%; max-width:420px;
+              padding:1.5rem; box-shadow:0 8px 40px rgba(0,0,0,0.5);">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+      <span style="font-size:1rem; font-weight:600;">Column Sets</span>
+      <button type="button" onclick="closeColumnSetManager()"
+              style="background:none; border:none; color:var(--sd-muted); font-size:1.2rem; cursor:pointer;">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    <div style="font-size:0.78rem; color:var(--sd-muted); margin-bottom:0.75rem;">
+      Named sets of columns for the Jobs List, with separate choices for
+      desktop, mobile landscape, and mobile portrait.
+    </div>
+    <div id="cs-set-list" style="max-height:280px; overflow-y:auto; margin-bottom:1rem;"></div>
+    <div style="display:flex; justify-content:flex-end;">
+      <button type="button" class="btn-accent" onclick="newColumnSet()">
+        <i class="bi bi-plus-lg"></i> New Column Set
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Column Set Editor — per-set, per-layout column picker with drag
+     reordering ─────────────────────────────────────────────────────────── -->
+<div id="cs-editor-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65);
+            z-index:2700; align-items:flex-start; justify-content:center;
+            padding: calc(env(safe-area-inset-top, 0px) + 2rem) 1rem 2rem; overflow-y:auto;"
+     onclick="if(event.target===this) closeColumnSetEditor()">
+  <div style="background:var(--sd-surface); border:1px solid var(--sd-border);
+              border-radius:12px; width:100%; max-width:520px;
+              padding:1.5rem; box-shadow:0 8px 40px rgba(0,0,0,0.5);">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+      <span style="font-size:1rem; font-weight:600;">Edit Column Set</span>
+      <button type="button" onclick="closeColumnSetEditor()"
+              style="background:none; border:none; color:var(--sd-muted); font-size:1.2rem; cursor:pointer;">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+
+    <div id="cs-edit-error" style="display:none; background:rgba(248,113,113,0.1); color:#f87171;
+         border:1px solid rgba(248,113,113,0.3); border-radius:6px; padding:0.5rem 0.75rem;
+         font-size:0.82rem; margin-bottom:1rem;"></div>
+
+    <div style="margin-bottom:1rem;">
+      <label class="sd-label">Set Name *</label>
+      <input type="text" id="cs-edit-name" class="sd-input" placeholder="e.g. Compact view">
+    </div>
+
+    <div style="display:flex; gap:0.4rem; margin-bottom:1rem;">
+      <button type="button" id="cs-tab-desktop" onclick="setColumnSetLayoutTab('desktop')"
+              style="flex:1; padding:0.4rem; border-radius:6px; border:1px solid var(--sd-border);
+                     background:var(--sd-accent); color:#fff; cursor:pointer; font-size:0.82rem;">
+        <i class="bi bi-display"></i> Desktop
+      </button>
+      <button type="button" id="cs-tab-landscape" onclick="setColumnSetLayoutTab('landscape')"
+              style="flex:1; padding:0.4rem; border-radius:6px; border:1px solid var(--sd-border);
+                     background:none; color:var(--sd-text); cursor:pointer; font-size:0.82rem;">
+        <i class="bi bi-phone-landscape"></i> Landscape
+      </button>
+      <button type="button" id="cs-tab-portrait" onclick="setColumnSetLayoutTab('portrait')"
+              style="flex:1; padding:0.4rem; border-radius:6px; border:1px solid var(--sd-border);
+                     background:none; color:var(--sd-text); cursor:pointer; font-size:0.82rem;">
+        <i class="bi bi-phone"></i> Portrait
+      </button>
+    </div>
+
+    <div style="margin-bottom:1rem;">
+      <label class="sd-label">Selected Columns
+        <span style="font-weight:400; text-transform:none; letter-spacing:0; color:var(--sd-muted); font-size:0.7rem; margin-left:0.3rem;">
+          — drag to reorder
+        </span>
+      </label>
+      <div id="cs-selected-list" style="min-height:40px;"></div>
+    </div>
+
+    <div style="margin-bottom:1.25rem;">
+      <label class="sd-label">Available Columns
+        <span style="font-weight:400; text-transform:none; letter-spacing:0; color:var(--sd-muted); font-size:0.7rem; margin-left:0.3rem;">
+          — click to add
+        </span>
+      </label>
+      <div id="cs-available-list" style="display:flex; flex-wrap:wrap; gap:0.4rem;"></div>
+    </div>
+
+    <div style="display:flex; justify-content:flex-end; gap:0.5rem;">
+      <button type="button" class="btn-ghost" onclick="closeColumnSetEditor()">Cancel</button>
+      <button type="button" class="btn-accent" onclick="saveColumnSet()">
+        <i class="bi bi-check-lg"></i> Save
+      </button>
+    </div>
+  </div>
+</div>
 
 <!-- Left rail — landscape mobile only -->
 <nav class="left-rail">
