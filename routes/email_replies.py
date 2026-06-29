@@ -74,9 +74,15 @@ def _build_feedback_link(job, full_name):
         return ''
 
 
-def _substitute(text, job, customer=None, totals=None):
+def _substitute(text, job, customer=None, totals=None, is_html=False):
     """
     Replace {{field}} placeholders with job/customer values.
+
+    When is_html=True, field VALUES are HTML-escaped before insertion
+    (so a customer name containing & or < can't break the markup), and
+    {{feedback_link}} renders as a real <a href> tag instead of a bare
+    URL. The template's own HTML markup is never escaped — only the
+    substituted values are.
 
     Available fields:
       {{first_name}}             {{customer_name}}    {{customer_email}}
@@ -87,6 +93,7 @@ def _substitute(text, job, customer=None, totals=None):
       {{scheduled_time_formatted}}  — e.g. 9:00am to 10:00am
       {{service_types}}          {{invoice_pdf}}
       {{job_total}}              {{amount_due}}
+      {{feedback_link}}
     """
     raw_date   = job['scheduled_date'] or ''
     raw_start  = job['scheduled_time'] or ''
@@ -94,17 +101,12 @@ def _substitute(text, job, customer=None, totals=None):
     full_name  = job['customer_name'] or ''
     first_name = full_name.split()[0] if full_name.strip() else ''
 
-    # Totals — compute from DB if not supplied
+    # Totals — read from the job's stored subtotal/gst/total (kept in
+    # sync by recalc_job_totals() on every job_parts/job change) unless
+    # the caller already supplied a totals dict.
     if totals is None:
         try:
-            from models import get_db
-            from routes.invoice import calc_totals
-            with get_db() as _c:
-                _jp = _c.execute(
-                    "SELECT * FROM job_parts WHERE job_id=?",
-                    (job['id'],)).fetchall()
-            _tax = bool(job['tax_inclusive'])
-            _, _, _total = calc_totals(_jp, _tax)
+            _total = job['total'] or 0.0
             _paid = float(job['amount_paid'] or 0)
             totals = {'job_total': _total, 'amount_due': max(_total - _paid, 0)}
         except Exception:
@@ -134,6 +136,15 @@ def _substitute(text, job, customer=None, totals=None):
         'amount_due':                _fmt_money(totals.get('amount_due', 0)),
         'feedback_link':             _build_feedback_link(job, full_name),
     }
+
+    if is_html:
+        import html as _html_mod
+        for key, val in list(fields.items()):
+            if key == 'feedback_link' and val:
+                escaped_url = _html_mod.escape(val, quote=True)
+                fields[key] = f'<a href="{escaped_url}">{escaped_url}</a>'
+            else:
+                fields[key] = _html_mod.escape(str(val))
 
     def replacer(m):
         key = m.group(1).strip()
@@ -315,31 +326,29 @@ def compose_reply(job_id):
 
         # Check if invoice PDF attachment is requested
         has_invoice = '{{invoice_pdf}}' in body or '[Invoice PDF attached]' in body
-        # Remove the placeholder from the body text
-        body_clean = body.replace('{{invoice_pdf}}', '').replace('[Invoice PDF attached]', '').strip()
+        # Remove the placeholder from the HTML body
+        body_html_clean = body.replace('{{invoice_pdf}}', '').replace('[Invoice PDF attached]', '').strip()
+        from email_sender import _html_to_plain_fallback
+        body_text_clean = _html_to_plain_fallback(body_html_clean)
 
         try:
             if has_invoice:
                 # Generate the invoice PDF
-                from routes.invoice import calc_totals
                 from invoice_pdf import generate_invoice_pdf
                 with get_db() as _inv_conn:
                     _jp = _inv_conn.execute(
                         "SELECT * FROM job_parts WHERE job_id=? ORDER BY id",
                         (job_id,)).fetchall()
                 _tax  = bool(job['tax_inclusive'])
-                if (job['payment_type'] or '').lower() == 'cash':
-                    _raw = round(sum(jp['quantity'] * jp['unit_cost'] for jp in _jp), 2)
-                    _sub, _gst, _tot = _raw, 0.0, _raw
-                else:
-                    _sub, _gst, _tot = calc_totals(_jp, _tax)
+                _sub, _gst, _tot = job['subtotal'] or 0.0, job['gst'] or 0.0, job['total'] or 0.0
                 _buf  = generate_invoice_pdf(job, _jp, _tax, _sub, _gst, _tot)
                 _fname = f"INV-{job['reference'].lower()}.pdf"
                 from email_sender import send_reply_with_attachment
                 msg_id = send_reply_with_attachment(
                     to_address          = to_addr,
                     subject             = subject,
-                    body_text           = body_clean,
+                    body_text           = body_text_clean,
+                    body_html           = body_html_clean,
                     attachment_bytes    = _buf.read(),
                     attachment_filename = _fname,
                     in_reply_to         = in_reply_to,
@@ -350,7 +359,8 @@ def compose_reply(job_id):
                 msg_id = send_reply(
                     to_address  = to_addr,
                     subject     = subject,
-                    body_text   = body,
+                    body_text   = body_text_clean,
+                    body_html   = body_html_clean,
                     in_reply_to = in_reply_to,
                     references  = references,
                 )
@@ -363,7 +373,10 @@ def compose_reply(job_id):
                                    template_id=tmpl_id,
                                    thread_subject=thread_subject)
 
-        # Record in email_replies
+        # Record in email_replies — store the plain-text fallback, not the
+        # HTML, so the in-app thread view (which escapes bodies as plain
+        # text) keeps working exactly as before. The HTML version is only
+        # used for the actual outgoing email.
         with get_db() as conn:
             conn.execute("""
                 INSERT INTO email_replies
@@ -371,7 +384,7 @@ def compose_reply(job_id):
                      to_address, body, sent_by, template_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (job_id, msg_id, in_reply_to, subject,
-                  to_addr, body, session.get('user_id'),
+                  to_addr, body_text_clean, session.get('user_id'),
                   int(tmpl_id) if tmpl_id else None))
             conn.commit()
 
@@ -384,8 +397,8 @@ def compose_reply(job_id):
         subject = request.form.get('subject', '').strip()
         body    = request.form.get('body', '').strip()
 
-        # Apply substitution to body only
-        body = _substitute(body, job)
+        # Apply substitution to body only — template body is now HTML
+        body = _substitute(body, job, is_html=True)
         has_invoice = '{{invoice_pdf}}' in body or '[Invoice PDF attached]' in body
 
         from flask import url_for as _uf
@@ -468,8 +481,11 @@ def send_feedback_email(job_id):
         if not job['customer_email']:
             return jsonify({'ok': False, 'error': 'Customer has no email address on file'}), 400
 
-        subject = _substitute(tmpl['subject'], job)
-        body    = _substitute(tmpl['body'], job)
+        subject  = _substitute(tmpl['subject'], job)
+        body_html = _substitute(tmpl['body'], job, is_html=True)
+
+        from email_sender import _html_to_plain_fallback
+        body_text = _html_to_plain_fallback(body_html)
 
         in_reply_to, references = _get_thread_refs(conn, job_id)
 
@@ -478,13 +494,17 @@ def send_feedback_email(job_id):
         msg_id = send_reply(
             to_address  = job['customer_email'],
             subject     = subject,
-            body_text   = body,
+            body_text   = body_text,
+            body_html   = body_html,
             in_reply_to = in_reply_to,
             references  = references,
         )
     except Exception as e:
         return jsonify({'ok': False, 'error': f'Send failed: {e}'}), 500
 
+    # Store the plain-text fallback in email_replies — the in-app thread
+    # view escapes bodies as plain text, so storing HTML there would show
+    # literal tags. The HTML is only used for the actual outgoing email.
     with get_db() as conn:
         conn.execute("""
             INSERT INTO email_replies
@@ -492,7 +512,7 @@ def send_feedback_email(job_id):
                  to_address, body, sent_by, template_id)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (job_id, msg_id, in_reply_to, subject,
-              job['customer_email'], body, session.get('user_id'), tmpl['id']))
+              job['customer_email'], body_text, session.get('user_id'), tmpl['id']))
         conn.commit()
 
     return jsonify({'ok': True})

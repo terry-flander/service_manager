@@ -22,6 +22,62 @@ with get_db() as conn:
     except: pass
     try: conn.execute('ALTER TABLE jobs ADD COLUMN referral_source TEXT')
     except: pass
+    try: conn.execute('ALTER TABLE job_queries ADD COLUMN sort1_field TEXT')
+    except: pass
+    try: conn.execute('ALTER TABLE job_queries ADD COLUMN sort1_dir TEXT')
+    except: pass
+    try: conn.execute('ALTER TABLE job_queries ADD COLUMN sort2_field TEXT')
+    except: pass
+    try: conn.execute('ALTER TABLE job_queries ADD COLUMN sort2_dir TEXT')
+    except: pass
+    try: conn.execute('ALTER TABLE job_queries ADD COLUMN sort3_field TEXT')
+    except: pass
+    try: conn.execute('ALTER TABLE job_queries ADD COLUMN sort3_dir TEXT')
+    except: pass
+    try: conn.execute('ALTER TABLE jobs ADD COLUMN subtotal REAL DEFAULT 0')
+    except: pass
+    try: conn.execute('ALTER TABLE jobs ADD COLUMN gst REAL DEFAULT 0')
+    except: pass
+    try: conn.execute('ALTER TABLE jobs ADD COLUMN total REAL DEFAULT 0')
+    except: pass
+    try: conn.execute('ALTER TABLE job_queries ADD COLUMN column_visibility_id INTEGER REFERENCES column_visibility_sets(id)')
+    except: pass
+
+    # ── Column visibility sets (Jobs List / Sales Report column picker) ─────
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS column_visibility_sets (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            name        TEXT NOT NULL UNIQUE,
+            page        TEXT NOT NULL,
+            desktop     TEXT,
+            landscape   TEXT,
+            portrait    TEXT,
+            created_at  TEXT DEFAULT (datetime('now')),
+            updated_at  TEXT DEFAULT (datetime('now'))
+        )''')
+    except Exception:
+        pass
+
+    # ── Saved job queries (Jobs List / Sales Report query builder) ──────────
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS job_queries (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            name          TEXT NOT NULL UNIQUE,
+            job_types     TEXT,
+            statuses      TEXT,
+            payment_types TEXT,
+            search        TEXT,
+            gross_min     REAL,
+            gross_max     REAL,
+            date_mode     TEXT NOT NULL DEFAULT 'preset',
+            date_preset   TEXT,
+            date_from     TEXT,
+            date_to       TEXT,
+            created_at    TEXT DEFAULT (datetime('now')),
+            updated_at    TEXT DEFAULT (datetime('now'))
+        )''')
+    except Exception:
+        pass
 
     # ── EFTPOS transactions table ────────────────────────────────────────────
     try:
@@ -75,5 +131,15 @@ with get_db() as conn:
             cleaned += 1
 
     conn.commit()
+
+    # ── Backfill subtotal/gst/total for every existing job ────────────────────
+    # These columns are new (denormalized totals, previously calculated on
+    # the fly everywhere they were needed). Recalculate once for every job
+    # so historical data isn't left at the column default of 0.
+    from routes.jobs import recalc_job_totals
+    all_job_ids = [r[0] for r in conn.execute("SELECT id FROM jobs").fetchall()]
+    for _jid in all_job_ids:
+        recalc_job_totals(conn, _jid)
+    print(f"Backfilled totals for {len(all_job_ids)} job(s).")
 
 print(f"Migration complete. {cleaned} workshop job(s) had service_types cleaned.")

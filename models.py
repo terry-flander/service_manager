@@ -115,7 +115,10 @@ def init_db():
                 reconciled_eftpos TEXT,
                 gcal_event_id     TEXT,
                 add_to_calendar   INTEGER NOT NULL DEFAULT 0,
-                referral_source   TEXT
+                referral_source   TEXT,
+                subtotal          REAL DEFAULT 0,
+                gst               REAL DEFAULT 0,
+                total             REAL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS eftpos_transactions (
@@ -145,6 +148,41 @@ def init_db():
                 value TEXT NOT NULL
             );
             INSERT OR IGNORE INTO settings (key, value) VALUES ('email_polling', 'on');
+
+            CREATE TABLE IF NOT EXISTS column_visibility_sets (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT NOT NULL UNIQUE,
+                page        TEXT NOT NULL,
+                desktop     TEXT,
+                landscape   TEXT,
+                portrait    TEXT,
+                created_at  TEXT DEFAULT (datetime('now')),
+                updated_at  TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS job_queries (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                name          TEXT NOT NULL UNIQUE,
+                job_types     TEXT,
+                statuses      TEXT,
+                payment_types TEXT,
+                search        TEXT,
+                gross_min     REAL,
+                gross_max     REAL,
+                date_mode     TEXT NOT NULL DEFAULT 'preset',
+                date_preset   TEXT,
+                date_from     TEXT,
+                date_to       TEXT,
+                sort1_field   TEXT,
+                sort1_dir     TEXT,
+                sort2_field   TEXT,
+                sort2_dir     TEXT,
+                sort3_field   TEXT,
+                sort3_dir     TEXT,
+                column_visibility_id INTEGER REFERENCES column_visibility_sets(id),
+                created_at    TEXT DEFAULT (datetime('now')),
+                updated_at    TEXT DEFAULT (datetime('now'))
+            );
 
             CREATE TABLE IF NOT EXISTS email_imports (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,

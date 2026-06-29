@@ -169,15 +169,25 @@ def _get_text_body(msg):
       1. text/plain parts (concatenated, non-attachment)
       2. text/html parts converted to plain text (fallback)
       3. Non-multipart payload decoded directly
+
+    Returns (body, attachment_names) — attachment_names is a list of
+    filenames for any attached parts. The files themselves are never
+    saved; this is visibility only. Callers append a bracketed note to
+    the *stored* body separately, after any field-parsing on the raw
+    body has already happened, so the note never leaks into a parsed
+    field like the customer's message.
     """
     plain_parts = []
     html_parts  = []
+    attachment_names = []
 
     if msg.is_multipart():
         for part in msg.walk():
             ct   = (part.get_content_type() or '').lower()
             disp = str(part.get('Content-Disposition', '')).lower()
             if 'attachment' in disp:
+                filename = part.get_filename() or f'(unnamed {ct})'
+                attachment_names.append(filename)
                 continue
             payload = part.get_payload(decode=True)
             if payload is None:
@@ -200,10 +210,23 @@ def _get_text_body(msg):
                 plain_parts.append(text)
 
     if plain_parts:
-        return '\n'.join(plain_parts).strip()
-    if html_parts:
-        return _html_to_text('\n'.join(html_parts))
-    return ''
+        body = '\n'.join(plain_parts).strip()
+    elif html_parts:
+        body = _html_to_text('\n'.join(html_parts))
+    else:
+        body = ''
+
+    return body, attachment_names
+
+
+def _attachment_note(attachment_names):
+    """Build the bracketed attachment note to append to a stored body,
+    or '' if there were none."""
+    if not attachment_names:
+        return ''
+    count = len(attachment_names)
+    label = 'attachment' if count == 1 else 'attachments'
+    return f"[{count} {label}: {', '.join(attachment_names)}]"
 
 
 def _strip_footer(text):
@@ -296,7 +319,7 @@ def _parse_email(msg):
     from_name  = from_name.strip()
     from_email = from_email.strip().lower()
 
-    body      = _get_text_body(msg)
+    body, attachment_names = _get_text_body(msg)
     body_norm = re.sub(r'\bMessage Body\s*:', 'Message:', body, flags=re.IGNORECASE)
     body_norm = re.sub(r'\bMobile\s*:', 'Phone:', body_norm, flags=re.IGNORECASE)
     body_norm = _strip_footer(body_norm)
@@ -326,13 +349,18 @@ def _parse_email(msg):
     if not email_ and phone:
         email_ = f"noemail_{phone}@import.local"
 
+    stored_body = body
+    note = _attachment_note(attachment_names)
+    if note:
+        stored_body = f"{body}\n\n{note}" if body else note
+
     return {
         'name':          name or 'Unknown',
         'email':         email_.lower(),
         'phone':         phone,
         'suburb':        suburb,
         'message':       message[:1000],
-        'body':          body,           # full plain-text body for email_imports
+        'body':          stored_body,     # full plain-text body for email_imports
         'service_types': service_types,
         'subject':       subject,
         'from_name':     from_name,
@@ -472,6 +500,8 @@ def _create_job(conn, parsed, message_id, thread_id=None, in_reply_to=None):
                             (job_id, part['id'], part['name'],
                              part['part_number'] or '', part['unit_cost']))
                 conn.commit()
+                from routes.jobs import recalc_job_totals
+                recalc_job_totals(conn, job_id)
 
             log.info(f"Created job {ref} from email {message_id[:40]}")
             return job_id
@@ -545,7 +575,10 @@ def _poll_inbox_replies(imap, app):
                     log.debug(f"INBOX: already imported {message_id[:40]}")
                     continue
 
-                body      = _get_text_body(msg)
+                body, attachment_names = _get_text_body(msg)
+                note = _attachment_note(attachment_names)
+                if note:
+                    body = f"{body}\n\n{note}" if body else note
                 thread_id = in_reply_to or message_id
 
                 # Strategy 1: thread headers (In-Reply-To / References)
@@ -654,7 +687,7 @@ def poll_once(app, force=False):
 
                         parsed = _parse_email(msg)
                         parsed['received_at'] = received_at
-                        body   = _get_text_body(msg)
+                        body   = parsed['body']  # already includes attachment note, if any
 
                         # Is this a reply in an existing thread?
                         existing_job_id = _find_job_for_thread(

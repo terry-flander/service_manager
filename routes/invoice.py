@@ -41,11 +41,7 @@ def view_invoice(job_id):
 
     tax_raw = job['tax_inclusive'] or 0
     gst_exempt = (tax_raw == 2)
-    if (job['payment_type'] or '').lower() == 'cash' or gst_exempt:
-        raw = round(sum(jp['quantity'] * jp['unit_cost'] for jp in job_parts), 2)
-        subtotal, gst, total = raw, 0.0, raw
-    else:
-        subtotal, gst, total = calc_totals(job_parts, tax_raw)
+    subtotal, gst, total = job['subtotal'] or 0.0, job['gst'] or 0.0, job['total'] or 0.0
     tax_inclusive = bool(tax_raw) and not gst_exempt
 
     today    = date.today()
@@ -192,11 +188,7 @@ def pdf_invoice_file(job_id):
 
     tax_raw = job['tax_inclusive'] or 0
     gst_exempt = (tax_raw == 2)
-    if (job['payment_type'] or '').lower() == 'cash' or gst_exempt:
-        raw = round(sum(jp['quantity'] * jp['unit_cost'] for jp in job_parts), 2)
-        subtotal, gst, total = raw, 0.0, raw
-    else:
-        subtotal, gst, total = calc_totals(job_parts, tax_raw)
+    subtotal, gst, total = job['subtotal'] or 0.0, job['gst'] or 0.0, job['total'] or 0.0
     tax_inclusive = bool(tax_raw) and not gst_exempt
 
     from invoice_pdf import generate_invoice_pdf
