@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from models import get_db
 from datetime import date
 
@@ -561,6 +561,30 @@ def new_job():
 
 @jobs_bp.route('/jobs/<int:job_id>', methods=['GET', 'POST'])
 def job_detail(job_id):
+    from flask import session as _sess
+    user_id = _sess.get('user_id')
+
+    # ── Return destination: capture ?from= on first load, store server-side,
+    #    then redirect to clean URL so sub-actions (add/remove part) never
+    #    need to thread ?from= through their own URLs. ──────────────────────
+    from_param = request.args.get('from', '').strip()
+    if from_param and request.method == 'GET':
+        cust_id_param = request.args.get('cust_id', '').strip()
+        return_url = {
+            'calendar': '/calendar',
+            'email':    '/jobs/email-imports',
+            'jobs':     '/',
+            'customer': f'/customers/{cust_id_param}/edit' if cust_id_param else '/',
+        }.get(from_param, '/')
+        if user_id:
+            with get_db() as conn:
+                conn.execute(
+                    "INSERT INTO settings (key,value) VALUES (?,?) "
+                    "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    (f'job_return_{user_id}', return_url))
+                conn.commit()
+        return redirect(url_for('jobs.job_detail', job_id=job_id))
+
     with get_db() as conn:
         job = conn.execute("""
             SELECT j.*, r.name as region_name, r.visit_day,
@@ -689,6 +713,11 @@ def job_detail(job_id):
 
         flash('Job updated.', 'success')
         return_to = request.form.get('return_to', '').strip()
+        if return_to == 'customer':
+            cust_id_form = request.form.get('return_cust_id', '').strip()
+            if cust_id_form and cust_id_form.isdigit():
+                return redirect(f'/customers/{cust_id_form}/edit')
+            return redirect(url_for('jobs.index'))
         if return_to in ('calendar', 'email', 'jobs'):
             return redirect(url_for({
                 'calendar': 'calendar.index',
@@ -926,10 +955,7 @@ def add_part(job_id):
             conn.commit()
             recalc_job_totals(conn, job_id)
     flash('Part added.', 'success')
-    # Preserve the ?from= param so return_to still works after adding a part
-    from_param = request.args.get('from', '')
-    suffix = ('?from=' + from_param if from_param else '') + '#add-part'
-    return redirect(url_for('jobs.job_detail', job_id=job_id) + suffix)
+    return redirect(url_for('jobs.job_detail', job_id=job_id) + '#add-part')
 
 
 @jobs_bp.route('/jobs/<int:job_id>/remove-part/<int:jp_id>', methods=['POST'])
@@ -940,9 +966,7 @@ def remove_part(job_id, jp_id):
         conn.commit()
         recalc_job_totals(conn, job_id)
     flash('Part removed.', 'success')
-    from_param = request.args.get('from', '')
-    suffix = ('?from=' + from_param) if from_param else ''
-    return redirect(url_for('jobs.job_detail', job_id=job_id) + suffix)
+    return redirect(url_for('jobs.job_detail', job_id=job_id))
 
 
 @jobs_bp.route('/jobs/<int:job_id>/delete', methods=['POST'])
@@ -965,6 +989,30 @@ def delete_job(job_id):
         conn.commit()
     flash(f'Job {job["reference"]} deleted.', 'success')
     return redirect(url_for('jobs.index'))
+
+
+@jobs_bp.route('/jobs/<int:job_id>/return-url')
+def job_return_url(job_id):
+    """Return the stored return destination for this user's current job
+    visit, then clear it so it's consumed once. Called by closeDetail()
+    JS instead of reading a fragile ?from= query param.
+    Returns JSON {url: '/calendar'} (or '/' as default).
+    """
+    from flask import session as _sess
+    user_id = _sess.get('user_id')
+    url = '/'
+    if user_id:
+        with get_db() as conn:
+            row = conn.execute(
+                "SELECT value FROM settings WHERE key=?",
+                (f'job_return_{user_id}',)).fetchone()
+            if row:
+                url = row['value']
+                # Do NOT delete here — the stored URL must survive page reloads
+                # caused by add/remove part. It will be naturally overwritten
+                # the next time the user opens a job from a caller that sets
+                # ?from=, or cleaned up via migrate/expiry.
+    return jsonify({'url': url})
 
 
 @jobs_bp.route('/jobs/<int:job_id>/status', methods=['POST'])
