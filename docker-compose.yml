@@ -9,6 +9,7 @@ services:
       - DATA_DIR=/data               # override/add container-specific vars here
     volumes:
       - app_data:/data
+      - .:/app                       # mount app code from host — no rebuild needed for code changes
     expose:
       - "5000"
     healthcheck:

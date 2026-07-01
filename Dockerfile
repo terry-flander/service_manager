@@ -12,23 +12,25 @@ RUN apt-get update -qq \
 
 WORKDIR /app
 
-# Upgrade pip first, then install deps one at a time to avoid
-# thread exhaustion from pip's parallel resolver
+# Install dependencies — this layer is cached and only rebuilds when
+# requirements.txt changes. App code is mounted as a volume at runtime
+# so no rebuild is ever needed for code changes.
 COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
  && pip install --no-cache-dir \
         --use-deprecated=legacy-resolver \
         -r requirements.txt
 
-# Copy application code
-COPY . .
+# App code is NOT copied here — it is mounted from the host via the
+# volume mount in docker-compose.yml (.:/app), so changes are
+# immediately visible after a simple: docker compose restart flask
 
-# Persistent data directory
+# Persistent data directory (database lives here)
 RUN mkdir -p /data
 
-# Non-root user
+# Non-root user — only /data needs chown since /app is a volume mount
 RUN useradd -m -u 1000 appuser \
- && chown -R appuser:appuser /app /data
+ && chown -R appuser:appuser /data
 USER appuser
 
 EXPOSE 5000

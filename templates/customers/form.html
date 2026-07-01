@@ -119,7 +119,7 @@
         <tbody>
           {% for job in jobs %}
           <tr class="row-link" style="cursor:pointer;"
-              onclick="window.location='{{ url_for('jobs.job_detail', job_id=job['id']) }}'">
+              onclick="window.location='{{ url_for('jobs.job_detail', job_id=job['id']) }}?from=customer&cust_id={{ customer['id'] }}'">
             <td>
               <span class="mono">{{ job['reference'] }}</span>
             </td>

@@ -84,6 +84,7 @@ document.addEventListener('click', function(e) {
 <form method="post" id="save-form"
       action="{{ url_for('jobs.job_detail', job_id=job['id']) }}">
   <input type="hidden" name="return_to" id="return-to-field" value="">
+  <input type="hidden" name="return_cust_id" id="return-cust-id-field" value="">
   <!-- Status & Payment hidden fields (merged into main save) -->
   <input type="hidden" name="payment_type_quickpay" id="payment-type-hidden" value="">
 
@@ -631,7 +632,7 @@ document.addEventListener('click', function(e) {
               ${{ '%.2f'|format(jp['quantity'] * jp['unit_cost']) }}
             </td>
             <td>
-              <form method="post" action="{{ url_for('jobs.remove_part', job_id=job['id'], jp_id=jp['id']) }}{% if request.args.get('from') %}?from={{ request.args.get('from') }}{% endif %}">
+              <form method="post" action="{{ url_for('jobs.remove_part', job_id=job['id'], jp_id=jp['id']) }}">
                 <button type="submit" class="btn-danger"><i class="bi bi-trash3"></i></button>
               </form>
             </td>
@@ -728,7 +729,7 @@ document.addEventListener('click', function(e) {
     </div>
     <!-- Form -->
     <form method="post"
-          action="{{ url_for('jobs.add_part', job_id=job['id']) }}{% if request.args.get('from') %}?from={{ request.args.get('from') }}{% endif %}"
+          action="{{ url_for('jobs.add_part', job_id=job['id']) }}"
           id="add-part-form">
       <input type="hidden" name="part_id" id="part-id-hidden" value="">
       <!-- Description with dropdown anchored below it, inside relative wrapper -->
@@ -855,10 +856,17 @@ function bookingModeChanged(mode) {
 
 // ── Detail control bar: dirty tracking + Cancel/Save/Save & Return ────────────
 (function () {
-  const fromParam = {{ request.args.get('from', '')|tojson }};
-  const returnUrl = fromParam === 'calendar' ? '/calendar'
-                  : fromParam === 'email'    ? '/jobs/email-imports'
-                  : '/';
+  const JOB_ID = {{ job['id'] }};
+
+  // Return URL is stored server-side (written when ?from= is first detected
+  // on a GET, then cleared when consumed here). We fetch it once on load
+  // and cache it — this means no ?from= needs to be threaded through
+  // add/remove part sub-actions.
+  let returnUrl = '/';
+  fetch('/jobs/' + JOB_ID + '/return-url')
+    .then(function(r) { return r.json(); })
+    .then(function(d) { returnUrl = d.url || '/'; })
+    .catch(function() { returnUrl = '/'; });
 
   let isDirty = false;
 
@@ -912,8 +920,21 @@ function bookingModeChanged(mode) {
     showUnsavedModal(function (choice) {
       // choice: 'yes' = save & close, 'no' = discard & close, 'cancel' = stay
       if (choice === 'yes') {
-        var f = document.getElementById('return-to-field');
-        if (f) f.value = fromParam || 'jobs';
+        // Encode the return destination in the save form so the POST redirect
+        // navigates back correctly. We pass the raw URL rather than a token.
+        var rt = document.getElementById('return-to-field');
+        var rc = document.getElementById('return-cust-id-field');
+        if (returnUrl === '/calendar') {
+          if (rt) rt.value = 'calendar';
+        } else if (returnUrl === '/jobs/email-imports') {
+          if (rt) rt.value = 'email';
+        } else if (returnUrl.startsWith('/customers/')) {
+          if (rt) rt.value = 'customer';
+          var custId = returnUrl.match(/\/customers\/(\d+)\//);
+          if (rc && custId) rc.value = custId[1];
+        } else {
+          if (rt) rt.value = 'jobs';
+        }
         document.getElementById('save-form').requestSubmit
           ? document.getElementById('save-form').requestSubmit()
           : document.getElementById('save-form').submit();
