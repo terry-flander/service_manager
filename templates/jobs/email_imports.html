@@ -203,6 +203,12 @@
               <i class="bi bi-chat-left-text"></i>
             </button>
             {% endif %}
+            <button onclick="toggleRowReadUnread(this, {{ imp['id'] }}, {{ 1 if is_unread else 0 }})"
+                    class="btn-ghost"
+                    style="padding:0.2rem 0.5rem; font-size:0.75rem; white-space:nowrap;"
+                    title="{{ 'Mark read' if is_unread else 'Mark unread' }}">
+              <i class="bi bi-{{ 'envelope-check' if is_unread else 'envelope' }}"></i>
+            </button>
             </div>
           </td>
         </tr>
@@ -235,6 +241,35 @@ function markReadAndNavigate(importId, markUrl, jobUrl) {
       } else {
         // No job — just refresh to update read state
         window.location.reload();
+      }
+    });
+}
+
+function toggleRowReadUnread(btn, importId, currentlyUnread) {
+  var url = currentlyUnread
+    ? '/jobs/email-imports/' + importId + '/mark-read'
+    : '/jobs/email-imports/' + importId + '/mark-unread';
+  fetch(url, { method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest'} })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (!res.ok) return;
+      var row = btn.closest('tr');
+      if (currentlyUnread) {
+        // Now read — dim row, remove bold, update button
+        row.style.fontWeight = '';
+        row.style.opacity = '0.72';
+        var dot = row.querySelector('span[style*="border-radius:50%"]');
+        if (dot) dot.remove();
+        btn.title = 'Mark unread';
+        btn.querySelector('i').className = 'bi bi-envelope';
+        btn.onclick = function() { toggleRowReadUnread(btn, importId, 0); };
+      } else {
+        // Now unread — bold row, restore opacity, update button
+        row.style.fontWeight = '600';
+        row.style.opacity = '';
+        btn.title = 'Mark read';
+        btn.querySelector('i').className = 'bi bi-envelope-check';
+        btn.onclick = function() { toggleRowReadUnread(btn, importId, 1); };
       }
     });
 }

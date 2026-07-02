@@ -34,6 +34,8 @@ with get_db() as conn:
     except: pass
     try: conn.execute('ALTER TABLE job_queries ADD COLUMN sort3_dir TEXT')
     except: pass
+    try: conn.execute("ALTER TABLE job_queries ADD COLUMN date_field TEXT NOT NULL DEFAULT 'scheduled'")
+    except: pass
     try: conn.execute('ALTER TABLE jobs ADD COLUMN subtotal REAL DEFAULT 0')
     except: pass
     try: conn.execute('ALTER TABLE jobs ADD COLUMN gst REAL DEFAULT 0')

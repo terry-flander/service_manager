@@ -71,9 +71,10 @@ def create_query():
             INSERT INTO job_queries
                 (name, job_types, statuses, payment_types, search,
                  gross_min, gross_max, date_mode, date_preset, date_from, date_to,
+                 date_field,
                  sort1_field, sort1_dir, sort2_field, sort2_dir, sort3_field, sort3_dir,
                  column_visibility_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             name,
             json.dumps(data.get('job_types') or []),
@@ -86,6 +87,7 @@ def create_query():
             data.get('date_preset') or None,
             data.get('date_from') or None,
             data.get('date_to') or None,
+            data.get('date_field') or 'scheduled',
             _clean_sort_field(data.get('sort1_field')),
             _clean_sort_dir(data.get('sort1_dir')),
             _clean_sort_field(data.get('sort2_field')),
@@ -125,7 +127,7 @@ def update_query(query_id):
             UPDATE job_queries
             SET name=?, job_types=?, statuses=?, payment_types=?, search=?,
                 gross_min=?, gross_max=?, date_mode=?, date_preset=?,
-                date_from=?, date_to=?,
+                date_from=?, date_to=?, date_field=?,
                 sort1_field=?, sort1_dir=?, sort2_field=?, sort2_dir=?,
                 sort3_field=?, sort3_dir=?, column_visibility_id=?,
                 updated_at=datetime('now')
@@ -142,6 +144,7 @@ def update_query(query_id):
             data.get('date_preset') or None,
             data.get('date_from') or None,
             data.get('date_to') or None,
+            data.get('date_field') or 'scheduled',
             _clean_sort_field(data.get('sort1_field')),
             _clean_sort_dir(data.get('sort1_dir')),
             _clean_sort_field(data.get('sort2_field')),

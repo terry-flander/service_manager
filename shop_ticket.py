@@ -155,23 +155,26 @@ def _draw_ticket(c, job, job_parts, ox, title_tag, show_notes,
         'Phone: 0403 225 135',
     ]
 
-    def field_row(label, value, y_, right_lines=None):
+    def field_row(label, value, y_, right_lines=None, large=False):
         """Draw a labelled field row.
         right_lines: list of strings to stack right-justified on the right half.
                      No underline is drawn under the right-side text.
+        large: if True, use a larger bold font for the value (Name/Phone/Bike).
         """
         _label(c, x0, y_ + 1*mm, label)
         y_ -= 4*mm
-        _value(c, x0, y_, value or '', size=9.5)
+        font_size = 12 if large else 9.5
+        c.setFont('Helvetica-Bold' if large else 'Helvetica', font_size)
+        c.drawString(x0, y_, str(value) if value else '')
+        c.setFont('Helvetica', 9.5)  # reset
         # Draw right-aligned lines if provided (no underline for those)
         if right_lines:
-            # Right lines occupy the right half; draw stacked above baseline
             rl_y = y_ + (len(right_lines) - 1) * 4*mm
             for rl in right_lines:
                 c.setFont('Helvetica', 8)
                 c.drawRightString(x1, rl_y, rl)
                 rl_y -= 4*mm
-            c.setFont('Helvetica', 9.5)  # reset
+            c.setFont('Helvetica', 9.5)
         y_ -= 2.5*mm
         _hline(c, x0, x1, y_, width=0.3, color=grey_line)
         y_ -= 4*mm
@@ -180,17 +183,31 @@ def _draw_ticket(c, job, job_parts, ox, title_tag, show_notes,
     # Name row — shop name + first address line on right (customer copy only)
     name_right  = SHOP_LINES[:2] if not show_notes else None
     phone_right = SHOP_LINES[2:] if not show_notes else None
-    y = field_row('Name',  job.get('customer_name')  or '', y, right_lines=name_right)
-    y = field_row('Phone', job.get('customer_phone') or '', y, right_lines=phone_right)
-    # Bike — full width, no right-side content
-    y = field_row('Bike',  job.get('bike_description') or '', y)
+    y = field_row('Name',  job.get('customer_name')  or '', y, right_lines=name_right,  large=True)
+    y = field_row('Phone', job.get('customer_phone') or '', y, right_lines=phone_right, large=True)
+    y = field_row('Bike',  job.get('bike_description') or '', y, large=True)
 
     # ── Description ────────────────────────────────────────────────────────────
-    _label(c, x0, y + 1*mm, 'Message / Description')
+    _label(c, x0, y + 1*mm, 'Services Requested')
     y -= 4*mm
     desc = job.get('description') or ''
     if desc:
-        y = _wrapped(c, x0, y, desc, cw, size=9, lh=5*mm)
+        # Render description large and bold
+        c.setFont('Helvetica-Bold', 11)
+        words = str(desc).replace('\r\n', ' ').replace('\n', ' ').split()
+        line, lines = '', []
+        for w in words:
+            test = (line + ' ' + w).strip()
+            if c.stringWidth(test, 'Helvetica-Bold', 11) <= cw:
+                line = test
+            else:
+                if line: lines.append(line)
+                line = w
+        if line: lines.append(line)
+        for ln in lines:
+            c.drawString(x0, y, ln)
+            y -= 5.5*mm
+        c.setFont('Helvetica', 9)
     else:
         y -= 5*mm
 
@@ -274,7 +291,27 @@ def _draw_ticket(c, job, job_parts, ox, title_tag, show_notes,
             y -= 2.5*mm
 
     y -= 3*mm
-    # (no closing line below parts list)
+
+    # ── Total row — always shown ────────────────────────────────────────────────
+    _hline(c, x0, x1, y, width=0.8)
+    y -= 1.5*mm
+    c.setFont('Helvetica-Bold', 10)
+    c.drawString(x0, y - 4*mm, 'TOTAL')
+    c.setFont('Helvetica-Bold', 13)
+    c.drawRightString(x1, y - 4.5*mm, f'${running_total:.2f}')
+    y -= 11*mm
+
+    # ── Status band — bold, centred, all caps — always shown ───────────────────
+    status_str = str(job.get('status') or '').upper().replace('_', ' ')
+    y -= 3*mm
+    band_h = 10*mm
+    c.setFillColor(colors.HexColor('#1e293b'))
+    c.rect(x0, y - 2*mm, x1 - x0, band_h, fill=1, stroke=0)
+    c.setFillColor(colors.white)
+    c.setFont('Helvetica-Bold', 13)
+    c.drawCentredString(x0 + (x1 - x0) / 2, y + band_h * 0.22, status_str or '—')
+    c.setFillColor(colors.black)
+    y -= band_h + 2*mm
 
     # ── Estimated total (customer copy, only when parts exist) ──────────────────
     if show_total and running_total > 0:

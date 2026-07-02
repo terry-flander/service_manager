@@ -110,9 +110,22 @@
     vertical-align: top;
   }
   table.parts tbody td.r { text-align: right; }
-  table.parts tbody tr.blank td {
-    height: 8mm;
-    border-bottom: 0.3pt solid #808080;
+  table.parts tfoot td {
+    padding: 2mm 1mm 1mm 0;
+    font-weight: 700;
+  }
+  table.parts tfoot td.r { text-align: right; }
+
+  .status-band {
+    margin-top: 4mm;
+    background: #1e293b;
+    color: #fff;
+    text-align: center;
+    font-size: 14pt;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    padding: 2.5mm 0;
+    border-radius: 2px;
   }
 
   /* ── Screen chrome ───────────────────────────────────────── */
@@ -192,17 +205,17 @@
   <div class="field" style="display:flex; justify-content:space-between; align-items:flex-end; gap:4mm;">
     <div style="flex:1;">
       <div class="field-label">Name</div>
-      <div class="field-value" style="padding-bottom:0;">{{ job['customer_name'] or '' }}</div>
+      <div class="field-value" style="padding-bottom:0; font-size:14pt; font-weight:700;">{{ job['customer_name'] or '' }}</div>
     </div>
     <div style="text-align:right;">
       <div class="field-label">Phone</div>
-      <div class="field-value" style="padding-bottom:0;">{{ job['customer_phone'] or '' }}</div>
+      <div class="field-value" style="padding-bottom:0; font-size:14pt; font-weight:700;">{{ job['customer_phone'] or '' }}</div>
     </div>
   </div>
 
   <div class="field">
     <div class="field-label">Bike</div>
-    <div class="field-value">{{ job['bike_description'] or '' }}</div>
+    <div class="field-value" style="font-size:14pt; font-weight:700;">{{ job['bike_description'] or '' }}</div>
   </div>
 
   {% if job['service_types'] %}
@@ -214,7 +227,7 @@
 
   <div class="field">
     <div class="field-label">Services Requested</div>
-    <div class="field-value tall">{{ job['description'] or '' }}</div>
+    <div class="field-value tall" style="font-size:12pt; font-weight:700;">{{ job['description'] or '' }}</div>
   </div>
 
   <div class="field">
@@ -248,7 +261,22 @@
       <tr class="blank"><td></td><td></td><td></td><td></td></tr>
       {% endfor %}
     </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="3" style="border-top:1pt solid #000; padding-top:2mm;">TOTAL</td>
+        <td class="r" style="border-top:1pt solid #000; padding-top:2mm; font-size:13pt;">
+          {% set total = namespace(val=0) %}
+          {% for p in job_parts %}{% set total.val = total.val + p['quantity'] * p['unit_cost'] %}{% endfor %}
+          ${{ '%.2f'|format(total.val) }}
+        </td>
+      </tr>
+    </tfoot>
   </table>
+
+  <div class="status-band">
+    {{ job['status']|upper|replace('_', ' ') }}
+  </div>
+
   <!-- JS fills remaining page height with blank rows before print -->
   <div id="stretch-anchor"></div>
 

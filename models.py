@@ -179,6 +179,7 @@ def init_db():
                 sort2_dir     TEXT,
                 sort3_field   TEXT,
                 sort3_dir     TEXT,
+                date_field    TEXT NOT NULL DEFAULT 'scheduled',
                 column_visibility_id INTEGER REFERENCES column_visibility_sets(id),
                 created_at    TEXT DEFAULT (datetime('now')),
                 updated_at    TEXT DEFAULT (datetime('now'))

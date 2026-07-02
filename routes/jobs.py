@@ -1219,13 +1219,20 @@ def mark_email_read(import_id):
         imp = conn.execute(
             "SELECT job_id FROM email_imports WHERE id=?", (import_id,)).fetchone()
         conn.commit()
-    # AJAX call from inbox JS
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify({'ok': True})
-    # Direct form submission fallback
     if imp and imp['job_id']:
         return redirect(url_for('jobs.job_detail', job_id=imp['job_id']))
     return redirect(url_for('jobs.email_imports'))
+
+
+@jobs_bp.route('/jobs/email-imports/<int:import_id>/mark-unread', methods=['POST'])
+def mark_email_unread(import_id):
+    """Mark an email import as unread."""
+    with get_db() as conn:
+        conn.execute("UPDATE email_imports SET read=1 WHERE id=?", (import_id,))
+        conn.commit()
+    return jsonify({'ok': True})
 
 
 @jobs_bp.route('/jobs/email-polling-toggle', methods=['POST'])
@@ -1519,12 +1526,13 @@ def email_thread_job(job_id):
             return jsonify({'error': 'Not found'}), 404
         rows = conn.execute("""
             SELECT 'inbound' as direction, imported_at as ts,
-                   sender as from_addr, subject, body, status, id, ? as job_ref
+                   sender as from_addr, subject, body, status,
+                   id as email_id, ? as job_ref, read, id as import_id
             FROM email_imports WHERE job_id=?
             UNION ALL
             SELECT 'outbound' as direction, sent_at as ts,
                    to_address as from_addr, subject, body, 'sent' as status,
-                   id, ? as job_ref
+                   id as email_id, ? as job_ref, 0 as read, NULL as import_id
             FROM email_replies WHERE job_id=?
             ORDER BY ts ASC
         """, (job['reference'], job_id, job['reference'], job_id)).fetchall()
