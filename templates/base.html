@@ -1129,6 +1129,7 @@ function openQueryBuilder(queryId) {
   document.getElementById('qb-gross-max').value = '';
   document.getElementById('qb-date-from').value = '';
   document.getElementById('qb-date-to').value = '';
+  document.getElementById('qb-date-field').value = 'scheduled';
   document.getElementById('qb-form').dataset.editingId = queryId || '';
 
   function populateChoicesAndShow(query) {
@@ -1157,6 +1158,7 @@ function openQueryBuilder(queryId) {
       document.getElementById('qb-gross-max').value = query.gross_max != null ? query.gross_max : '';
       document.getElementById('qb-date-from').value = query.date_from || '';
       document.getElementById('qb-date-to').value = query.date_to || '';
+      document.getElementById('qb-date-field').value = query.date_field || 'scheduled';
     }
 
     populateColumnVisibilityDropdown(query ? query.column_visibility_id : '');
@@ -1236,6 +1238,7 @@ function saveQueryBuilder() {
     date_preset: isCustom ? null : datePreset,
     date_from: isCustom ? document.getElementById('qb-date-from').value : null,
     date_to: isCustom ? document.getElementById('qb-date-to').value : null,
+    date_field: document.getElementById('qb-date-field').value || 'scheduled',
     sort1_field: document.getElementById('qb-sort1-field').value || null,
     sort1_dir: document.getElementById('qb-sort1-dir').value || 'asc',
     sort2_field: document.getElementById('qb-sort2-field').value || null,
@@ -1585,6 +1588,12 @@ function saveColumnSet() {
       </div>
 
       <div style="margin-bottom:1rem;">
+        <label class="sd-label">Date Field</label>
+        <select id="qb-date-field" class="sd-input" style="margin-bottom:0.75rem;">
+          <option value="scheduled">Scheduled Date</option>
+          <option value="paid">Paid Date</option>
+        </select>
+
         <label class="sd-label">Date Range</label>
         <select id="qb-date-preset" class="sd-input" onchange="toggleCustomDateFields()" style="margin-bottom:0.5rem;"></select>
         <div id="qb-custom-dates" style="display:none; gap:0.5rem;">

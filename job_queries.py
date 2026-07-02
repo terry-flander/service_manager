@@ -139,6 +139,7 @@ def query_row_to_dict(row):
         'date_preset':   row['date_preset'] or '',
         'date_from':     row['date_from'] or '',
         'date_to':       row['date_to'] or '',
+        'date_field':    _safe('date_field') or 'scheduled',
         'sort1_field':   _safe('sort1_field') or '',
         'sort1_dir':     _safe('sort1_dir') or 'asc',
         'sort2_field':   _safe('sort2_field') or '',
@@ -212,11 +213,22 @@ def resolve_query_filters(query, table_alias='j', date_column='scheduled_date'):
     else:
         date_from, date_to = resolve_date_preset(query.get('date_preset'))
 
+    # date_field from the query overrides the caller-supplied date_column default.
+    # 'scheduled' -> j.scheduled_date, 'paid' -> j.paid_date.
+    # If date_field is missing/unknown, fall back to the caller's default.
+    date_field = (query.get('date_field') or '').strip()
+    if date_field == 'paid':
+        resolved_date_col = f"{table_alias}.paid_date"
+    elif date_field == 'scheduled':
+        resolved_date_col = f"{table_alias}.scheduled_date"
+    else:
+        resolved_date_col = date_column  # caller-supplied fallback
+
     if date_from:
-        clauses.append(f"{date_column} >= ?")
+        clauses.append(f"{resolved_date_col} >= ?")
         params.append(date_from)
     if date_to:
-        clauses.append(f"{date_column} <= ?")
+        clauses.append(f"{resolved_date_col} <= ?")
         params.append(date_to)
 
     return ' AND '.join(clauses), params
