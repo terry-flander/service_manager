@@ -150,12 +150,21 @@
 
   {% endif %}
 
+  <div style="margin-top:1rem; padding:0.75rem 0; border-top:1px solid var(--sd-border);
+              display:flex; justify-content:flex-end;">
+    <button class="btn-ghost" style="font-size:0.82rem;"
+            onclick="openEmailThread('{{ url_for('jobs.email_thread_job', job_id=job['id']) }}', REPLY_CUSTOMER_NAME)">
+      <i class="bi bi-chat-left-text"></i> Email Thread
+    </button>
+  </div>
+
   </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+var REPLY_CUSTOMER_NAME = {{ job['customer_name']|tojson }};
 const TEMPLATES = {
   {% for t in templates %}
   "{{ t['id'] }}": {

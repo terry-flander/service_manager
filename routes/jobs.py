@@ -1175,12 +1175,33 @@ def email_imports():
 
         where_sql = ('WHERE ' + ' AND '.join(wheres)) if wheres else ''
 
+        # Group by subject — one row per conversation thread (subject).
+        # Shows the first (earliest) email_import for each subject.
+        # Unread if ANY import in that subject group is unread.
+        # Received = count of email_imports for this subject.
+        # Sent = count of email_replies for the job linked to this subject.
         imports = conn.execute(f"""
-            SELECT ei.*, j.reference
+            SELECT
+                ei.id,
+                ei.subject,
+                ei.sender,
+                ei.job_id,
+                ei.status,
+                ei.body,
+                j.reference,
+                MIN(coalesce(ei.received_at, ei.imported_at)) as first_received,
+                MAX(coalesce(ei.received_at, ei.imported_at)) as last_received,
+                SUM(CASE WHEN (ei.read = 1 OR ei.read IS NULL) THEN 1 ELSE 0 END) as unread_count,
+                COUNT(ei.id) as received_count,
+                COALESCE((
+                    SELECT COUNT(*) FROM email_replies er
+                    WHERE er.job_id = ei.job_id
+                ), 0) as sent_count
             FROM email_imports ei
             LEFT JOIN jobs j ON j.id = ei.job_id
             {where_sql}
-            ORDER BY coalesce(ei.received_at, ei.imported_at) DESC
+            GROUP BY LOWER(TRIM(ei.subject))
+            ORDER BY last_received DESC
             LIMIT 500
         """, params).fetchall()
 
@@ -1231,6 +1252,20 @@ def mark_email_unread(import_id):
     """Mark an email import as unread."""
     with get_db() as conn:
         conn.execute("UPDATE email_imports SET read=1 WHERE id=?", (import_id,))
+        conn.commit()
+    return jsonify({'ok': True})
+
+
+@jobs_bp.route('/jobs/email-imports/mark-subject-read', methods=['POST'])
+def mark_subject_read():
+    """Mark all email_imports with the given subject as read."""
+    subject = request.json.get('subject', '').strip() if request.is_json else request.form.get('subject', '').strip()
+    if not subject:
+        return jsonify({'ok': False, 'error': 'No subject'}), 400
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE email_imports SET read=0 WHERE LOWER(TRIM(subject))=LOWER(TRIM(?))",
+            (subject,))
         conn.commit()
     return jsonify({'ok': True})
 

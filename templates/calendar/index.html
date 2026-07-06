@@ -126,10 +126,15 @@
     <a id="popup-map-link" href="#" target="_blank" rel="noopener"
        style="color:var(--sd-accent); text-decoration:none; word-break:break-word;"></a>
   </div>
-  <div style="margin-top:0.5rem;">
+  <div style="margin-top:0.5rem; display:flex; gap:0.5rem; align-items:center;">
     <a id="popup-link" href="#" class="btn-accent" style="font-size:0.78rem; padding:0.3rem 0.75rem;">
       View Job
     </a>
+    <button id="popup-thread-btn" class="btn-ghost"
+            style="font-size:0.78rem; padding:0.3rem 0.75rem; display:none;"
+            onclick="openPopupEmailThread()">
+      <i class="bi bi-chat-left-text"></i> Email Thread
+    </button>
   </div>
 </div>
 
@@ -493,6 +498,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.getElementById('popup-link').href = info.event.url || '#';
 
+    // Email thread button — extract job_id from the event URL
+    const threadBtn = document.getElementById('popup-thread-btn');
+    const jobIdMatch = (info.event.url || '').match(/\/jobs\/(\d+)/);
+    if (jobIdMatch) {
+      const jobId = jobIdMatch[1];
+      threadBtn.style.display = '';
+      threadBtn.onclick = function() {
+        openEmailThread('/email/thread/' + jobId, info.event.title);
+      };
+    } else {
+      threadBtn.style.display = 'none';
+    }
+
     // Position popup below the event, keeping it on screen
     const rect   = info.el.getBoundingClientRect();
     const popW   = 280;
@@ -504,6 +522,16 @@ document.addEventListener('DOMContentLoaded', function() {
     jobPopup.style.top     = top  + 'px';
     jobPopup.style.display = 'block';
   }
+
+  // Escape closes the job popup and the event modal
+  document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    if (jobPopup.style.display !== 'none') {
+      jobPopup.style.display = 'none';
+    } else {
+      closeModal();
+    }
+  });
 
   // ── Google-external event popup (read-only) ─────────────────────────────────
   const gcalPopup = document.getElementById('gcal-popup');

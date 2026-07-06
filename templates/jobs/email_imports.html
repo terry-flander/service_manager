@@ -36,7 +36,7 @@
       — checks every {{ poll_minutes }} minute{{ 's' if poll_minutes != 1 }}
     {% endif %}
   </span>
-  {% set unread_count = imports | selectattr('read', 'equalto', 1) | list | length %}
+  {% set unread_count = imports | selectattr('unread_count') | list | length %}
   {% if unread_count %}
   <span style="margin-left:auto; background:var(--sd-accent); color:#fff;
                border-radius:12px; padding:0.15rem 0.6rem; font-size:0.75rem;
@@ -139,21 +139,21 @@
           <th style="width:130px;">Received</th>
           <th>From</th>
           <th>Subject</th>
-          <th style="width:90px;">Type</th>
+          <th style="width:80px; text-align:center;">In / Out</th>
           <th style="width:80px;">Job</th>
-          <th style="width:60px;"></th>
+          <th style="width:80px;"></th>
         </tr>
       </thead>
       <tbody>
         {% for imp in imports %}
-        {% set is_unread = imp['read'] == 1 or imp['read'] is none %}
+        {% set is_unread = imp['unread_count'] > 0 %}
         <tr style="cursor:pointer;
                    {% if is_unread %}font-weight:600;{% endif %}
                    {% if not is_unread %}opacity:0.72;{% endif %}"
-            onclick="markReadAndNavigate({{ imp['id'] }}, '{{ url_for('jobs.mark_email_read', import_id=imp['id']) }}', '{{ (url_for('jobs.job_detail', job_id=imp['job_id']) + '?from=email') if imp['job_id'] else '' }}')">
+            onclick="markSubjectReadAndNavigate({{ imp['id'] }}, {{ imp['job_id'] or 'null' }}, SUBJECTS[{{ imp['id'] }}])">
 
           <td class="mono" style="font-size:0.78rem; white-space:nowrap;">
-            {% set dt = imp['received_at'] or imp['imported_at'] %}
+            {% set dt = imp['last_received'] %}
             {% if dt %}{{ dt[:16] }}{% else %}—{% endif %}
             {% if is_unread %}
             <span style="display:inline-block; width:7px; height:7px; border-radius:50%;
@@ -169,14 +169,10 @@
                      overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
             {{ imp['subject'] or '(no subject)' }}
           </td>
-          <td>
-            {% if imp['status'] == 'ok' %}
-            <span class="badge-status status-complete">Booking</span>
-            {% elif imp['status'] == 'thread' %}
-            <span class="badge-status status-scheduled">Reply</span>
-            {% else %}
-            <span class="badge-status status-void">{{ imp['status'] }}</span>
-            {% endif %}
+          <td style="text-align:center; font-size:0.82rem;">
+            <span style="color:var(--sd-accent);">{{ imp['received_count'] }}</span>
+            /
+            <span style="color:var(--sd-muted);">{{ imp['sent_count'] }}</span>
           </td>
           <td>
             {% if imp['job_id'] %}
@@ -187,23 +183,14 @@
           </td>
           <td onclick="event.stopPropagation();">
             <div style="display:flex; gap:0.3rem; align-items:center;">
-            {% if imp['body'] %}
-            <button onclick="openEmailPopup('{{ url_for('jobs.email_message', import_id=imp['id']) }}')"
-                    class="btn-ghost"
-                    style="padding:0.2rem 0.5rem; font-size:0.75rem; white-space:nowrap;">
-              <i class="bi bi-envelope-open"></i>
-            </button>
-            {% endif %}
             {% if imp['job_id'] %}
-            <button onclick="openEmailThread('{{ url_for('jobs.email_thread_job', job_id=imp['job_id']) }}',
-                                             '{{ imp['subject']|replace("'","\\'")|truncate(40) }}')"
+            <button onclick="openEmailThread('{{ url_for('jobs.email_thread_job', job_id=imp['job_id']) }}', SUBJECTS[{{ imp['id'] }}])"
                     class="btn-ghost"
-                    style="padding:0.2rem 0.5rem; font-size:0.75rem; white-space:nowrap;"
-                    title="View full conversation">
-              <i class="bi bi-chat-left-text"></i>
+                    style="padding:0.2rem 0.6rem; font-size:0.75rem; white-space:nowrap;">
+              Read
             </button>
             {% endif %}
-            <button onclick="toggleRowReadUnread(this, {{ imp['id'] }}, {{ 1 if is_unread else 0 }})"
+            <button onclick="toggleRowReadUnread(this, {{ imp['id'] }}, {{ 1 if is_unread else 0 }}, SUBJECTS[{{ imp['id'] }}])"
                     class="btn-ghost"
                     style="padding:0.2rem 0.5rem; font-size:0.75rem; white-space:nowrap;"
                     title="{{ 'Mark read' if is_unread else 'Mark unread' }}">
@@ -231,45 +218,58 @@
 
 {% block scripts %}
 <script>
-function markReadAndNavigate(importId, markUrl, jobUrl) {
-  // POST to mark as read, then navigate to job (or stay if no job)
-  fetch(markUrl, { method: 'POST',
-                   headers: {'X-Requested-With': 'XMLHttpRequest'} })
-    .then(function() {
-      if (jobUrl) {
-        window.location = jobUrl;
-      } else {
-        // No job — just refresh to update read state
-        window.location.reload();
-      }
-    });
+// Subject lookup by import_id — avoids HTML attribute quoting issues entirely
+var SUBJECTS = {
+  {% for imp in imports %}
+  {{ imp['id'] }}: {{ imp['subject']|tojson }},
+  {% endfor %}
+};
+
+function markSubjectReadAndNavigate(importId, jobId, subject) {
+  // Mark all imports for this subject as read, then navigate to job
+  fetch('/jobs/email-imports/mark-subject-read', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({subject: subject})
+  }).then(function() {
+    if (jobId) {
+      window.location = '/jobs/' + jobId + '?from=email';
+    } else {
+      window.location.reload();
+    }
+  });
 }
 
-function toggleRowReadUnread(btn, importId, currentlyUnread) {
+function toggleRowReadUnread(btn, importId, currentlyUnread, subject) {
+  // Toggle read state for all imports with this subject
   var url = currentlyUnread
-    ? '/jobs/email-imports/' + importId + '/mark-read'
+    ? '/jobs/email-imports/mark-subject-read'
     : '/jobs/email-imports/' + importId + '/mark-unread';
-  fetch(url, { method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest'} })
+  var fetchOpts = currentlyUnread
+    ? { method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({subject: subject}) }
+    : { method: 'POST' };
+
+  fetch(url, fetchOpts)
     .then(function(r) { return r.json(); })
     .then(function(res) {
       if (!res.ok) return;
       var row = btn.closest('tr');
       if (currentlyUnread) {
-        // Now read — dim row, remove bold, update button
         row.style.fontWeight = '';
         row.style.opacity = '0.72';
         var dot = row.querySelector('span[style*="border-radius:50%"]');
         if (dot) dot.remove();
         btn.title = 'Mark unread';
         btn.querySelector('i').className = 'bi bi-envelope';
-        btn.onclick = function() { toggleRowReadUnread(btn, importId, 0); };
+        btn.onclick = function() { toggleRowReadUnread(btn, importId, 0, subject); };
       } else {
-        // Now unread — bold row, restore opacity, update button
         row.style.fontWeight = '600';
         row.style.opacity = '';
         btn.title = 'Mark read';
         btn.querySelector('i').className = 'bi bi-envelope-check';
-        btn.onclick = function() { toggleRowReadUnread(btn, importId, 1); };
+        btn.onclick = function() { toggleRowReadUnread(btn, importId, 1, subject); };
       }
     });
 }
