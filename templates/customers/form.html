@@ -11,11 +11,7 @@
      class="btn-ghost">
     <i class="bi bi-person-dash"></i> Merge
   </a>
-  <button type="button" class="btn-ghost"
-          onclick="openEmailThread('{{ url_for('jobs.email_thread_customer', customer_id=customer['id']) }}',
-                                   '{{ customer['name']|replace("'","\\'") }} — All Emails')">
-    <i class="bi bi-chat-left-text"></i> Emails
-  </button>
+
   {% endif %}
 {% endblock %}
 
@@ -114,6 +110,7 @@
             <th>Scheduled</th>
             <th>Status</th>
             <th style="text-align:right;">Total</th>
+            <th style="width:70px;"></th>
           </tr>
         </thead>
         <tbody>
@@ -139,6 +136,15 @@
               {% if job['total'] %}${{ '%.2f'|format(job['total']) }}
               {% else %}<span style="color:var(--sd-muted);">—</span>{% endif %}
             </td>
+            <td onclick="event.stopPropagation();">
+              {% if job['customer_email'] %}
+              <button onclick="openReplyModal({{ job['id'] }}, CUST_EMAIL_MAP[{{ job['id'] }}], CUST_NAME)"
+                      class="btn-ghost"
+                      style="padding:0.2rem 0.5rem; font-size:0.75rem; white-space:nowrap;">
+                <i class="bi bi-reply"></i>
+              </button>
+              {% endif %}
+            </td>
           </tr>
           {% else %}
           <tr>
@@ -158,6 +164,13 @@
 
 {% block scripts %}
 <script>
+// Customer email lookup by job_id — for Reply modal
+var CUST_EMAIL_MAP = {
+  {% for job in jobs %}
+  {{ job['id'] }}: {{ (job['customer_email'] or '')|tojson }},
+  {% endfor %}
+};
+var CUST_NAME = {{ (customer['name'] or '')|tojson }};
 (function () {
   const form     = document.getElementById('customer-form');
   const saveBtn  = document.getElementById('customer-save-btn');

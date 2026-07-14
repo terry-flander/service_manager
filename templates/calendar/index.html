@@ -125,6 +125,11 @@
     <i class="bi bi-geo-alt" style="font-size:0.75rem;"></i>
     <a id="popup-map-link" href="#" target="_blank" rel="noopener"
        style="color:var(--sd-accent); text-decoration:none; word-break:break-word;"></a>
+    <a id="popup-dir-link" href="#" target="_blank" rel="noopener"
+       style="color:var(--sd-muted); font-size:0.75rem; margin-left:0.4rem; white-space:nowrap;"
+       title="Get directions from current location">
+      <i class="bi bi-signpost-2"></i>
+    </a>
   </div>
   <div style="margin-top:0.5rem; display:flex; gap:0.5rem; align-items:center;">
     <a id="popup-link" href="#" class="btn-accent" style="font-size:0.78rem; padding:0.3rem 0.75rem;">
@@ -132,8 +137,8 @@
     </a>
     <button id="popup-thread-btn" class="btn-ghost"
             style="font-size:0.78rem; padding:0.3rem 0.75rem; display:none;"
-            onclick="openPopupEmailThread()">
-      <i class="bi bi-chat-left-text"></i> Email Thread
+            onclick="openPopupReplyModal()">
+      <i class="bi bi-reply"></i> Reply
     </button>
   </div>
 </div>
@@ -473,15 +478,20 @@ document.addEventListener('DOMContentLoaded', function() {
     // Address with Google Maps link
     const addrRow = document.getElementById('popup-addr');
     const mapLink = document.getElementById('popup-map-link');
+    const dirLink = document.getElementById('popup-dir-link');
     const displayAddr = p.address || p.suburb || '';
+    const fullDest    = [p.address, p.suburb].filter(Boolean).join(', ');
     const addrMissing = !p.address ||
       (p.suburb && p.address.trim().toLowerCase() === p.suburb.trim().toLowerCase());
 
     if (displayAddr) {
       mapLink.textContent = displayAddr;
       mapLink.href = 'https://maps.google.com/?q=' + encodeURIComponent(displayAddr);
+      dirLink.href = 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(fullDest);
+      dirLink.style.display = '';
       addrRow.style.display = '';
     } else {
+      dirLink.style.display = 'none';
       addrRow.style.display = 'none';
     }
 
@@ -498,14 +508,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
     document.getElementById('popup-link').href = info.event.url || '#';
 
-    // Email thread button — extract job_id from the event URL
+    // Reply button — extract job_id and customer info from the event
     const threadBtn = document.getElementById('popup-thread-btn');
     const jobIdMatch = (info.event.url || '').match(/\/jobs\/(\d+)/);
     if (jobIdMatch) {
       const jobId = jobIdMatch[1];
+      const custEmail = p.customer_email || '';
+      const custName  = p.customer_name  || info.event.title;
       threadBtn.style.display = '';
       threadBtn.onclick = function() {
-        openEmailThread('/email/thread/' + jobId, info.event.title);
+        openReplyModal(jobId, custEmail, custName);
       };
     } else {
       threadBtn.style.display = 'none';

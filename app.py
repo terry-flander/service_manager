@@ -86,7 +86,25 @@ def create_app():
             return value.strftime('%a %-d %b %Y')
         return value.strftime('%A %-d %B %Y')
 
-    app.jinja_env.filters['fmt_date'] = _fmt_date
+    def _fmt_datetime_local(value, fmt='%d/%m/%Y %H:%M'):
+        """Convert a UTC datetime string to Australia/Melbourne local time."""
+        if not value:
+            return '—'
+        try:
+            from datetime import datetime, timezone
+            from zoneinfo import ZoneInfo
+            if isinstance(value, str):
+                dt = datetime.strptime(value[:19], '%Y-%m-%d %H:%M:%S')
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = value.replace(tzinfo=timezone.utc) if not value.tzinfo else value
+            local = dt.astimezone(ZoneInfo('Australia/Melbourne'))
+            return local.strftime(fmt)
+        except Exception:
+            return str(value)[:16]
+
+    app.jinja_env.filters['fmt_date']     = _fmt_date
+    app.jinja_env.filters['fmt_datetime'] = _fmt_datetime_local
 
     @app.context_processor
     def inject_globals():

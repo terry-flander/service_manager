@@ -613,8 +613,10 @@ def _poll_inbox_replies(imap, app):
                     processed += 1
                     log.info(f"INBOX reply logged for job {existing_job_id} "
                              f"from {from_email}")
-                    # Mark read only when matched — leave others unread
-                    imap.store(num, '+FLAGS', '\\Seen')
+                    # Don't mark Seen in Gmail — user needs to see
+                    # unmatched INBOX emails as unread. Matched emails are
+                    # recorded in DB with read=1 (unread) for the in-app log.
+                    pass
                 else:
                     log.debug(f"INBOX: no job match for '{subject[:40]}' "
                               f"from {from_email} — leaving unread")
@@ -700,7 +702,8 @@ def poll_once(app, force=False):
                                 parsed['subject'], parsed['from_email'],
                                 body, existing_job_id, received_at)
                             log.info(f"Thread follow-up logged for job {existing_job_id}")
-                            imap.store(num, '+FLAGS', '\\Seen')
+                            # Don't mark Seen in Gmail — labels share read state
+                            pass
                         else:
                             # New booking — create job
                             if parsed['name'] == 'Unknown':
@@ -719,10 +722,10 @@ def poll_once(app, force=False):
                             if _create_job(db_conn, parsed, message_id,
                                            thread_id, in_reply_to):
                                 imported += 1
-                                imap.store(num, '+FLAGS', '\\Seen')
+                                # Don't mark Seen — Gmail shares read state across labels
                             else:
-                                # Job creation failed — restore unread
-                                imap.store(num, '-FLAGS', '\\Seen')
+                                # Job creation failed — already unread, nothing to do
+                                pass
         else:
             log.info(f"No unread messages in '{label}'")
 

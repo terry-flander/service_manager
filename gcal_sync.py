@@ -26,7 +26,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 
-log = logging.getLogger('gcal_sync')
+log = logging.getLogger('app')  # use Flask app logger so errors appear in docker logs
 
 CALENDAR_API = 'https://www.googleapis.com/calendar/v3'
 
@@ -170,9 +170,16 @@ def _build_event_body(job):
     service_types = job['service_types'] or ''
     summary = f"{first_name} – {service_types}" if service_types else first_name
 
-    job_url = f"{_base_url()}/jobs/{job['id']}"
+    job_url      = f"{_base_url()}/jobs/{job['id']}"
+    thread_url   = f"{_base_url()}/email/thread/{job['id']}/view"
+    address      = job['address'] or ''
+    suburb       = job['suburb'] or ''
+    dest         = (address + (', ' + suburb if suburb else '')).strip()
+    dir_url      = ('https://www.google.com/maps/dir/?api=1&destination=' + urllib.parse.quote_plus(dest)) if dest else ''
     description_lines = [
-        f'<a href="{job_url}">ServiceDesk</a>',
+        f'<a href="{job_url}">ServiceDesk Job</a>',
+        f'<a href="{thread_url}">Email Thread</a>',
+        (f'<a href="{dir_url}">Get Directions</a>' if dir_url else ''),
         '',
         f"Name: {_escape(job['customer_name'])}",
         f"Email: {_escape(job['customer_email'])}",
@@ -183,12 +190,13 @@ def _build_event_body(job):
         'Message:',
         _escape(job['description']),
     ]
-    description = '\n'.join(description_lines)
+    description = '\n'.join(line for line in description_lines if line is not None)
 
     event = {
-        'summary': summary,
-        'location': _escape(job['address']),
+        'summary':     summary,
+        'location':    _escape(job['address']),
         'description': description,
+        'reminders':   {'useDefault': False, 'overrides': []},
     }
 
     color_id = _color_id_for_status(job['status'])

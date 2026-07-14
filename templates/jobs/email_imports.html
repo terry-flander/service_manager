@@ -150,11 +150,11 @@
         <tr style="cursor:pointer;
                    {% if is_unread %}font-weight:600;{% endif %}
                    {% if not is_unread %}opacity:0.72;{% endif %}"
-            onclick="markSubjectReadAndNavigate({{ imp['id'] }}, {{ imp['job_id'] or 'null' }}, SUBJECTS[{{ imp['id'] }}])">
+            onclick="markSubjectReadAndNavigate({{ imp['id'] }}, {{ imp['job_id'] or 'null' }})">
 
           <td class="mono" style="font-size:0.78rem; white-space:nowrap;">
             {% set dt = imp['last_received'] %}
-            {% if dt %}{{ dt[:16] }}{% else %}—{% endif %}
+            {{ dt|fmt_datetime if dt else '—' }}
             {% if is_unread %}
             <span style="display:inline-block; width:7px; height:7px; border-radius:50%;
                          background:var(--sd-accent); margin-left:0.35rem;
@@ -184,13 +184,13 @@
           <td onclick="event.stopPropagation();">
             <div style="display:flex; gap:0.3rem; align-items:center;">
             {% if imp['job_id'] %}
-            <button onclick="openEmailThread('{{ url_for('jobs.email_thread_job', job_id=imp['job_id']) }}', SUBJECTS[{{ imp['id'] }}])"
+            <button onclick="openReplyModal({{ imp['job_id'] }}, CUST_EMAILS[{{ imp['id'] }}], CUST_NAMES[{{ imp['id'] }}])"
                     class="btn-ghost"
                     style="padding:0.2rem 0.6rem; font-size:0.75rem; white-space:nowrap;">
-              Read
+              <i class="bi bi-reply"></i> Reply
             </button>
             {% endif %}
-            <button onclick="toggleRowReadUnread(this, {{ imp['id'] }}, {{ 1 if is_unread else 0 }}, SUBJECTS[{{ imp['id'] }}])"
+            <button onclick="toggleRowReadUnread(this, {{ imp['id'] }}, {{ 1 if is_unread else 0 }}, {{ imp['job_id'] or 'null' }})"
                     class="btn-ghost"
                     style="padding:0.2rem 0.5rem; font-size:0.75rem; white-space:nowrap;"
                     title="{{ 'Mark read' if is_unread else 'Mark unread' }}">
@@ -218,37 +218,41 @@
 
 {% block scripts %}
 <script>
-// Subject lookup by import_id — avoids HTML attribute quoting issues entirely
-var SUBJECTS = {
+// Customer lookups by import_id — for Reply modal
+var CUST_EMAILS = {
   {% for imp in imports %}
-  {{ imp['id'] }}: {{ imp['subject']|tojson }},
+  {{ imp['id'] }}: {{ (imp['customer_email'] or '')|tojson }},
+  {% endfor %}
+};
+var CUST_NAMES = {
+  {% for imp in imports %}
+  {{ imp['id'] }}: {{ (imp['customer_name'] or '')|tojson }},
   {% endfor %}
 };
 
-function markSubjectReadAndNavigate(importId, jobId, subject) {
-  // Mark all imports for this subject as read, then navigate to job
-  fetch('/jobs/email-imports/mark-subject-read', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({subject: subject})
-  }).then(function() {
-    if (jobId) {
+function markSubjectReadAndNavigate(importId, jobId) {
+  // Mark all imports for this job as read, then navigate to job
+  if (jobId) {
+    fetch('/jobs/email-imports/mark-subject-read', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({job_id: jobId})
+    }).then(function() {
       window.location = '/jobs/' + jobId + '?from=email';
-    } else {
-      window.location.reload();
-    }
-  });
+    });
+  } else {
+    window.location.reload();
+  }
 }
 
-function toggleRowReadUnread(btn, importId, currentlyUnread, subject) {
-  // Toggle read state for all imports with this subject
+function toggleRowReadUnread(btn, importId, currentlyUnread, jobId) {
   var url = currentlyUnread
     ? '/jobs/email-imports/mark-subject-read'
     : '/jobs/email-imports/' + importId + '/mark-unread';
   var fetchOpts = currentlyUnread
     ? { method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({subject: subject}) }
+        body: JSON.stringify({job_id: jobId}) }
     : { method: 'POST' };
 
   fetch(url, fetchOpts)
@@ -263,13 +267,13 @@ function toggleRowReadUnread(btn, importId, currentlyUnread, subject) {
         if (dot) dot.remove();
         btn.title = 'Mark unread';
         btn.querySelector('i').className = 'bi bi-envelope';
-        btn.onclick = function() { toggleRowReadUnread(btn, importId, 0, subject); };
+        btn.onclick = function() { toggleRowReadUnread(btn, importId, 0, jobId); };
       } else {
         row.style.fontWeight = '600';
         row.style.opacity = '';
         btn.title = 'Mark read';
         btn.querySelector('i').className = 'bi bi-envelope-check';
-        btn.onclick = function() { toggleRowReadUnread(btn, importId, 1, subject); };
+        btn.onclick = function() { toggleRowReadUnread(btn, importId, 1, jobId); };
       }
     });
 }

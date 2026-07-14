@@ -423,6 +423,123 @@ def compose_reply(job_id):
                            invoice_url=None)
 
 
+# ── Reply Modal API ────────────────────────────────────────────────────────────
+
+@email_replies_bp.route('/jobs/<int:job_id>/compose/templates')
+def compose_template_list(job_id):
+    """Return all email templates (id, name) for the reply modal dropdown."""
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, name FROM email_templates ORDER BY name").fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@email_replies_bp.route('/jobs/<int:job_id>/compose/template/<int:tmpl_id>')
+def compose_template_fetch(job_id, tmpl_id):
+    """Return a single template with all substitution fields already replaced
+    using the current job's data. Used by the reply modal to fill the editor
+    when a template is selected."""
+    with get_db() as conn:
+        job = conn.execute("""
+            SELECT j.*, r.name as region_name
+            FROM jobs j JOIN regions r ON r.id=j.region_id
+            WHERE j.id=?
+        """, (job_id,)).fetchone()
+        if not job:
+            return jsonify({'ok': False, 'error': 'Job not found'}), 404
+        tmpl = conn.execute(
+            "SELECT * FROM email_templates WHERE id=?", (tmpl_id,)).fetchone()
+        if not tmpl:
+            return jsonify({'ok': False, 'error': 'Template not found'}), 404
+
+        orig = conn.execute("""
+            SELECT subject FROM email_imports
+            WHERE job_id=? AND status='ok'
+            ORDER BY imported_at ASC LIMIT 1
+        """, (job_id,)).fetchone()
+
+    original_subject = orig['subject'] if orig else ''
+    def _thread_subject(s):
+        if not s: return 'Re: Your booking with The Flying Bike'
+        return s if s.lower().startswith('re:') else f'Re: {s}'
+
+    subject_val = _substitute(tmpl['subject'], job)
+    body_html   = _substitute(tmpl['body'], job, is_html=True)
+
+    return jsonify({
+        'ok':      True,
+        'subject': subject_val,
+        'body':    body_html,
+        'thread_subject': _thread_subject(original_subject),
+        'has_invoice': '{{invoice_pdf}}' in tmpl['body'] or
+                       '[Invoice PDF attached]' in body_html,
+    })
+
+
+@email_replies_bp.route('/jobs/<int:job_id>/compose/send', methods=['POST'])
+def compose_send(job_id):
+    """Send a reply from the in-page reply modal. Accepts JSON."""
+    from flask import jsonify as _j
+    data     = request.get_json() or {}
+    to_addr  = (data.get('to_address') or '').strip()
+    subject  = (data.get('subject') or '').strip()
+    body     = (data.get('body') or '').strip()
+    tmpl_id  = data.get('template_id') or None
+
+    if not to_addr or not subject or not body:
+        return _j({'ok': False, 'error': 'To, Subject and Body are all required.'}), 400
+
+    with get_db() as conn:
+        job = conn.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
+        if not job:
+            return _j({'ok': False, 'error': 'Job not found'}), 404
+        in_reply_to, references = _get_thread_refs(conn, job_id)
+
+    has_invoice = '[Invoice PDF attached]' in body
+    body_html_clean = body.replace('[Invoice PDF attached]', '').strip()
+    from email_sender import _html_to_plain_fallback
+    body_text = _html_to_plain_fallback(body_html_clean)
+
+    try:
+        if has_invoice:
+            from invoice_pdf import generate_invoice_pdf
+            with get_db() as _c:
+                _jp = _c.execute(
+                    "SELECT * FROM job_parts WHERE job_id=? ORDER BY id",
+                    (job_id,)).fetchall()
+            _buf = generate_invoice_pdf(
+                job, _jp, bool(job['tax_inclusive']),
+                job['subtotal'] or 0.0, job['gst'] or 0.0, job['total'] or 0.0)
+            from email_sender import send_reply_with_attachment
+            msg_id = send_reply_with_attachment(
+                to_address=to_addr, subject=subject,
+                body_text=body_text, body_html=body_html_clean,
+                attachment_bytes=_buf.read(),
+                attachment_filename=f"INV-{job['reference'].lower()}.pdf",
+                in_reply_to=in_reply_to, references=references)
+        else:
+            from email_sender import send_reply
+            msg_id = send_reply(
+                to_address=to_addr, subject=subject,
+                body_text=body_text, body_html=body_html_clean,
+                in_reply_to=in_reply_to, references=references)
+    except Exception as e:
+        return _j({'ok': False, 'error': f'Send failed: {e}'}), 500
+
+    with get_db() as conn:
+        conn.execute("""
+            INSERT INTO email_replies
+                (job_id, message_id, in_reply_to, subject,
+                 to_address, body, sent_by, template_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (job_id, msg_id, in_reply_to, subject,
+              to_addr, body_text, session.get('user_id'),
+              int(tmpl_id) if tmpl_id else None))
+        conn.commit()
+
+    return _j({'ok': True})
+
+
 @email_replies_bp.route('/email-templates/preview-fields')
 def preview_fields():
     """Return the complete list of available template substitution fields."""

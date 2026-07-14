@@ -1182,12 +1182,12 @@ def email_imports():
         # Sent = count of email_replies for the job linked to this subject.
         imports = conn.execute(f"""
             SELECT
-                ei.id,
-                ei.subject,
-                ei.sender,
+                MIN(ei.id) as id,
+                MIN(ei.subject) as subject,
+                MIN(ei.sender) as sender,
                 ei.job_id,
-                ei.status,
-                ei.body,
+                MIN(ei.status) as status,
+                MIN(ei.body) as body,
                 j.reference,
                 MIN(coalesce(ei.received_at, ei.imported_at)) as first_received,
                 MAX(coalesce(ei.received_at, ei.imported_at)) as last_received,
@@ -1196,11 +1196,13 @@ def email_imports():
                 COALESCE((
                     SELECT COUNT(*) FROM email_replies er
                     WHERE er.job_id = ei.job_id
-                ), 0) as sent_count
+                ), 0) as sent_count,
+                j.customer_email,
+                j.customer_name
             FROM email_imports ei
             LEFT JOIN jobs j ON j.id = ei.job_id
             {where_sql}
-            GROUP BY LOWER(TRIM(ei.subject))
+            GROUP BY ei.job_id
             ORDER BY last_received DESC
             LIMIT 500
         """, params).fetchall()
@@ -1258,10 +1260,23 @@ def mark_email_unread(import_id):
 
 @jobs_bp.route('/jobs/email-imports/mark-subject-read', methods=['POST'])
 def mark_subject_read():
-    """Mark all email_imports with the given subject as read."""
-    subject = request.json.get('subject', '').strip() if request.is_json else request.form.get('subject', '').strip()
+    """Mark all email_imports for a job as read. Accepts JSON {job_id} (primary)
+    or {subject} (legacy fallback)."""
+    data   = request.get_json() if request.is_json else {}
+    job_id = (data or {}).get('job_id') or request.form.get('job_id')
+
+    if job_id:
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE email_imports SET read=0 WHERE job_id=?",
+                (int(job_id),))
+            conn.commit()
+        return jsonify({'ok': True})
+
+    # Legacy fallback — subject-based matching
+    subject = ((data or {}).get('subject') or request.form.get('subject') or '').strip()
     if not subject:
-        return jsonify({'ok': False, 'error': 'No subject'}), 400
+        return jsonify({'ok': False, 'error': 'No job_id or subject'}), 400
     with get_db() as conn:
         conn.execute(
             "UPDATE email_imports SET read=0 WHERE LOWER(TRIM(subject))=LOWER(TRIM(?))",
@@ -1572,6 +1587,34 @@ def email_thread_job(job_id):
             ORDER BY ts ASC
         """, (job['reference'], job_id, job['reference'], job_id)).fetchall()
     return jsonify([dict(r) for r in rows])
+
+
+@jobs_bp.route('/email/thread/<int:job_id>/view')
+def email_thread_job_view(job_id):
+    """Standalone HTML page — full email thread for a job, readable in a
+    new tab (e.g. opened from a Google Calendar event link). No app
+    chrome needed — just the thread bubbles."""
+    with get_db() as conn:
+        job = conn.execute(
+            "SELECT id, reference, customer_name FROM jobs WHERE id=?",
+            (job_id,)).fetchone()
+        if not job:
+            return "Job not found", 404
+        rows = conn.execute("""
+            SELECT 'inbound' as direction, imported_at as ts,
+                   sender as from_addr, subject, body, status,
+                   id as email_id, read
+            FROM email_imports WHERE job_id=?
+            UNION ALL
+            SELECT 'outbound' as direction, sent_at as ts,
+                   to_address as from_addr, subject, body, 'sent' as status,
+                   id as email_id, 0 as read
+            FROM email_replies WHERE job_id=?
+            ORDER BY ts ASC
+        """, (job_id, job_id)).fetchall()
+    return render_template('jobs/email_thread_view.html',
+                           job=dict(job),
+                           messages=[dict(r) for r in rows])
 
 
 @jobs_bp.route('/email/thread/customer/<int:customer_id>')
