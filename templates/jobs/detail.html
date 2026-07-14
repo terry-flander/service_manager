@@ -63,7 +63,15 @@
 function toggleDetailMenu(e) {
   e.stopPropagation();
   var m = document.getElementById('detail-menu');
-  m.style.display = m.style.display === 'none' ? 'block' : 'none';
+  if (m.style.display === 'none') {
+    if (window._jobIsDirty) {
+      silentSave(function() { m.style.display = 'block'; });
+    } else {
+      m.style.display = 'block';
+    }
+  } else {
+    m.style.display = 'none';
+  }
 }
 function closeDetailMenu() {
   document.getElementById('detail-menu').style.display = 'none';
@@ -73,6 +81,21 @@ document.addEventListener('click', function(e) {
     closeDetailMenu();
   }
 });
+
+function silentSave(callback) {
+  var form = document.getElementById('save-form');
+  if (!form) { if (callback) callback(); return; }
+  var data = new FormData(form);
+  fetch(form.action || window.location.pathname, {
+    method: 'POST',
+    body: data,
+  }).then(function() {
+    window._jobIsDirty = false;
+    if (callback) callback();
+  }).catch(function() {
+    if (callback) callback();
+  });
+}
 </script>
 {% endblock %}
 
@@ -149,12 +172,9 @@ document.addEventListener('click', function(e) {
           <i class="bi bi-download"></i> Xero CSV
         </a>
         <div style="border-top:1px solid var(--sd-border); margin:0.25rem 0;"></div>
-        <a href="{{ url_for('email_replies.compose_reply', job_id=job['id']) }}" class="detail-menu-item" onclick="closeDetailMenu()">
-          <i class="bi bi-reply"></i> Reply
-        </a>
         <button type="button" class="detail-menu-item"
-                onclick="closeDetailMenu(); openEmailThread('{{ url_for('jobs.email_thread_job', job_id=job['id']) }}', '{{ job['reference'] }} — Conversation')">
-          <i class="bi bi-chat-left-text"></i> Email Thread
+                onclick="closeDetailMenu(); openReplyModal({{ job['id'] }}, JOB_CUST_EMAIL, JOB_CUST_NAME)">
+          <i class="bi bi-reply"></i> Reply
           {% if unread_emails %}
           <span style="margin-left:auto; background:var(--sd-accent); color:#fff;
                        font-size:0.65rem; font-weight:700; border-radius:10px;
@@ -362,6 +382,12 @@ document.addEventListener('click', function(e) {
                    style="padding:0.35rem 0.6rem; font-size:0.75rem; flex-shrink:0;"
                    title="Open in Google Maps">
                   <i class="bi bi-map"></i>
+                </a>
+                <a href="https://www.google.com/maps/dir/?api=1&destination={{ (job['address'] ~ (', ' ~ job['suburb'] if job['suburb'] else ''))|urlencode }}"
+                   target="_blank" rel="noopener" class="btn-ghost"
+                   style="padding:0.35rem 0.6rem; font-size:0.75rem; flex-shrink:0;"
+                   title="Get directions from current location">
+                  <i class="bi bi-signpost-2"></i>
                 </a>
                 {% endif %}
               </div>
@@ -624,7 +650,7 @@ document.addEventListener('click', function(e) {
                      data-jp="{{ jp['id'] }}"
                      data-field="unit_cost"
                      value="{{ '%.2f'|format(jp['unit_cost']) }}"
-                     min="0" step="0.01"
+                     step="0.01"
                      style="width:5.5rem; text-align:right;">
             </td>
             <td class="mono" style="text-align:right; font-weight:600;"
@@ -767,7 +793,7 @@ document.addEventListener('click', function(e) {
         <div class="col-6 col-sm-4">
           <label class="sd-label">Unit Cost ($)</label>
           <input type="number" name="unit_cost" id="part-cost"
-                 class="sd-input" value="0.00" step="0.01" min="0">
+                 class="sd-input" value="0.00" step="0.01">
         </div>
       </div>
       <div style="display:flex; gap:0.6rem; justify-content:flex-end;">
@@ -787,6 +813,10 @@ document.addEventListener('click', function(e) {
 
 
 {% block scripts %}
+<script>
+var JOB_CUST_EMAIL = {{ (job['customer_email'] or '')|tojson }};
+var JOB_CUST_NAME  = {{ (job['customer_name']  or '')|tojson }};
+</script>
 <!-- ── Change Job Type Modal ──────────────────────────────────────────────── -->
 <div id="type-modal-overlay"
      style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55);
@@ -872,6 +902,7 @@ function bookingModeChanged(mode) {
 
   function setDirty(val) {
     isDirty = val;
+    window._jobIsDirty = val;  // expose globally for silentSave
     const btnSave = document.getElementById('btn-save');
     const btnClose = document.getElementById('btn-cancel');
     if (btnSave) {
@@ -1055,6 +1086,30 @@ function bookingModeChanged(mode) {
   };
 })();
 
+
+// ── Auto-check "Add to Calendar" when scheduled date/time is first set ────────
+(function() {
+  var calCb = document.querySelector('input[name="add_to_calendar"]');
+  if (!calCb) return;
+
+  function autoCheckCalendar() {
+    // Only auto-check if currently unchecked — don't override explicit user choices
+    if (!calCb.checked) {
+      calCb.checked = true;
+      // Trigger change so dirty tracking picks it up
+      calCb.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
+
+  // Watch all scheduled_date and scheduled_time inputs
+  document.querySelectorAll(
+    'input[name="scheduled_date"], select[name="scheduled_date"], select[name="scheduled_time"]'
+  ).forEach(function(el) {
+    el.addEventListener('change', function() {
+      if (this.value) autoCheckCalendar();
+    });
+  });
+})();
 
 // ── Auto-set end time to start + 1 hour when start changes ──────────────────
 (function () {
@@ -1290,6 +1345,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // ── Add Part modal open/close ─────────────────────────────────────────────────
 function openAddPartModal() {
+  if (window._jobIsDirty) {
+    silentSave(_doOpenAddPartModal);
+  } else {
+    _doOpenAddPartModal();
+  }
+}
+function _doOpenAddPartModal() {
   const overlay = document.getElementById('add-part-overlay');
   overlay.style.display = 'flex';
   document.body.style.overflow = 'hidden';

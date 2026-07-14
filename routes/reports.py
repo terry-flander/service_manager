@@ -56,6 +56,22 @@ def _get_report_data(date_from, date_to, job_types, show_cash=False, sort_by='pa
     order_clause = 'j.scheduled_date ASC' if sort_by == 'scheduled' else \
                    'coalesce(j.paid_date, j.scheduled_date) ASC'
 
+    # Date field — use saved query's date_field preference if set,
+    # otherwise default to scheduled_date (historical behaviour).
+    date_field = (saved_query or {}).get('date_field', 'scheduled') if saved_query else 'scheduled'
+    if date_field == 'paid':
+        date_where = """(
+                (j.paid_date IS NOT NULL AND j.paid_date BETWEEN ? AND ?)
+                OR
+                (j.paid_date IS NULL AND j.scheduled_date BETWEEN ? AND ?)
+            )"""
+    else:
+        date_where = """(
+                (j.scheduled_date IS NOT NULL AND j.scheduled_date BETWEEN ? AND ?)
+                OR
+                (j.scheduled_date IS NULL AND j.paid_date BETWEEN ? AND ?)
+            )"""
+
     # Status: saved query's own selection wins if it has one, otherwise
     # default to invoiced/paid (financial report default).
     extra_clause = ''
@@ -93,17 +109,13 @@ def _get_report_data(date_from, date_to, job_types, show_cash=False, sort_by='pa
                    j.subtotal, j.gst, j.total,
                    coalesce(j.paid_date, j.scheduled_date) as report_date
             FROM jobs j
-            WHERE (
-                (j.scheduled_date IS NOT NULL AND j.scheduled_date BETWEEN ? AND ?)
-                OR
-                (j.scheduled_date IS NULL AND j.paid_date BETWEEN ? AND ?)
-            )
+            WHERE {date_where}
               AND j.job_type IN ({jt_ph})
               {extra_clause}
               {cash_clause}
             ORDER BY {order_clause}, j.id ASC
-        """.format(order_clause=order_clause, jt_ph=jt_ph, extra_clause=extra_clause,
-                   cash_clause=cash_clause), params).fetchall()
+        """.format(date_where=date_where, order_clause=order_clause, jt_ph=jt_ph,
+                   extra_clause=extra_clause, cash_clause=cash_clause), params).fetchall()
 
         # subtotal/gst/total are now stored directly on the jobs row —
         # no more per-row parts fetch + calc_totals() call needed here.

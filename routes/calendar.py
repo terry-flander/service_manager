@@ -89,6 +89,7 @@ def events():
 
         jobs = conn.execute("""
             SELECT j.id, j.reference, j.customer_name, j.customer_phone,
+                   j.customer_email,
                    j.scheduled_date, j.scheduled_time, j.end_time, j.end_date,
                    j.job_type, j.status, j.address, j.suburb, r.name as region_name
             FROM jobs j JOIN regions r ON j.region_id = r.id
@@ -161,6 +162,8 @@ def events():
                         'address': job['address'] or '',
                         'suburb':  job['suburb']  or '',
                         'phone':   job['customer_phone'] or '',
+                        'customer_name':  job['customer_name'] or '',
+                        'customer_email': job['customer_email'] or '',
                     }
                 })
         else:
@@ -189,6 +192,8 @@ def events():
                     'suburb':  job['suburb']  or '',
                     'phone':   job['customer_phone'] or '',
                     'time':    job['scheduled_time'] or '',
+                    'customer_name':  job['customer_name'] or '',
+                    'customer_email': job['customer_email'] or '',
                 }
             })
 

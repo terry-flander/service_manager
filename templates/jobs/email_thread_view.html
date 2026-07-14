@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Email Thread — {{ job['reference'] }} {{ job['customer_name'] }}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0f172a;
+      color: #e2e8f0;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      padding: 1.5rem 1rem 3rem;
+      min-height: 100vh;
+    }
+
+    h1 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #e2e8f0;
+      margin-bottom: 0.25rem;
+    }
+    .sub {
+      font-size: 0.78rem;
+      color: #94a3b8;
+      margin-bottom: 1.5rem;
+    }
+
+    .thread {
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    .bubble-wrap {
+      display: flex;
+      margin-bottom: 0.85rem;
+    }
+    .bubble-wrap.out { justify-content: flex-end; }
+    .bubble-wrap.in  { justify-content: flex-start; }
+
+    .bubble {
+      max-width: 82%;
+      padding: 0.65rem 0.9rem;
+      border-radius: 12px;
+      border: 1px solid #334155;
+      background: #1e293b;
+    }
+    .bubble-wrap.out .bubble {
+      background: rgba(249,115,22,0.12);
+      border-color: rgba(249,115,22,0.25);
+      border-radius: 12px 12px 3px 12px;
+    }
+    .bubble-wrap.in .bubble {
+      border-radius: 12px 12px 12px 3px;
+    }
+    .bubble-wrap.in.unread .bubble {
+      background: rgba(249,115,22,0.07);
+      border-color: rgba(249,115,22,0.4);
+    }
+
+    .meta {
+      font-size: 0.7rem;
+      color: #94a3b8;
+      display: flex;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.3rem;
+      flex-wrap: wrap;
+    }
+    .subject {
+      font-size: 0.8rem;
+      font-weight: 600;
+      margin-bottom: 0.3rem;
+    }
+    .body {
+      font-size: 0.82rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #e2e8f0;
+      line-height: 1.5;
+    }
+    .unread-dot {
+      display: inline-block;
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #f97316;
+      margin-right: 0.3rem;
+      vertical-align: middle;
+    }
+
+    .empty {
+      text-align: center;
+      color: #94a3b8;
+      padding: 3rem 0;
+      font-size: 0.9rem;
+    }
+  </style>
+</head>
+<body>
+<div class="thread">
+  <h1>{{ job['reference'] }} — {{ job['customer_name'] }}</h1>
+  <div class="sub">Email conversation · {{ messages|length }} message{{ 's' if messages|length != 1 }}</div>
+
+  {% if messages %}
+    {% for m in messages %}
+    {% set is_out = m['direction'] == 'outbound' %}
+    {% set is_unread = not is_out and (m['read'] == 1 or m['read'] is none) %}
+    <div class="bubble-wrap {{ 'out' if is_out else 'in' }} {{ 'unread' if is_unread }}">
+      <div class="bubble">
+        <div class="meta">
+          <span>
+            {% if is_unread %}<span class="unread-dot"></span>{% endif %}
+            {{ m['from_addr'] or '' }}
+          </span>
+          <span>{{ m['ts']|fmt_datetime if m['ts'] else '—' }}</span>
+        </div>
+        <div class="subject">{{ m['subject'] or '' }}</div>
+        <div class="body">{{ m['body'] or '' }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">No emails on this thread yet.</div>
+  {% endif %}
+</div>
+</body>
+</html>

@@ -800,40 +800,296 @@ document.getElementById('email-modal').addEventListener('close', function() {
 })();
 </script>
 <!-- Email thread modal -->
-<dialog id="thread-modal"
-        style="background:var(--sd-surface); border:1px solid var(--sd-border);
-               border-radius:10px; padding:0; width:min(600px,95vw);
-               max-height:85vh; color:var(--sd-text); overflow:hidden;">
+<div id="thread-modal"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65);
+            z-index:2700; align-items:center; justify-content:center; padding:1rem;"
+     onclick="if(event.target===this) closeThreadModal()">
+  <div style="background:var(--sd-surface); border:1px solid var(--sd-border);
+              border-radius:10px; padding:0; width:min(600px,95vw);
+              max-height:85vh; color:var(--sd-text); overflow:hidden;
+              display:flex; flex-direction:column;">
+    <div style="display:flex; align-items:center; justify-content:space-between;
+                padding:0.875rem 1.25rem; border-bottom:1px solid var(--sd-border);
+                background:var(--sd-surface2); flex-shrink:0;">
+      <span style="font-weight:600; font-size:0.9rem;">
+        <i class="bi bi-chat-left-text" style="margin-right:0.4rem; color:var(--sd-muted);"></i>
+        <span id="thread-modal-title">Email Conversation</span>
+      </span>
+      <button onclick="closeThreadModal()"
+              style="background:none; border:none; cursor:pointer; color:var(--sd-muted);
+                     font-size:1.1rem; padding:0.2rem 0.4rem; line-height:1;">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    <div id="thread-modal-body"
+         style="overflow-y:auto; flex:1; padding:1rem;">
+      <div id="thread-modal-loading"
+           style="text-align:center; color:var(--sd-muted); padding:2rem;">
+        Loading…
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Reply Modal ────────────────────────────────────────────────────────── -->
+<div id="reply-modal"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65);
+            z-index:2800; align-items:center; justify-content:center; padding:1rem;">
+  <div style="background:var(--sd-surface); border:1px solid var(--sd-border);
+              border-radius:10px; padding:0; width:min(640px,97vw);
+              max-height:92vh; color:var(--sd-text); overflow:hidden;
+              display:flex; flex-direction:column;">
+  <!-- Header -->
   <div style="display:flex; align-items:center; justify-content:space-between;
               padding:0.875rem 1.25rem; border-bottom:1px solid var(--sd-border);
-              background:var(--sd-surface2);">
+              background:var(--sd-surface2); flex-shrink:0;">
     <span style="font-weight:600; font-size:0.9rem;">
-      <i class="bi bi-chat-left-text" style="margin-right:0.4rem; color:var(--sd-muted);"></i>
-      <span id="thread-modal-title">Email Conversation</span>
+      <i class="bi bi-reply" style="margin-right:0.4rem; color:var(--sd-muted);"></i>
+      <span id="reply-modal-title">Reply</span>
     </span>
-    <button onclick="document.getElementById('thread-modal').close()"
+    <button onclick="closeReplyModal()"
             style="background:none; border:none; cursor:pointer; color:var(--sd-muted);
                    font-size:1.1rem; padding:0.2rem 0.4rem; line-height:1;">
       <i class="bi bi-x-lg"></i>
     </button>
   </div>
-  <div id="thread-modal-body"
-       style="overflow-y:auto; max-height:calc(85vh - 56px); padding:1rem;">
-    <div id="thread-modal-loading"
-         style="text-align:center; color:var(--sd-muted); padding:2rem;">
-      Loading…
+
+  <!-- Thread view — scrollable, read-only -->
+  <div id="reply-modal-thread"
+       style="overflow-y:auto; flex:0 0 40%; min-height:120px; max-height:42vh;
+              padding:0.875rem 1rem; border-bottom:1px solid var(--sd-border);
+              background:var(--sd-navy);">
+    <div style="text-align:center; color:var(--sd-muted); padding:1rem;">Loading…</div>
+  </div>
+
+  <!-- Compose panel -->
+  <div style="padding:0.875rem 1rem; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:0.6rem;">
+
+    <!-- Error banner -->
+    <div id="reply-modal-error"
+         style="display:none; background:rgba(248,113,113,0.1); color:#f87171;
+                border:1px solid rgba(248,113,113,0.3); border-radius:6px;
+                padding:0.5rem 0.75rem; font-size:0.82rem;"></div>
+
+    <!-- Template selector -->
+    <div style="display:flex; align-items:center; gap:0.5rem;">
+      <label style="font-size:0.78rem; color:var(--sd-muted); white-space:nowrap;">Template</label>
+      <select id="reply-modal-template" class="sd-input" style="flex:1;"
+              onchange="replyModalSelectTemplate(this.value)">
+        <option value="">— Choose a template —</option>
+      </select>
+    </div>
+
+    <!-- Rich text editor (hidden textarea keeps HTML in sync) -->
+    <div style="flex:1;">
+      <textarea id="reply-modal-body" name="body"
+                style="display:none;"></textarea>
+    </div>
+
+    <!-- Footer: send info + buttons -->
+    <div style="display:flex; align-items:center; gap:0.5rem; flex-shrink:0; padding-top:0.25rem;
+                border-top:1px solid var(--sd-border); margin-top:0.25rem;">
+      <span id="reply-modal-to" style="font-size:0.75rem; color:var(--sd-muted); flex:1;
+            overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></span>
+      <button type="button" class="btn-ghost" onclick="closeReplyModal()">Close</button>
+      <button type="button" class="btn-accent" id="reply-modal-send-btn"
+              onclick="replyModalSend()">
+        <i class="bi bi-send"></i> Send
+      </button>
     </div>
   </div>
-</dialog>
+  </div>
+</div>
 
 <script>
+// ── Shared utilities ──────────────────────────────────────────────────────────
+function utcToLocal(utcStr) {
+  // Timestamps stored in DB are UTC naive strings (YYYY-MM-DD HH:MM:SS).
+  // Append 'Z' so the browser parses as UTC and converts to local time.
+  if (!utcStr) return '—';
+  try {
+    var s = utcStr.trim().replace(' ', 'T') + 'Z';
+    var d = new Date(s);
+    if (isNaN(d.getTime())) return utcStr.slice(0, 16);
+    var dd = String(d.getDate()).padStart(2,'0');
+    var mm = String(d.getMonth()+1).padStart(2,'0');
+    var yy = d.getFullYear();
+    var hh = String(d.getHours()).padStart(2,'0');
+    var mi = String(d.getMinutes()).padStart(2,'0');
+    return dd+'/'+mm+'/'+yy+' '+hh+':'+mi;
+  } catch(e) { return utcStr.slice(0, 16); }
+}
+
+// ── Reply Modal ───────────────────────────────────────────────────────────────
+var _replyJobId   = null;
+var _replyToAddr  = null;
+var _replySubject = null;
+var _replyRte     = null;
+
+function openReplyModal(jobId, toAddr, customerName) {
+  _replyJobId  = jobId;
+  _replyToAddr = toAddr;
+  var modal = document.getElementById('reply-modal');
+  var err   = document.getElementById('reply-modal-error');
+  err.style.display = 'none';
+  document.getElementById('reply-modal-title').textContent =
+    'Reply — ' + (customerName || '');
+  document.getElementById('reply-modal-to').textContent =
+    'To: ' + (toAddr || '(no email on file)');
+  if (!_replyRte) {
+    _replyRte = initRichTextEditor('reply-modal-body', { minHeight: '160px' });
+  }
+  if (_replyRte) _replyRte.setContent('');
+  document.getElementById('reply-modal-template').value = '';
+  modal.style.display = 'flex';
+  _replyLoadThread();
+  _replyLoadTemplates();
+}
+
+function closeReplyModal() {
+  document.getElementById('reply-modal').style.display = 'none';
+}
+
+function _replyLoadThread() {
+  var container = document.getElementById('reply-modal-thread');
+  container.innerHTML =
+    '<div style="text-align:center; color:var(--sd-muted); padding:1rem;">Loading…</div>';
+  fetch('/email/thread/' + _replyJobId)
+    .then(function(r) { return r.json(); })
+    .then(function(msgs) {
+      if (!msgs || !msgs.length) {
+        container.innerHTML =
+          '<div style="text-align:center; color:var(--sd-muted); padding:1rem;">No messages yet.</div>';
+        return;
+      }
+      var html = '';
+      msgs.forEach(function(m) {
+        var isOut = m.direction === 'outbound';
+        var ts    = utcToLocal(m.ts);
+        html += '<div style="display:flex; justify-content:' +
+          (isOut ? 'flex-end' : 'flex-start') + '; margin-bottom:0.65rem;">' +
+          '<div style="max-width:85%; background:' +
+            (isOut ? 'rgba(249,115,22,0.12)' : 'var(--sd-slate)') +
+            '; border:1px solid ' +
+            (isOut ? 'rgba(249,115,22,0.25)' : 'var(--sd-border)') +
+            '; border-radius:' + (isOut ? '10px 10px 3px 10px' : '10px 10px 10px 3px') +
+            '; padding:0.5rem 0.75rem;">' +
+          '<div style="font-size:0.68rem; color:var(--sd-muted); margin-bottom:0.2rem;' +
+               'display:flex; gap:0.5rem; flex-wrap:wrap;">' +
+            '<span>' + escHtmlThread(m.from_addr || '') + '</span>' +
+            '<span style="margin-left:auto;">' + escHtmlThread(ts) + '</span>' +
+          '</div>' +
+          '<div style="font-size:0.75rem; font-weight:600; margin-bottom:0.2rem;">' +
+            escHtmlThread(m.subject || '') + '</div>' +
+          '<div style="font-size:0.78rem; white-space:pre-wrap; word-break:break-word;">' +
+            escHtmlThread(stripEmailQuotes(m.body || '').slice(0, 600)) +
+          '</div></div></div>';
+      });
+      container.innerHTML = html;
+      container.scrollTop = container.scrollHeight;
+    })
+    .catch(function() {
+      container.innerHTML = '<div style="color:#f87171; padding:1rem;">Error loading thread.</div>';
+    });
+}
+
+function _replyLoadTemplates() {
+  var sel = document.getElementById('reply-modal-template');
+  fetch('/jobs/' + _replyJobId + '/compose/templates')
+    .then(function(r) { return r.json(); })
+    .then(function(list) {
+      sel.innerHTML = '<option value="">— Choose a template —</option>';
+      list.forEach(function(t) {
+        var o = document.createElement('option');
+        o.value = t.id;
+        o.textContent = t.name;
+        sel.appendChild(o);
+      });
+    });
+}
+
+function replyModalSelectTemplate(tmplId) {
+  if (!tmplId) return;
+  var err = document.getElementById('reply-modal-error');
+  err.style.display = 'none';
+  fetch('/jobs/' + _replyJobId + '/compose/template/' + tmplId)
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (!res.ok) {
+        err.textContent = res.error || 'Could not load template.';
+        err.style.display = 'block';
+        return;
+      }
+      _replySubject = res.thread_subject;
+      if (_replyRte) _replyRte.setContent(res.body);
+      else document.getElementById('reply-modal-body').value = res.body;
+    })
+    .catch(function() {
+      err.textContent = 'Error loading template.';
+      err.style.display = 'block';
+    });
+}
+
+function replyModalSend() {
+  var err     = document.getElementById('reply-modal-error');
+  var sendBtn = document.getElementById('reply-modal-send-btn');
+  err.style.display = 'none';
+  var body = document.getElementById('reply-modal-body').value;
+  if (!body.trim()) {
+    err.textContent = 'Please select a template or write a message.';
+    err.style.display = 'block';
+    return;
+  }
+  if (!_replyToAddr) {
+    err.textContent = 'No email address on file for this customer.';
+    err.style.display = 'block';
+    return;
+  }
+  var tmplId = document.getElementById('reply-modal-template').value || null;
+  sendBtn.disabled = true;
+  sendBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Sending…';
+  fetch('/jobs/' + _replyJobId + '/compose/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      to_address:  _replyToAddr,
+      subject:     _replySubject || 'Re: Your booking',
+      body:        body,
+      template_id: tmplId,
+    }),
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      sendBtn.disabled = false;
+      sendBtn.innerHTML = '<i class="bi bi-send"></i> Send';
+      if (!res.ok) {
+        err.textContent = res.error || 'Send failed.';
+        err.style.display = 'block';
+        return;
+      }
+      // Clear editor, reload thread to show the sent message
+      if (_replyRte) _replyRte.setContent('');
+      document.getElementById('reply-modal-template').innerHTML =
+        '<option value="">— Choose a template —</option>';
+      _replySubject = null;
+      _replyLoadThread();
+    })
+    .catch(function() {
+      sendBtn.disabled = false;
+      sendBtn.innerHTML = '<i class="bi bi-send"></i> Send';
+      err.textContent = 'Network error — please try again.';
+      err.style.display = 'block';
+    });
+}
+
+// ── Email Thread modal ────────────────────────────────────────────────────────
 function openEmailThread(url, title) {
   var modal = document.getElementById('thread-modal');
   var body  = document.getElementById('thread-modal-body');
   var ttl   = document.getElementById('thread-modal-title');
   if (ttl) ttl.textContent = title || 'Email Conversation';
   body.innerHTML = '<div style="text-align:center; color:var(--sd-muted); padding:2rem;">Loading…</div>';
-  modal.showModal();
+  modal.style.display = 'flex';
 
   fetch(url)
     .then(function(r) { return r.json(); })
@@ -846,7 +1102,7 @@ function openEmailThread(url, title) {
       var lastRef = null;
       msgs.forEach(function(m) {
         var isOut  = m.direction === 'outbound';
-        var ts     = (m.ts || '').slice(0, 16).replace('T', ' ');
+        var ts     = utcToLocal(m.ts);
         // Job reference divider (for customer multi-job view)
         if (m.job_ref && m.job_ref !== lastRef) {
           lastRef = m.job_ref;
@@ -886,6 +1142,10 @@ function openEmailThread(url, title) {
     .catch(function() {
       body.innerHTML = '<div style="color:#f87171; padding:1rem;">Error loading conversation.</div>';
     });
+}
+
+function closeThreadModal() {
+  document.getElementById('thread-modal').style.display = 'none';
 }
 
 function escHtmlThread(s) {
