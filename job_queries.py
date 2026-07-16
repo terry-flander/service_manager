@@ -414,6 +414,7 @@ COLUMN_CATALOG = {
     'gross':      {'label': 'Gross',         'align': 'right'},
     'payment':    {'label': 'Payment',       'align': 'left'},
     'amount':     {'label': 'Amount Paid',   'align': 'right'},
+    'reconciled': {'label': 'Reconciled',    'align': 'center'},
     'status':     {'label': 'Status',        'align': 'left'},
 }
 

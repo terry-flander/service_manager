@@ -14,6 +14,9 @@
   <link rel="icon" type="image/svg+xml" href="/static/img/favicon.svg" />
   <link rel="shortcut icon" href="/static/img/favicon.ico" />
   <link rel="apple-touch-icon" sizes="180x180" href="/static/img/apple-touch-icon.png" />
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="apple-mobile-web-app-title" content="ServiceDesk">
+  <meta name="application-name" content="ServiceDesk">
   <style>
     /* ── Dark mode (default) ── */
     :root, [data-theme="dark"] {
@@ -1428,7 +1431,7 @@ function openQueryBuilder(queryId) {
       presetSel.value = presetValue || 'all_time';
       toggleCustomDateFields();
     }
-    setDatePreset(query ? query.date_preset : 'all_time');
+    setDatePreset(query && query.date_mode === 'custom' ? 'custom' : (query ? query.date_preset : 'all_time'));
 
     overlay.style.display = 'flex';
   }

@@ -145,6 +145,17 @@
             <span style="color:#34d399;">${{ '%.2f'|format(job['amount_paid']) }}</span>
           {% else %}<span style="color:var(--sd-muted);">—</span>{% endif %}
         </td>
+        {% elif col_key == 'reconciled' %}
+        {% set pt = (job['payment_type'] or '')|lower %}
+        {% set is_cash_transfer = pt in ('cash', 'transfer', 'bank transfer') %}
+        {% set is_reconciled = is_cash_transfer or job['reconciled_eftpos'] %}
+        <td class="{{ hide_classes }}" style="text-align:center;">
+          {% if is_reconciled %}
+          <i class="bi bi-check-circle-fill" style="color:#34d399; font-size:1rem;"></i>
+          {% elif job['status'] == 'paid' %}
+          <i class="bi bi-circle" style="color:var(--sd-muted); font-size:0.9rem;"></i>
+          {% endif %}
+        </td>
         {% elif col_key == 'status' %}
         <td class="{{ hide_classes }}">
           <span class="badge-status status-{{ job['status'] }}">
