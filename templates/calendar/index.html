@@ -127,8 +127,13 @@
        style="color:var(--sd-accent); text-decoration:none; word-break:break-word;"></a>
     <a id="popup-dir-link" href="#" target="_blank" rel="noopener"
        style="color:var(--sd-muted); font-size:0.75rem; margin-left:0.4rem; white-space:nowrap;"
-       title="Get directions from current location">
+       title="Google Maps directions">
       <i class="bi bi-signpost-2"></i>
+    </a>
+    <a id="popup-apple-dir-link" href="#" target="_blank" rel="noopener"
+       style="color:var(--sd-muted); font-size:0.75rem; margin-left:0.3rem; white-space:nowrap;"
+       title="Apple Maps directions">
+      <i class="bi bi-apple"></i>
     </a>
   </div>
   <div style="margin-top:0.5rem; display:flex; gap:0.5rem; align-items:center;">
@@ -468,7 +473,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const phoneRow  = document.getElementById('popup-phone');
     const phoneLink = document.getElementById('popup-phone-link');
     if (p.phone) {
-      phoneLink.textContent = p.phone;
+      phoneLink.textContent = fmtPhone(p.phone);
       phoneLink.href        = 'tel:' + p.phone.replace(/\s/g, '');
       phoneRow.style.display = '';
     } else {
@@ -479,6 +484,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const addrRow = document.getElementById('popup-addr');
     const mapLink = document.getElementById('popup-map-link');
     const dirLink = document.getElementById('popup-dir-link');
+    const appleLink = document.getElementById('popup-apple-dir-link');
     const displayAddr = p.address || p.suburb || '';
     const fullDest    = [p.address, p.suburb].filter(Boolean).join(', ');
     const addrMissing = !p.address ||
@@ -489,9 +495,12 @@ document.addEventListener('DOMContentLoaded', function() {
       mapLink.href = 'https://maps.google.com/?q=' + encodeURIComponent(displayAddr);
       dirLink.href = 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(fullDest);
       dirLink.style.display = '';
+      appleLink.href = 'https://maps.apple.com/?daddr=' + encodeURIComponent(fullDest) + '&dirflg=d';
+      appleLink.style.display = '';
       addrRow.style.display = '';
     } else {
       dirLink.style.display = 'none';
+      appleLink.style.display = 'none';
       addrRow.style.display = 'none';
     }
 

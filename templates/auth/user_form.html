@@ -28,9 +28,10 @@
             </div>
             <div class="col-md-6">
               <label class="sd-label">Phone</label>
-              <input type="text" name="phone" class="sd-input"
-                     value="{{ user['phone'] if user else '' }}"
-                     placeholder="e.g. 0412 345 678">
+              <input type="tel" name="phone" class="sd-input phone-input"
+                     inputmode="tel" pattern="[0-9 ]{8,15}"
+                     value="{{ user['phone']|fmt_phone if user and user['phone'] else '' }}"
+                     placeholder="0412 345 678">
             </div>
             <div class="col-md-6">
               <label class="sd-label">Role</label>

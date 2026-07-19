@@ -81,9 +81,10 @@
             </div>
             <div class="col-md-6">
               <label class="sd-label">Phone</label>
-              <input type="text" name="customer_phone" id="f_phone" class="sd-input"
-                     placeholder="e.g. 0412 345 678"
-                     value="{{ prefill_customer['phone'] if prefill_customer else '' }}">
+              <input type="tel" name="customer_phone" id="f_phone" class="sd-input phone-input"
+                     inputmode="tel" pattern="[0-9 ]{8,15}"
+                     placeholder="0412 345 678"
+                     value="{{ (prefill_customer['phone'] if prefill_customer else '')|fmt_phone }}">
             </div>
             <div class="col-md-6" id="suburb-col" data-rental-hide="1">
               <label class="sd-label">Suburb</label>

@@ -766,6 +766,14 @@ def job_detail(job_id):
                 (job['customer_id'], job_id)).fetchone()
             is_repeat_customer = bool(prior)
 
+        # Customer contacts (for display in customer panel and reply modal)
+        customer_contacts = []
+        if job['customer_id']:
+            customer_contacts = conn.execute(
+                "SELECT id, name, phone, email, notes FROM customer_contacts "
+                "WHERE customer_id=? ORDER BY name",
+                (job['customer_id'],)).fetchall()
+
     return render_template('jobs/detail.html', job=job, job_parts=job_parts,
                            parts=parts, total=total, regions=regions,
                            thread_emails=thread_emails,
@@ -773,6 +781,7 @@ def job_detail(job_id):
                            region_dates_list=region_dates_list,
                            SR_PARTS=sr_parts,
                            is_repeat_customer=is_repeat_customer,
+                           customer_contacts=customer_contacts,
                            TIME_SLOTS=TIME_SLOTS, TIME_LABELS=TIME_LABELS,
                            JOB_TYPES=JOB_TYPES)
 
@@ -989,6 +998,40 @@ def delete_job(job_id):
         conn.commit()
     flash(f'Job {job["reference"]} deleted.', 'success')
     return redirect(url_for('jobs.index'))
+
+
+@jobs_bp.route('/jobs/<int:job_id>/return-url')
+@jobs_bp.route('/jobs/<int:job_id>/email-addresses')
+def job_email_addresses(job_id):
+    """Return all email addresses available for this job — the customer's
+    primary email plus any contact emails linked to that customer.
+    Used by the reply modal To: dropdown."""
+    with get_db() as conn:
+        job = conn.execute(
+            "SELECT customer_id, customer_email, customer_name FROM jobs WHERE id=?",
+            (job_id,)).fetchone()
+        if not job:
+            return jsonify({'ok': False, 'error': 'Not found'}), 404
+        addresses = []
+        if job['customer_email']:
+            addresses.append({
+                'email': job['customer_email'],
+                'label': job['customer_name'] or job['customer_email'],
+                'contact_id': None,
+            })
+        if job['customer_id']:
+            contacts = conn.execute(
+                "SELECT id, name, email FROM customer_contacts "
+                "WHERE customer_id=? AND email IS NOT NULL AND email != '' "
+                "ORDER BY name",
+                (job['customer_id'],)).fetchall()
+            for c in contacts:
+                addresses.append({
+                    'email': c['email'],
+                    'label': c['name'],
+                    'contact_id': c['id'],
+                })
+    return jsonify({'ok': True, 'addresses': addresses})
 
 
 @jobs_bp.route('/jobs/<int:job_id>/return-url')

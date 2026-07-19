@@ -86,6 +86,16 @@ def init_db():
                 created_at TEXT DEFAULT (datetime('now'))
             );
 
+            CREATE TABLE IF NOT EXISTS customer_contacts (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+                name        TEXT NOT NULL,
+                phone       TEXT,
+                email       TEXT,
+                notes       TEXT,
+                created_at  TEXT DEFAULT (datetime('now'))
+            );
+
             CREATE TABLE IF NOT EXISTS jobs (
                 id             INTEGER PRIMARY KEY AUTOINCREMENT,
                 reference      TEXT NOT NULL UNIQUE,
@@ -232,7 +242,8 @@ def init_db():
                 body        TEXT,
                 sent_at     TEXT DEFAULT (datetime('now')),
                 sent_by     INTEGER REFERENCES users(id),
-                template_id INTEGER REFERENCES email_templates(id)
+                template_id INTEGER REFERENCES email_templates(id),
+                contact_id  INTEGER REFERENCES customer_contacts(id) ON DELETE SET NULL
             );
 
             CREATE TABLE IF NOT EXISTS job_parts (

@@ -127,7 +127,7 @@
         <td class="{{ hide_classes }}" style="font-size:0.875rem;">{{ job['customer_name'] }}</td>
         {% elif col_key == 'phone' %}
         <td class="mono{{ hide_classes }}" style="font-size:0.82rem; white-space:nowrap;">
-          {{ job['customer_phone'] or '—' }}
+          {{ job['customer_phone']|fmt_phone if job['customer_phone'] else '—' }}
         </td>
         {% elif col_key == 'bike_desc' %}
         <td class="{{ hide_classes }}" style="font-size:0.82rem; color:var(--sd-muted); max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">

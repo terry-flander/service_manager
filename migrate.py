@@ -42,6 +42,19 @@ with get_db() as conn:
     except: pass
     try: conn.execute('ALTER TABLE jobs ADD COLUMN total REAL DEFAULT 0')
     except: pass
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS customer_contacts (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+            name        TEXT NOT NULL,
+            phone       TEXT,
+            email       TEXT,
+            notes       TEXT,
+            created_at  TEXT DEFAULT (datetime('now'))
+        )''')
+    except: pass
+    try: conn.execute('ALTER TABLE email_replies ADD COLUMN contact_id INTEGER REFERENCES customer_contacts(id) ON DELETE SET NULL')
+    except: pass
     try: conn.execute('ALTER TABLE job_queries ADD COLUMN column_visibility_id INTEGER REFERENCES column_visibility_sets(id)')
     except: pass
 

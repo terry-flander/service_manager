@@ -481,10 +481,11 @@ def compose_send(job_id):
     """Send a reply from the in-page reply modal. Accepts JSON."""
     from flask import jsonify as _j
     data     = request.get_json() or {}
-    to_addr  = (data.get('to_address') or '').strip()
-    subject  = (data.get('subject') or '').strip()
-    body     = (data.get('body') or '').strip()
-    tmpl_id  = data.get('template_id') or None
+    to_addr    = (data.get('to_address') or '').strip()
+    subject    = (data.get('subject') or '').strip()
+    body       = (data.get('body') or '').strip()
+    tmpl_id    = data.get('template_id') or None
+    contact_id = data.get('contact_id') or None
 
     if not to_addr or not subject or not body:
         return _j({'ok': False, 'error': 'To, Subject and Body are all required.'}), 400
@@ -530,11 +531,12 @@ def compose_send(job_id):
         conn.execute("""
             INSERT INTO email_replies
                 (job_id, message_id, in_reply_to, subject,
-                 to_address, body, sent_by, template_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 to_address, body, sent_by, template_id, contact_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (job_id, msg_id, in_reply_to, subject,
               to_addr, body_text, session.get('user_id'),
-              int(tmpl_id) if tmpl_id else None))
+              int(tmpl_id) if tmpl_id else None,
+              int(contact_id) if contact_id else None))
         conn.commit()
 
     return _j({'ok': True})

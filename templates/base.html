@@ -906,6 +906,40 @@ document.getElementById('email-modal').addEventListener('close', function() {
 
 <script>
 // ── Shared utilities ──────────────────────────────────────────────────────────
+function fmtPhone(raw) {
+  // Format digits as XXXX XXX XXX
+  var digits = (raw || '').replace(/\D/g, '');
+  if (digits.length === 10) return digits.slice(0,4) + ' ' + digits.slice(4,7) + ' ' + digits.slice(7);
+  if (digits.length === 9)  return digits.slice(0,4) + ' ' + digits.slice(4,7) + ' ' + digits.slice(7);
+  return raw || '';
+}
+
+function applyPhoneMask(el) {
+  el.addEventListener('input', function() {
+    var pos    = el.selectionStart;
+    var before = el.value.length;
+    // Strip non-digits, then reformat
+    var digits = el.value.replace(/\D/g, '').slice(0, 10);
+    var fmt    = '';
+    if (digits.length > 7)      fmt = digits.slice(0,4) + ' ' + digits.slice(4,7) + ' ' + digits.slice(7);
+    else if (digits.length > 4) fmt = digits.slice(0,4) + ' ' + digits.slice(4);
+    else                        fmt = digits;
+    el.value = fmt;
+    // Restore cursor position adjusted for inserted spaces
+    var diff = el.value.length - before;
+    el.setSelectionRange(pos + diff, pos + diff);
+  });
+  // Format on blur in case value was pasted or pre-filled
+  el.addEventListener('blur', function() {
+    el.value = fmtPhone(el.value);
+  });
+}
+
+// Apply mask to all phone inputs on page load
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('input.phone-input').forEach(applyPhoneMask);
+});
+
 function utcToLocal(utcStr) {
   // Timestamps stored in DB are UTC naive strings (YYYY-MM-DD HH:MM:SS).
   // Append 'Z' so the browser parses as UTC and converts to local time.
@@ -928,17 +962,17 @@ var _replyJobId   = null;
 var _replyToAddr  = null;
 var _replySubject = null;
 var _replyRte     = null;
+var _replyContactId = null;
 
 function openReplyModal(jobId, toAddr, customerName) {
-  _replyJobId  = jobId;
-  _replyToAddr = toAddr;
+  _replyJobId     = jobId;
+  _replyToAddr    = toAddr;
+  _replyContactId = null;
   var modal = document.getElementById('reply-modal');
   var err   = document.getElementById('reply-modal-error');
   err.style.display = 'none';
   document.getElementById('reply-modal-title').textContent =
     'Reply — ' + (customerName || '');
-  document.getElementById('reply-modal-to').textContent =
-    'To: ' + (toAddr || '(no email on file)');
   if (!_replyRte) {
     _replyRte = initRichTextEditor('reply-modal-body', { minHeight: '160px' });
   }
@@ -947,6 +981,48 @@ function openReplyModal(jobId, toAddr, customerName) {
   modal.style.display = 'flex';
   _replyLoadThread();
   _replyLoadTemplates();
+  // Fetch all available email addresses for this job
+  _replyLoadAddresses(toAddr);
+}
+
+function _replyLoadAddresses(fallbackAddr) {
+  var toSpan = document.getElementById('reply-modal-to');
+  fetch('/jobs/' + _replyJobId + '/email-addresses')
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (!res.ok || !res.addresses || res.addresses.length === 0) {
+        _replyToAddr = fallbackAddr || '';
+        toSpan.innerHTML = 'To: ' + (_replyToAddr || '(no email on file)');
+        return;
+      }
+      if (res.addresses.length === 1) {
+        _replyToAddr    = res.addresses[0].email;
+        _replyContactId = res.addresses[0].contact_id;
+        toSpan.innerHTML = 'To: <strong>' + res.addresses[0].label + '</strong> &lt;' + _replyToAddr + '&gt;';
+        return;
+      }
+      // Multiple addresses — show a select
+      var sel = '<select id="reply-to-select" class="sd-input" style="font-size:0.8rem; padding:0.2rem 0.5rem;" onchange="replySelectAddress(this)">';
+      res.addresses.forEach(function(a) {
+        sel += '<option value="' + a.email + '" data-contact-id="' + (a.contact_id || '') + '">' +
+               a.label + ' &lt;' + a.email + '&gt;</option>';
+      });
+      sel += '</select>';
+      toSpan.innerHTML = 'To: ' + sel;
+      // Set initial selection
+      _replyToAddr    = res.addresses[0].email;
+      _replyContactId = res.addresses[0].contact_id;
+    })
+    .catch(function() {
+      _replyToAddr = fallbackAddr || '';
+      toSpan.innerHTML = 'To: ' + (_replyToAddr || '(no email on file)');
+    });
+}
+
+function replySelectAddress(sel) {
+  var opt = sel.options[sel.selectedIndex];
+  _replyToAddr    = opt.value;
+  _replyContactId = opt.dataset.contactId || null;
 }
 
 function closeReplyModal() {
@@ -1059,6 +1135,7 @@ function replyModalSend() {
       subject:     _replySubject || 'Re: Your booking',
       body:        body,
       template_id: tmplId,
+      contact_id:  _replyContactId || null,
     }),
   })
     .then(function(r) { return r.json(); })

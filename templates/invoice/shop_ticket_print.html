@@ -118,14 +118,15 @@
 
   .status-band {
     margin-top: 4mm;
-    background: #1e293b;
-    color: #fff;
+    background: transparent;
+    color: #000;
     text-align: center;
     font-size: 14pt;
     font-weight: 700;
     letter-spacing: 0.08em;
     padding: 2.5mm 0;
     border-radius: 2px;
+    border: 1.5pt solid #000;
   }
 
   /* ── Screen chrome ───────────────────────────────────────── */
@@ -209,7 +210,7 @@
     </div>
     <div style="text-align:right;">
       <div class="field-label">Phone</div>
-      <div class="field-value" style="padding-bottom:0; font-size:14pt; font-weight:700;">{{ job['customer_phone'] or '' }}</div>
+      <div class="field-value" style="padding-bottom:0; font-size:14pt; font-weight:700;">{{ job['customer_phone']|fmt_phone if job['customer_phone'] else '' }}</div>
     </div>
   </div>
 

@@ -238,10 +238,8 @@ function silentSave(callback) {
               </td>
             </tr>
             {% for label, value in [
-              ('Phone', job['customer_phone'] or '—'),
-            ] + ([] if is_workshop else [('Suburb', job['suburb'] or '—')]) + [
-              ('Email', job['customer_email'] or '—'),
-            ] %}
+              ('Phone', job['customer_phone']|fmt_phone if job['customer_phone'] else '—'),
+            ] + ([] if is_workshop else [('Suburb', job['suburb'] or '—')]) %}
             <tr style="border-bottom:1px solid var(--sd-border);">
               <td style="color:var(--sd-muted); padding:0.45rem 0; width:30%; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em;">{{ label }}</td>
               <td style="padding:0.45rem 0 0.45rem 1rem;">{{ value }}</td>
@@ -258,6 +256,24 @@ function silentSave(callback) {
           <div style="margin-top:0.75rem;">
             <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--sd-muted); margin-bottom:0.4rem;">Bike</div>
             <div style="font-size:0.875rem; color:var(--sd-text);">{{ job['bike_description'] }}</div>
+          </div>
+          {% endif %}
+          {% if customer_contacts %}
+          <div style="margin-top:0.75rem; border-top:1px solid var(--sd-border); padding-top:0.75rem;">
+            <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--sd-muted); margin-bottom:0.5rem;">Contacts</div>
+            {% for ct in customer_contacts %}
+            <div style="display:flex; align-items:baseline; gap:0.75rem; padding:0.3rem 0;
+                        {% if not loop.last %}border-bottom:1px solid var(--sd-border);{% endif %}
+                        font-size:0.85rem;">
+              <span style="font-weight:600; min-width:120px;">{{ ct['name'] }}</span>
+              {% if ct['phone'] %}
+              <span style="color:var(--sd-muted); font-size:0.8rem;">{{ ct['phone']|fmt_phone }}</span>
+              {% endif %}
+              {% if ct['notes'] %}
+              <span style="color:var(--sd-muted); font-size:0.78rem; font-style:italic;">{{ ct['notes'] }}</span>
+              {% endif %}
+            </div>
+            {% endfor %}
           </div>
           {% endif %}
         </div>
@@ -386,8 +402,14 @@ function silentSave(callback) {
                 <a href="https://www.google.com/maps/dir/?api=1&destination={{ (job['address'] ~ (', ' ~ job['suburb'] if job['suburb'] else ''))|urlencode }}"
                    target="_blank" rel="noopener" class="btn-ghost"
                    style="padding:0.35rem 0.6rem; font-size:0.75rem; flex-shrink:0;"
-                   title="Get directions from current location">
+                   title="Google Maps directions">
                   <i class="bi bi-signpost-2"></i>
+                </a>
+                <a href="https://maps.apple.com/?daddr={{ (job['address'] ~ (', ' ~ job['suburb'] if job['suburb'] else ''))|urlencode }}&dirflg=d"
+                   target="_blank" rel="noopener" class="btn-ghost"
+                   style="padding:0.35rem 0.6rem; font-size:0.75rem; flex-shrink:0;"
+                   title="Apple Maps directions">
+                  <i class="bi bi-apple"></i>
                 </a>
                 {% endif %}
               </div>
@@ -1392,8 +1414,7 @@ document.addEventListener('keydown', function (e) {
   var prevDisplay  = '';
   radios.forEach(function(r) { if (r.checked) prevDisplay = r.value; });
 
-  var defaultDate   = {{ (job['scheduled_date'] or '')|tojson }} ||
-                      new Date().toISOString().slice(0, 10);
+  var defaultDate   = new Date().toISOString().slice(0, 10);
   var defaultAmount = null;
 
   function getTotal() {

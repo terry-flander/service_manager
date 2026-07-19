@@ -49,7 +49,7 @@
             <div style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--sd-muted); margin-bottom:0.5rem;">Bill To</div>
             <div style="font-weight:600; margin-bottom:0.2rem;">{{ job['customer_name'] }}</div>
             {% if job['customer_email'] %}<div style="font-size:0.85rem; color:var(--sd-muted);">{{ job['customer_email'] }}</div>{% endif %}
-            {% if job['customer_phone'] %}<div style="font-size:0.85rem; color:var(--sd-muted);">{{ job['customer_phone'] }}</div>{% endif %}
+            {% if job['customer_phone'] %}<div style="font-size:0.85rem; color:var(--sd-muted);">{{ job['customer_phone']|fmt_phone }}</div>{% endif %}
             {% if job['suburb'] %}<div style="font-size:0.85rem; color:var(--sd-muted);">{{ job['suburb'] }}, VIC</div>{% endif %}
             <div style="font-size:0.85rem; color:var(--sd-muted); margin-top:0.25rem;">{{ job['address'] }}</div>
           </div>

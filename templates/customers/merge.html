@@ -258,7 +258,7 @@ function renderResults(results) {
     item.style.cssText = 'padding:0.6rem 1rem; cursor:pointer; border-bottom:1px solid var(--sd-border);';
     item.innerHTML =
       `<div style="font-weight:500; font-size:0.88rem;">${esc(c.name)}</div>` +
-      `<div style="font-size:0.76rem; color:var(--sd-muted);">${esc(c.email)}${c.phone ? ' · ' + esc(c.phone) : ''}</div>`;
+      `<div style="font-size:0.76rem; color:var(--sd-muted);">${esc(c.email)}${c.phone ? ' · ' + esc(fmtPhone(c.phone)) : ''}</div>`;
     item.addEventListener('mouseenter', () => item.style.background = 'var(--sd-surface2)');
     item.addEventListener('mouseleave', () => item.style.background = '');
     item.addEventListener('mousedown',  (e) => { e.preventDefault(); selectTarget(c); });
@@ -282,7 +282,7 @@ function selectTarget(data) {
     `<div><span style="color:var(--sd-muted);width:4.5rem;display:inline-block;">Email</span>
        <span class="mono">${esc(data.email)}</span></div>` +
     `<div><span style="color:var(--sd-muted);width:4.5rem;display:inline-block;">Phone</span>
-       ${data.phone || '—'}</div>` +
+       ${fmtPhone(data.phone) || '—'}</div>` +
     `<div><span style="color:var(--sd-muted);width:4.5rem;display:inline-block;">Address</span>
        ${data.address || '—'}</div>` +
     (data.suburb ? `<div><span style="color:var(--sd-muted);width:4.5rem;display:inline-block;">
@@ -290,7 +290,7 @@ function selectTarget(data) {
 
   document.getElementById('th-target').textContent = data.name;
   document.getElementById('disp-email').textContent   = data.email   || '(none)';
-  document.getElementById('disp-phone').textContent   = data.phone   || '(none)';
+  document.getElementById('disp-phone').textContent   = fmtPhone(data.phone)   || '(none)';
   const addrText = (data.address || '(none)') + (data.suburb ? '\n' + data.suburb : '');
   document.getElementById('disp-address').textContent = addrText;
 

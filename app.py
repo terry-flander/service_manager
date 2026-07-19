@@ -103,8 +103,23 @@ def create_app():
         except Exception:
             return str(value)[:16]
 
+    def _fmt_phone(value):
+        """Format a phone number as XXXX XXX XXX for display.
+        Strips non-digits, then inserts spaces at positions 4 and 8.
+        Returns the original value unchanged if it doesn't look like
+        a 10-digit Australian number."""
+        if not value:
+            return ''
+        digits = ''.join(c for c in str(value) if c.isdigit())
+        if len(digits) == 10:
+            return f"{digits[:4]} {digits[4:7]} {digits[7:]}"
+        if len(digits) == 9:  # e.g. landline without area code
+            return f"{digits[:4]} {digits[4:7]} {digits[7:]}"
+        return str(value)
+
     app.jinja_env.filters['fmt_date']     = _fmt_date
     app.jinja_env.filters['fmt_datetime'] = _fmt_datetime_local
+    app.jinja_env.filters['fmt_phone']    = _fmt_phone
 
     @app.context_processor
     def inject_globals():

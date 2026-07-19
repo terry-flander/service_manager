@@ -413,6 +413,19 @@ def _find_job_for_thread(conn, in_reply_to, references, from_email):
         if row:
             return row['id']
 
+        # Also check customer_contacts — exact match to contacts
+        # of customers who own active jobs
+        row = conn.execute("""
+            SELECT j.id FROM jobs j
+            JOIN customers c ON c.id = j.customer_id
+            JOIN customer_contacts cc ON cc.customer_id = c.id
+            WHERE LOWER(cc.email) = LOWER(?)
+              AND j.status IN ('pending', 'scheduled', 'in_progress')
+            ORDER BY j.id DESC LIMIT 1
+        """, (from_email,)).fetchone()
+        if row:
+            return row['id']
+
     return None
 
 

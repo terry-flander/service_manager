@@ -175,11 +175,13 @@ def _build_event_body(job):
     address      = job['address'] or ''
     suburb       = job['suburb'] or ''
     dest         = (address + (', ' + suburb if suburb else '')).strip()
-    dir_url      = ('https://www.google.com/maps/dir/?api=1&destination=' + urllib.parse.quote_plus(dest)) if dest else ''
+    dir_url        = ('https://www.google.com/maps/dir/?api=1&destination=' + urllib.parse.quote_plus(dest)) if dest else ''
+    apple_dir_url  = ('https://maps.apple.com/?daddr=' + urllib.parse.quote_plus(dest) + '&dirflg=d') if dest else ''
     description_lines = [
         f'<a href="{job_url}">ServiceDesk Job</a>',
         f'<a href="{thread_url}">Email Thread</a>',
-        (f'<a href="{dir_url}">Get Directions</a>' if dir_url else ''),
+        (f'<a href="{dir_url}">Google Maps Directions</a>' if dir_url else ''),
+        (f'<a href="{apple_dir_url}">Apple Maps Directions</a>' if apple_dir_url else ''),
         '',
         f"Name: {_escape(job['customer_name'])}",
         f"Email: {_escape(job['customer_email'])}",

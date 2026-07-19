@@ -252,10 +252,14 @@ def edit_customer(customer_id):
         return redirect(url_for('customers.edit_customer', customer_id=customer_id))
 
     with get_db() as conn:
-        suburbs = get_suburbs(conn)
+        suburbs  = get_suburbs(conn)
+        contacts = conn.execute(
+            "SELECT * FROM customer_contacts WHERE customer_id=? ORDER BY name",
+            (customer_id,)).fetchall()
     return render_template('customers/form.html',
                            customer=customer, action='edit', jobs=jobs,
-                           thread_emails=thread_emails, suburbs=suburbs)
+                           thread_emails=thread_emails, suburbs=suburbs,
+                           contacts=contacts)
 
 
 @customers_bp.route('/customers/clear-search', methods=['POST'])
@@ -268,3 +272,65 @@ def clear_search():
                          (f'customer_search_{user_id}',))
             conn.commit()
     return redirect(url_for('customers.index'))
+
+
+# ── Customer Contacts CRUD ────────────────────────────────────────────────────
+
+@customers_bp.route('/customers/<int:customer_id>/contacts', methods=['POST'])
+def add_contact(customer_id):
+    """Add a contact to a customer."""
+    from flask import jsonify
+    data  = request.get_json() or {}
+    name  = (data.get('name') or '').strip()
+    phone = (data.get('phone') or '').strip() or None
+    email = (data.get('email') or '').strip().lower() or None
+    notes = (data.get('notes') or '').strip() or None
+    if not name:
+        return jsonify({'ok': False, 'error': 'Name is required'}), 400
+    with get_db() as conn:
+        row = conn.execute('SELECT id FROM customers WHERE id=?', (customer_id,)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'error': 'Customer not found'}), 404
+        conn.execute(
+            'INSERT INTO customer_contacts (customer_id, name, phone, email, notes) VALUES (?,?,?,?,?)',
+            (customer_id, name, phone, email, notes))
+        conn.commit()
+        new_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]
+    return jsonify({'ok': True, 'id': new_id})
+
+
+@customers_bp.route('/customers/<int:customer_id>/contacts/<int:contact_id>', methods=['PUT'])
+def update_contact(customer_id, contact_id):
+    from flask import jsonify
+    data  = request.get_json() or {}
+    name  = (data.get('name') or '').strip()
+    phone = (data.get('phone') or '').strip() or None
+    email = (data.get('email') or '').strip().lower() or None
+    notes = (data.get('notes') or '').strip() or None
+    if not name:
+        return jsonify({'ok': False, 'error': 'Name is required'}), 400
+    with get_db() as conn:
+        row = conn.execute(
+            'SELECT id FROM customer_contacts WHERE id=? AND customer_id=?',
+            (contact_id, customer_id)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'error': 'Not found'}), 404
+        conn.execute(
+            'UPDATE customer_contacts SET name=?, phone=?, email=?, notes=? WHERE id=?',
+            (name, phone, email, notes, contact_id))
+        conn.commit()
+    return jsonify({'ok': True})
+
+
+@customers_bp.route('/customers/<int:customer_id>/contacts/<int:contact_id>', methods=['DELETE'])
+def delete_contact(customer_id, contact_id):
+    from flask import jsonify
+    with get_db() as conn:
+        row = conn.execute(
+            'SELECT id FROM customer_contacts WHERE id=? AND customer_id=?',
+            (contact_id, customer_id)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'error': 'Not found'}), 404
+        conn.execute('DELETE FROM customer_contacts WHERE id=?', (contact_id,))
+        conn.commit()
+    return jsonify({'ok': True})
