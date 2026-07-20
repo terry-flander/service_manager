@@ -54,7 +54,7 @@ def create_app():
     app.register_blueprint(portal_bp)
 
     # ── Global auth gate ──────────────────────────────────────────────────────
-    PUBLIC_ENDPOINTS = {'auth.login', 'auth.totp_verify', 'static'}
+    PUBLIC_ENDPOINTS = {'auth.login', 'auth.totp_verify', 'static', 'portal.job_portal', 'portal.not_found'}
 
     @app.before_request
     def require_login():

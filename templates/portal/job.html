@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Job {{ job['reference'] }} — The Flying Bike</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #f8fafc;
+      color: #1e293b;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15px;
+      min-height: 100vh;
+      padding: 0;
+    }
+
+    /* Header */
+    .header {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 1rem 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .header-logo { font-size: 1.4rem; }
+    .header-name { font-weight: 700; font-size: 1rem; }
+    .header-sub  { font-size: 0.75rem; color: #94a3b8; }
+
+    /* Container */
+    .container {
+      max-width: 580px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem 3rem;
+    }
+
+    /* Status banner */
+    .status-banner {
+      border-radius: 10px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .status-banner.pending     { background: rgba(245,158,11,0.12);  border: 1px solid rgba(245,158,11,0.3);  }
+    .status-banner.scheduled   { background: rgba(59,130,246,0.1);   border: 1px solid rgba(59,130,246,0.3);  }
+    .status-banner.in_progress { background: rgba(139,92,246,0.1);   border: 1px solid rgba(139,92,246,0.3);  }
+    .status-banner.quote       { background: rgba(14,165,233,0.1);   border: 1px solid rgba(14,165,233,0.3);  }
+    .status-banner.complete    { background: rgba(16,185,129,0.1);   border: 1px solid rgba(16,185,129,0.3);  }
+    .status-banner.invoiced    { background: rgba(107,114,128,0.1);  border: 1px solid rgba(107,114,128,0.3); }
+    .status-banner.paid        { background: rgba(16,185,129,0.12);  border: 1px solid rgba(16,185,129,0.4);  }
+    .status-banner.lost        { background: rgba(239,68,68,0.08);   border: 1px solid rgba(239,68,68,0.25);  }
+
+    .status-icon { font-size: 2rem; flex-shrink: 0; }
+    .status-pending .status-icon     { color: #f59e0b; }
+    .status-scheduled .status-icon   { color: #3b82f6; }
+    .status-in_progress .status-icon { color: #8b5cf6; }
+    .status-quote .status-icon       { color: #0ea5e9; }
+    .status-complete .status-icon    { color: #10b981; }
+    .status-invoiced .status-icon    { color: #6b7280; }
+    .status-paid .status-icon        { color: #10b981; }
+    .status-lost .status-icon        { color: #ef4444; }
+
+    .status-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 600;
+      color: #64748b;
+      margin-bottom: 0.2rem;
+    }
+    .status-value {
+      font-size: 1.3rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .status-pending .status-value     { color: #d97706; }
+    .status-scheduled .status-value   { color: #2563eb; }
+    .status-in_progress .status-value { color: #7c3aed; }
+    .status-quote .status-value       { color: #0284c7; }
+    .status-complete .status-value    { color: #059669; }
+    .status-invoiced .status-value    { color: #4b5563; }
+    .status-paid .status-value        { color: #059669; }
+    .status-lost .status-value        { color: #dc2626; }
+
+    /* Card */
+    .card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      margin-bottom: 1rem;
+      overflow: hidden;
+    }
+    .card-header {
+      background: #f1f5f9;
+      border-bottom: 1px solid #e2e8f0;
+      padding: 0.6rem 1.25rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: #64748b;
+    }
+    .card-body { padding: 1rem 1.25rem; }
+
+    /* Detail rows */
+    .detail-row {
+      display: flex;
+      gap: 1rem;
+      padding: 0.45rem 0;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 0.9rem;
+    }
+    .detail-row:last-child { border-bottom: none; }
+    .detail-label {
+      color: #64748b;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      width: 110px;
+      flex-shrink: 0;
+      padding-top: 0.1rem;
+    }
+    .detail-value { color: #1e293b; flex: 1; }
+
+    /* Parts table */
+    table.parts {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+    table.parts th {
+      text-align: left;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #64748b;
+      padding: 0.4rem 0;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    table.parts th.r, table.parts td.r { text-align: right; }
+    table.parts td {
+      padding: 0.5rem 0;
+      border-bottom: 1px solid #f1f5f9;
+      color: #1e293b;
+    }
+    table.parts tbody tr:last-child td { border-bottom: none; }
+    table.parts tfoot td {
+      padding-top: 0.6rem;
+      font-weight: 700;
+      border-top: 2px solid #e2e8f0;
+      font-size: 1rem;
+    }
+
+    /* Invoice button */
+    .invoice-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: #0f172a;
+      color: #fff;
+      text-decoration: none;
+      padding: 0.65rem 1.25rem;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin-top: 0.25rem;
+    }
+    .invoice-btn:hover { background: #1e293b; }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      color: #94a3b8;
+      font-size: 0.78rem;
+      margin-top: 2rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid #e2e8f0;
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <span class="header-logo">🚲</span>
+  <div>
+    <div class="header-name">The Flying Bike</div>
+    <div class="header-sub">Mobile Bicycle Repair</div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Status banner -->
+  {% set st = job['status'] %}
+  {% set status_icons = {
+    'pending': '🕐', 'scheduled': '📅', 'in_progress': '🔧',
+    'quote': '💬', 'complete': '✅', 'invoiced': '📄',
+    'paid': '✅', 'lost': '❌'
+  } %}
+  {% set status_labels = {
+    'pending': 'Awaiting scheduling', 'scheduled': 'Scheduled',
+    'in_progress': 'Work in progress', 'quote': 'Quote ready',
+    'complete': 'Work complete', 'invoiced': 'Invoice sent',
+    'paid': 'Paid — thank you!', 'lost': 'Cancelled'
+  } %}
+  <div class="status-banner {{ st|replace('_','-') }} status-{{ st }}">
+    <div class="status-icon">{{ status_icons.get(st, '📋') }}</div>
+    <div>
+      <div class="status-label">Job status</div>
+      <div class="status-value">{{ status_labels.get(st, st|replace('_',' ')) }}</div>
+    </div>
+  </div>
+
+  <!-- Job details -->
+  <div class="card">
+    <div class="card-header">Job Details</div>
+    <div class="card-body">
+      <div class="detail-row">
+        <div class="detail-label">Reference</div>
+        <div class="detail-value" style="font-family:monospace; font-weight:600;">{{ job['reference'] }}</div>
+      </div>
+      <div class="detail-row">
+        <div class="detail-label">Name</div>
+        <div class="detail-value">{{ job['customer_name'] }}</div>
+      </div>
+      {% if job['scheduled_date'] %}
+      <div class="detail-row">
+        <div class="detail-label">Scheduled</div>
+        <div class="detail-value">
+          {{ job['scheduled_date']|fmt_date('dmy') }}
+          {% if job['scheduled_time'] %} at {{ job['scheduled_time'][:5] }}{% endif %}
+        </div>
+      </div>
+      {% endif %}
+      {% if job['suburb'] %}
+      <div class="detail-row">
+        <div class="detail-label">Location</div>
+        <div class="detail-value">{{ job['suburb'] }}</div>
+      </div>
+      {% endif %}
+      {% if job['bike_description'] %}
+      <div class="detail-row">
+        <div class="detail-label">Bike</div>
+        <div class="detail-value">{{ job['bike_description'] }}</div>
+      </div>
+      {% endif %}
+      {% if job['description'] %}
+      <div class="detail-row">
+        <div class="detail-label">Request</div>
+        <div class="detail-value" style="white-space:pre-wrap;">{{ job['description'] }}</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Parts & pricing -->
+  {% if job_parts %}
+  <div class="card">
+    <div class="card-header">Parts & Labour</div>
+    <div class="card-body" style="padding-top:0.5rem;">
+      <table class="parts">
+        <thead>
+          <tr>
+            <th>Description</th>
+            <th class="r" style="width:50px;">Qty</th>
+            <th class="r" style="width:80px;">Price</th>
+            <th class="r" style="width:80px;">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in job_parts %}
+          <tr>
+            <td>{{ p['description'] }}</td>
+            <td class="r">{{ p['quantity']|int if p['quantity'] == p['quantity']|int else p['quantity'] }}</td>
+            <td class="r">${{ '%.2f'|format(p['unit_cost']) }}</td>
+            <td class="r">${{ '%.2f'|format(p['quantity'] * p['unit_cost']) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="3">Total {% if job['tax_inclusive'] == 1 %}(inc GST){% elif job['tax_inclusive'] == 2 %}(GST exempt){% endif %}</td>
+            <td class="r">${{ '%.2f'|format(job['total'] or 0) }}</td>
+          </tr>
+          {% if job['gst'] %}
+          <tr>
+            <td colspan="3" style="font-size:0.78rem; font-weight:400; color:#64748b;">GST included</td>
+            <td class="r" style="font-size:0.78rem; font-weight:400; color:#64748b;">${{ '%.2f'|format(job['gst']) }}</td>
+          </tr>
+          {% endif %}
+        </tfoot>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Invoice download (paid/invoiced jobs only) -->
+  {% if job['status'] in ('paid', 'invoiced') %}
+  <div class="card">
+    <div class="card-header">Invoice</div>
+    <div class="card-body">
+      <a href="{{ url_for('invoice.view_invoice', job_id=job['id']) }}"
+         class="invoice-btn" target="_blank">
+        📄 View / Download Invoice
+      </a>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="footer">
+    <p>Questions? Reply to your booking email or call <strong>0403 225 135</strong></p>
+    <p style="margin-top:0.4rem;">The Flying Bike — Mobile Bicycle Repair, Melbourne</p>
+  </div>
+
+</div>
+</body>
+</html>

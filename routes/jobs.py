@@ -813,7 +813,9 @@ def job_detail(job_id):
 
         # Portal token — generate lazily
         portal_token = _get_or_create_portal_token(conn, job_id)
-        portal_url   = f"{request.host_url.rstrip('/')}job/{portal_token}"
+        import os as _os
+        _base = _os.environ.get('BASE_URL', request.host_url.rstrip('/')).rstrip('/')
+        portal_url = f"{_base}/job/{portal_token}"
 
         # Pending trigger from a previous status change
         from flask import session as _sess2
