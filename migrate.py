@@ -42,6 +42,19 @@ with get_db() as conn:
     except: pass
     try: conn.execute('ALTER TABLE jobs ADD COLUMN total REAL DEFAULT 0')
     except: pass
+    try: conn.execute('ALTER TABLE jobs ADD COLUMN portal_token TEXT')
+    except: pass
+    try:
+        conn.execute('''CREATE TABLE IF NOT EXISTS job_status_triggers (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_type       TEXT NOT NULL,
+            trigger_status TEXT NOT NULL,
+            template_id    INTEGER REFERENCES email_templates(id) ON DELETE SET NULL,
+            active         INTEGER NOT NULL DEFAULT 1,
+            created_at     TEXT DEFAULT (datetime('now')),
+            UNIQUE(job_type, trigger_status)
+        )''')
+    except: pass
     try:
         conn.execute('''CREATE TABLE IF NOT EXISTS customer_contacts (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,

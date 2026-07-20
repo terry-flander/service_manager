@@ -74,6 +74,22 @@ def _build_feedback_link(job, full_name):
         return ''
 
 
+def _build_portal_link(job):
+    """Return the public portal URL for this job, generating a token if needed."""
+    try:
+        from models import get_db
+        from routes.jobs import _get_or_create_portal_token
+        import os
+        base = os.environ.get('BASE_URL', '').rstrip('/')
+        if not base:
+            return ''
+        with get_db() as conn:
+            token = _get_or_create_portal_token(conn, job['id'])
+        return f"{base}/job/{token}"
+    except Exception:
+        return ''
+
+
 def _substitute(text, job, customer=None, totals=None, is_html=False):
     """
     Replace {{field}} placeholders with job/customer values.
@@ -135,14 +151,15 @@ def _substitute(text, job, customer=None, totals=None, is_html=False):
         'job_total':                 _fmt_money(totals.get('job_total', 0)),
         'amount_due':                _fmt_money(totals.get('amount_due', 0)),
         'feedback_link':             _build_feedback_link(job, full_name),
+        'portal_link':               _build_portal_link(job),
     }
 
     if is_html:
         import html as _html_mod
         for key, val in list(fields.items()):
-            if key == 'feedback_link' and val:
+            if key in ('feedback_link', 'portal_link') and val:
                 escaped_url = _html_mod.escape(val, quote=True)
-                fields[key] = f'<a href="{escaped_url}">{escaped_url}</a>'
+                fields[key] = f'<a href="{escaped_url}">View your job status →</a>'
             else:
                 fields[key] = _html_mod.escape(str(val))
 
@@ -570,6 +587,7 @@ def preview_fields():
         'job_total',                 # e.g. $150.00
         'amount_due',                # e.g. $150.00 (total minus any payment)
         'feedback_link',             # pre-filled Google Form link (if configured)
+        'portal_link',               # public job status portal URL
     ])
 
 

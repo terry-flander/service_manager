@@ -1,6 +1,20 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from models import get_db
 from datetime import date
+import secrets
+
+
+def _get_or_create_portal_token(conn, job_id):
+    """Return the portal token for a job, generating and storing one if absent."""
+    row = conn.execute(
+        "SELECT portal_token FROM jobs WHERE id=?", (job_id,)).fetchone()
+    if row and row['portal_token']:
+        return row['portal_token']
+    token = secrets.token_hex(32)
+    conn.execute(
+        "UPDATE jobs SET portal_token=? WHERE id=?", (token, job_id))
+    conn.commit()
+    return token
 
 jobs_bp = Blueprint('jobs', __name__)
 
@@ -712,6 +726,29 @@ def job_detail(job_id):
                         flash('Job saved — calendar sync failed, please retry.', 'warning')
 
         flash('Job updated.', 'success')
+
+        # Check for status trigger — if the status changed to a trigger status,
+        # return trigger info so the JS confirmation modal can fire.
+        old_status = job['status']
+        if new_status != old_status and job.get('customer_email'):
+            with get_db() as _tc:
+                trigger = _tc.execute("""
+                    SELECT t.id, t.template_id, tmpl.name as template_name
+                    FROM job_status_triggers t
+                    LEFT JOIN email_templates tmpl ON tmpl.id = t.template_id
+                    WHERE t.job_type=? AND t.trigger_status=? AND t.active=1
+                """, (jt, new_status)).fetchone()
+            if trigger and trigger['template_id']:
+                # Store trigger info in session for the redirect target to read
+                from flask import session as _s
+                _s['pending_trigger'] = {
+                    'job_id':        job_id,
+                    'template_id':   trigger['template_id'],
+                    'template_name': trigger['template_name'],
+                    'to_email':      job['customer_email'],
+                    'customer_name': job['customer_name'],
+                }
+
         return_to = request.form.get('return_to', '').strip()
         if return_to == 'customer':
             cust_id_form = request.form.get('return_cust_id', '').strip()
@@ -774,6 +811,14 @@ def job_detail(job_id):
                 "WHERE customer_id=? ORDER BY name",
                 (job['customer_id'],)).fetchall()
 
+        # Portal token — generate lazily
+        portal_token = _get_or_create_portal_token(conn, job_id)
+        portal_url   = f"{request.host_url.rstrip('/')}job/{portal_token}"
+
+        # Pending trigger from a previous status change
+        from flask import session as _sess2
+        pending_trigger = _sess2.pop('pending_trigger', None)
+
     return render_template('jobs/detail.html', job=job, job_parts=job_parts,
                            parts=parts, total=total, regions=regions,
                            thread_emails=thread_emails,
@@ -782,6 +827,8 @@ def job_detail(job_id):
                            SR_PARTS=sr_parts,
                            is_repeat_customer=is_repeat_customer,
                            customer_contacts=customer_contacts,
+                           portal_url=portal_url,
+                           pending_trigger=pending_trigger,
                            TIME_SLOTS=TIME_SLOTS, TIME_LABELS=TIME_LABELS,
                            JOB_TYPES=JOB_TYPES)
 
@@ -1001,6 +1048,89 @@ def delete_job(job_id):
 
 
 @jobs_bp.route('/jobs/<int:job_id>/return-url')
+@jobs_bp.route('/jobs/<int:job_id>/send-trigger-email', methods=['POST'])
+def send_trigger_email(job_id):
+    """Send an automated trigger email after user confirmation."""
+    data        = request.get_json() or {}
+    template_id = data.get('template_id')
+    if not template_id:
+        return jsonify({'ok': False, 'error': 'No template specified'}), 400
+
+    with get_db() as conn:
+        job  = conn.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
+        tmpl = conn.execute(
+            "SELECT * FROM email_templates WHERE id=?", (template_id,)).fetchone()
+        if not job or not tmpl:
+            return jsonify({'ok': False, 'error': 'Not found'}), 404
+
+    try:
+        from routes.email_replies import _substitute, _get_thread_refs
+        from email_sender import send_reply
+        from invoice_pdf import generate_invoice_pdf
+
+        with get_db() as conn:
+            in_reply_to, references = _get_thread_refs(conn, job_id)
+            job_parts = conn.execute(
+                "SELECT * FROM job_parts WHERE job_id=? ORDER BY id",
+                (job_id,)).fetchall()
+
+        body_html = _substitute(tmpl['body'], job, is_html=True)
+        subject   = _substitute(tmpl['subject'], job)
+
+        has_invoice = '[Invoice PDF attached]' in tmpl['body']
+        body_clean  = body_html.replace('[Invoice PDF attached]', '').strip()
+
+        from email_sender import _html_to_plain_fallback
+        body_text = _html_to_plain_fallback(body_clean)
+
+        if has_invoice and job_parts:
+            buf = generate_invoice_pdf(
+                job, job_parts, bool(job['tax_inclusive']),
+                job['subtotal'] or 0.0, job['gst'] or 0.0, job['total'] or 0.0)
+            from email_sender import send_reply_with_attachment
+            msg_id = send_reply_with_attachment(
+                to_address=job['customer_email'],
+                subject=subject,
+                body_text=body_text, body_html=body_clean,
+                attachment_bytes=buf.read(),
+                attachment_filename=f"INV-{job['reference'].lower()}.pdf",
+                in_reply_to=in_reply_to, references=references)
+        else:
+            msg_id = send_reply(
+                to_address=job['customer_email'],
+                subject=subject,
+                body_text=body_text, body_html=body_clean,
+                in_reply_to=in_reply_to, references=references)
+
+        with get_db() as conn:
+            from flask import session as _s
+            conn.execute("""
+                INSERT INTO email_replies
+                    (job_id, message_id, in_reply_to, subject,
+                     to_address, body, sent_by, template_id)
+                VALUES (?,?,?,?,?,?,?,?)
+            """, (job_id, msg_id, in_reply_to, subject,
+                  job['customer_email'], body_text,
+                  _s.get('user_id'), int(template_id)))
+            conn.commit()
+
+        return jsonify({'ok': True})
+
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@jobs_bp.route('/jobs/<int:job_id>/regenerate-portal-token', methods=['POST'])
+def regenerate_portal_token(job_id):
+    """Regenerate the portal token for a job, invalidating the old link."""
+    token = secrets.token_hex(32)
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE jobs SET portal_token=? WHERE id=?", (token, job_id))
+        conn.commit()
+    return jsonify({'ok': True, 'token': token})
+
+
 @jobs_bp.route('/jobs/<int:job_id>/email-addresses')
 def job_email_addresses(job_id):
     """Return all email addresses available for this job — the customer's
@@ -1475,6 +1605,63 @@ def calendar_settings():
     return render_template('jobs/calendar_settings.html',
                            gcal_enabled=gcal_enabled,
                            calendar_id=calendar_id)
+
+
+@jobs_bp.route('/settings/status-triggers', methods=['GET', 'POST'])
+def status_triggers():
+    """Admin page to configure automatic email triggers per job type and status."""
+    JOB_TYPES_LIST  = ['booking', 'rental', 'workshop', 'sale']
+    STATUS_LIST = ['pending', 'scheduled', 'in_progress', 'quote',
+                   'complete', 'invoiced', 'paid', 'lost']
+    with get_db() as conn:
+        if request.method == 'POST':
+            action = request.form.get('action')
+            if action == 'add':
+                jt     = request.form.get('job_type', '').strip()
+                st     = request.form.get('trigger_status', '').strip()
+                tmpl   = request.form.get('template_id') or None
+                active = 1 if request.form.get('active') else 0
+                if jt and st:
+                    try:
+                        conn.execute("""
+                            INSERT INTO job_status_triggers
+                                (job_type, trigger_status, template_id, active)
+                            VALUES (?,?,?,?)
+                            ON CONFLICT(job_type, trigger_status)
+                            DO UPDATE SET template_id=excluded.template_id,
+                                          active=excluded.active
+                        """, (jt, st, int(tmpl) if tmpl else None, active))
+                        conn.commit()
+                    except Exception:
+                        pass
+            elif action == 'delete':
+                tid = request.form.get('trigger_id')
+                if tid:
+                    conn.execute("DELETE FROM job_status_triggers WHERE id=?", (tid,))
+                    conn.commit()
+            elif action == 'toggle':
+                tid = request.form.get('trigger_id')
+                if tid:
+                    conn.execute("""
+                        UPDATE job_status_triggers
+                        SET active = CASE WHEN active=1 THEN 0 ELSE 1 END
+                        WHERE id=?
+                    """, (tid,))
+                    conn.commit()
+            return redirect(url_for('jobs.status_triggers'))
+
+        triggers  = conn.execute("""
+            SELECT t.*, tmpl.name as template_name
+            FROM job_status_triggers t
+            LEFT JOIN email_templates tmpl ON tmpl.id = t.template_id
+            ORDER BY t.job_type, t.trigger_status
+        """).fetchall()
+        templates = conn.execute(
+            "SELECT id, name FROM email_templates ORDER BY name").fetchall()
+
+    return render_template('jobs/status_triggers.html',
+                           triggers=triggers, templates=templates,
+                           job_types=JOB_TYPES_LIST, statuses=STATUS_LIST)
 
 
 @jobs_bp.route('/settings/feedback', methods=['GET', 'POST'])

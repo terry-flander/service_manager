@@ -350,6 +350,7 @@
     .status-invoiced    { background:var(--sc-invoiced-bg,rgba(107,114,128,0.15));   color:var(--sc-invoiced,#9ca3af); }
     .status-paid        { background:var(--sc-paid-bg,rgba(16,185,129,0.18));        color:var(--sc-paid,#6ee7b7); }
     .status-lost        { background:var(--sc-void-bg,rgba(239,68,68,0.12));         color:var(--sc-void,#fca5a5); }
+    .status-quote       { background:rgba(14,165,233,0.15);                           color:#38bdf8; }
 
     /* ── Buttons — min touch target 44px ── */
     .btn-accent {
@@ -587,6 +588,9 @@
         </a>
         <a href="{{ url_for('jobs.feedback_settings') }}" class="sidebar-link {% if request.endpoint == 'jobs.feedback_settings' %}active{% endif %}" onclick="closeSidebar()" style="padding-left:2rem;">
           <i class="bi bi-star"></i> Feedback Settings
+        </a>
+        <a href="{{ url_for('jobs.status_triggers') }}" class="sidebar-link {% if request.endpoint == 'jobs.status_triggers' %}active{% endif %}" onclick="closeSidebar()" style="padding-left:2rem;">
+          <i class="bi bi-envelope-check"></i> Status Triggers
         </a>
         <a href="{{ url_for('jobs.backup_db') }}" class="sidebar-link" onclick="closeSidebar()" style="padding-left:2rem;">
           <i class="bi bi-download"></i> Backup DB

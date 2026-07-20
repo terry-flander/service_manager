@@ -86,6 +86,16 @@ def init_db():
                 created_at TEXT DEFAULT (datetime('now'))
             );
 
+            CREATE TABLE IF NOT EXISTS job_status_triggers (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_type    TEXT NOT NULL,
+                trigger_status TEXT NOT NULL,
+                template_id INTEGER REFERENCES email_templates(id) ON DELETE SET NULL,
+                active      INTEGER NOT NULL DEFAULT 1,
+                created_at  TEXT DEFAULT (datetime('now')),
+                UNIQUE(job_type, trigger_status)
+            );
+
             CREATE TABLE IF NOT EXISTS customer_contacts (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 customer_id INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
@@ -128,7 +138,8 @@ def init_db():
                 referral_source   TEXT,
                 subtotal          REAL DEFAULT 0,
                 gst               REAL DEFAULT 0,
-                total             REAL DEFAULT 0
+                total             REAL DEFAULT 0,
+                portal_token      TEXT
             );
 
             CREATE TABLE IF NOT EXISTS eftpos_transactions (

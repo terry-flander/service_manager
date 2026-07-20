@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block title %}Status Email Triggers{% endblock %}
+{% block topbar_title %}Status Email Triggers{% endblock %}
+
+{% block content %}
+<div style="max-width:720px; margin:0 auto; padding:1rem;">
+
+  <div class="sd-card mb-3">
+    <div class="sd-card-header">Configured Triggers</div>
+    <div style="padding:0.5rem 1.25rem 1rem;">
+      <p style="font-size:0.82rem; color:var(--sd-muted); margin-bottom:1rem;">
+        When a job's status changes to the trigger status, the nominated email
+        template is sent automatically (after confirmation). Only active triggers fire.
+      </p>
+
+      {% if triggers %}
+      <div class="table-responsive-sd">
+      <table class="sd-table">
+        <thead>
+          <tr>
+            <th>Job Type</th>
+            <th>Trigger Status</th>
+            <th>Email Template</th>
+            <th style="width:80px; text-align:center;">Active</th>
+            <th style="width:80px;"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in triggers %}
+          <tr>
+            <td style="font-size:0.85rem;">{{ t['job_type']|title }}</td>
+            <td>
+              <span class="badge-status status-{{ t['trigger_status'] }}">
+                {{ t['trigger_status']|replace('_',' ') }}
+              </span>
+            </td>
+            <td style="font-size:0.85rem;">{{ t['template_name'] or '— none —' }}</td>
+            <td style="text-align:center;">
+              <form method="post" style="display:inline;">
+                <input type="hidden" name="action" value="toggle">
+                <input type="hidden" name="trigger_id" value="{{ t['id'] }}">
+                <button type="submit" class="btn-ghost"
+                        style="padding:0.2rem 0.5rem; font-size:0.78rem;">
+                  {% if t['active'] %}
+                  <i class="bi bi-toggle-on" style="color:#34d399; font-size:1.1rem;"></i>
+                  {% else %}
+                  <i class="bi bi-toggle-off" style="color:var(--sd-muted); font-size:1.1rem;"></i>
+                  {% endif %}
+                </button>
+              </form>
+            </td>
+            <td style="text-align:center;">
+              <form method="post" style="display:inline;"
+                    onsubmit="return confirm('Delete this trigger?')">
+                <input type="hidden" name="action" value="delete">
+                <input type="hidden" name="trigger_id" value="{{ t['id'] }}">
+                <button type="submit" class="btn-ghost"
+                        style="padding:0.2rem 0.5rem; font-size:0.78rem; color:#f87171;">
+                  <i class="bi bi-trash3"></i>
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}
+      <p style="color:var(--sd-muted); font-size:0.85rem;">No triggers configured yet.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="sd-card">
+    <div class="sd-card-header">Add Trigger</div>
+    <div style="padding:1.25rem;">
+      <form method="post">
+        <input type="hidden" name="action" value="add">
+        <div style="display:grid; grid-template-columns:1fr 1fr 2fr auto auto; gap:0.75rem; align-items:end;">
+          <div>
+            <label class="sd-label">Job Type *</label>
+            <select name="job_type" class="sd-input" required>
+              <option value="">—</option>
+              {% for jt in job_types %}
+              <option value="{{ jt }}">{{ jt|title }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="sd-label">Trigger Status *</label>
+            <select name="trigger_status" class="sd-input" required>
+              <option value="">—</option>
+              {% for s in statuses %}
+              <option value="{{ s }}">{{ s|replace('_',' ')|title }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="sd-label">Email Template</label>
+            <select name="template_id" class="sd-input">
+              <option value="">— none —</option>
+              {% for tmpl in templates %}
+              <option value="{{ tmpl['id'] }}">{{ tmpl['name'] }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="sd-label">Active</label>
+            <div style="padding:0.55rem 0;">
+              <input type="checkbox" name="active" value="1" checked
+                     style="width:1.1rem; height:1.1rem; cursor:pointer;">
+            </div>
+          </div>
+          <div>
+            <label class="sd-label">&nbsp;</label>
+            <button type="submit" class="btn-accent">
+              <i class="bi bi-plus-lg"></i> Add
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

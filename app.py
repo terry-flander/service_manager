@@ -36,6 +36,7 @@ def create_app():
     from routes.import_customers import import_customers_bp
     from routes.job_queries import job_queries_bp
     from routes.column_visibility import column_visibility_bp
+    from routes.portal import portal_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(jobs_bp)
@@ -50,6 +51,7 @@ def create_app():
     app.register_blueprint(import_customers_bp)
     app.register_blueprint(job_queries_bp)
     app.register_blueprint(column_visibility_bp)
+    app.register_blueprint(portal_bp)
 
     # ── Global auth gate ──────────────────────────────────────────────────────
     PUBLIC_ENDPOINTS = {'auth.login', 'auth.totp_verify', 'static'}

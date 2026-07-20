@@ -587,7 +587,7 @@ function silentSave(callback) {
           {{ job['status']|replace('_',' ') }}
         </span>
         <select name="status" class="sd-input" style="flex:1; min-width:120px;">
-          {% for s in ['pending','scheduled','in_progress','complete','invoiced','paid','lost'] %}
+          {% for s in ['pending','scheduled','in_progress','quote','complete','invoiced','paid','lost'] %}
           <option value="{{ s }}" {% if job['status'] == s %}selected{% endif %}>
             {{ s|replace('_',' ')|title }}
           </option>
@@ -831,6 +831,60 @@ function silentSave(callback) {
 <!-- Email Thread — full width below grid -->
 <div class="detail-email">
 </div><!-- /email thread wrapper -->
+
+<!-- Portal link -->
+{% if portal_url %}
+<div class="sd-card mb-3" style="margin-top:0.75rem;">
+  <div class="sd-card-header">
+    Customer Portal Link
+  </div>
+  <div style="padding:0.75rem 1.25rem; display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+    <input type="text" id="portal-url-input" value="{{ portal_url }}" readonly
+           class="sd-input" style="flex:1; font-size:0.78rem; font-family:monospace; min-width:200px;">
+    <button type="button" class="btn-ghost" style="white-space:nowrap;"
+            onclick="navigator.clipboard.writeText('{{ portal_url }}').then(function(){ this.textContent='Copied!'; setTimeout(function(){ document.querySelector('#portal-url-input+button').textContent='Copy'; },1500); }.bind(this))">
+      Copy
+    </button>
+    <button type="button" class="btn-ghost" style="white-space:nowrap; color:#f87171;"
+            onclick="regeneratePortalToken()">
+      <i class="bi bi-arrow-clockwise"></i> Regenerate
+    </button>
+  </div>
+</div>
+{% endif %}
+
+<!-- Status trigger confirmation modal -->
+{% if pending_trigger %}
+<div id="trigger-modal-overlay"
+     style="display:flex; position:fixed; inset:0; background:rgba(0,0,0,0.65);
+            z-index:3100; align-items:center; justify-content:center; padding:1rem;">
+  <div style="background:var(--sd-surface); border:1px solid var(--sd-border);
+              border-radius:10px; padding:1.5rem; width:min(420px,97vw);">
+    <div style="font-size:1rem; font-weight:600; margin-bottom:0.75rem;">
+      <i class="bi bi-envelope" style="color:var(--sd-accent); margin-right:0.4rem;"></i>
+      Send Automated Email?
+    </div>
+    <p style="font-size:0.85rem; color:var(--sd-muted); margin-bottom:1rem; line-height:1.5;">
+      The status changed to
+      <strong style="color:var(--sd-text);">{{ pending_trigger.trigger_status|replace('_',' ')|title }}</strong>.
+      Send <strong style="color:var(--sd-text);">{{ pending_trigger.template_name }}</strong>
+      to <strong style="color:var(--sd-text);">{{ pending_trigger.customer_name }}</strong>
+      at <code style="font-size:0.8rem;">{{ pending_trigger.to_email }}</code>?
+    </p>
+    <div id="trigger-modal-error" style="display:none; color:#f87171; font-size:0.82rem; margin-bottom:0.75rem;"></div>
+    <div style="display:flex; justify-content:flex-end; gap:0.5rem;">
+      <button type="button" class="btn-ghost" onclick="document.getElementById('trigger-modal-overlay').style.display='none'">
+        Skip
+      </button>
+      <button type="button" class="btn-accent" id="trigger-send-btn"
+              onclick="sendTriggerEmail({{ pending_trigger.job_id }}, {{ pending_trigger.template_id }})">
+        <i class="bi bi-send"></i> Send Email
+      </button>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% endblock %}
 
 
@@ -1546,6 +1600,44 @@ document.addEventListener('keydown', function (e) {
   var field = document.getElementById('return-to-field');
   if (field && val) field.value = val;
 })();
+
+function sendTriggerEmail(jobId, templateId) {
+  var btn = document.getElementById('trigger-send-btn');
+  var err = document.getElementById('trigger-modal-error');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Sending…';
+  fetch('/jobs/' + jobId + '/send-trigger-email', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({template_id: templateId}),
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (!res.ok) {
+        err.textContent = res.error || 'Send failed.';
+        err.style.display = 'block';
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-send"></i> Send Email';
+        return;
+      }
+      document.getElementById('trigger-modal-overlay').style.display = 'none';
+    })
+    .catch(function() {
+      err.textContent = 'Network error — please try again.';
+      err.style.display = 'block';
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-send"></i> Send Email';
+    });
+}
+
+function regeneratePortalToken() {
+  if (!confirm('Regenerate the portal link? The old link will stop working.')) return;
+  fetch('/jobs/{{ job["id"] }}/regenerate-portal-token', {method: 'POST'})
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (res.ok) window.location.reload();
+    });
+}
 
 </script>
 {% endblock %}
