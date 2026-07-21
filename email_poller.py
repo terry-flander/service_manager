@@ -566,6 +566,15 @@ def _poll_inbox_replies(imap, app):
     processed = 0
 
     for num in ids:
+        # Check the \Seen flag BEFORE fetching — fetching via IMAP can
+        # cause Gmail to auto-mark messages as read. We save the original
+        # state so we can restore it if no job match is found.
+        status_flags, flags_data = imap.fetch(num, '(FLAGS)')
+        was_already_seen = False
+        if status_flags == 'OK' and flags_data and flags_data[0]:
+            flags_str = flags_data[0].decode() if isinstance(flags_data[0], bytes) else str(flags_data[0])
+            was_already_seen = '\\Seen' in flags_str
+
         status, msg_data = imap.fetch(num, '(RFC822)')
         if status != 'OK':
             continue
@@ -626,13 +635,17 @@ def _poll_inbox_replies(imap, app):
                     processed += 1
                     log.info(f"INBOX reply logged for job {existing_job_id} "
                              f"from {from_email}")
-                    # Don't mark Seen in Gmail — user needs to see
-                    # unmatched INBOX emails as unread. Matched emails are
-                    # recorded in DB with read=1 (unread) for the in-app log.
-                    pass
                 else:
                     log.debug(f"INBOX: no job match for '{subject[:40]}' "
                               f"from {from_email} — leaving unread")
+                    # If fetching the message caused Gmail to auto-mark it as
+                    # Seen, and it wasn't already read before we started,
+                    # restore the unread flag so the user still sees it.
+                    if not was_already_seen:
+                        try:
+                            imap.store(num, '-FLAGS', '\\Seen')
+                        except Exception:
+                            pass
 
     return processed
 

@@ -730,7 +730,7 @@ def job_detail(job_id):
         # Check for status trigger — if the status changed to a trigger status,
         # return trigger info so the JS confirmation modal can fire.
         old_status = job['status']
-        if new_status != old_status and job.get('customer_email'):
+        if new_status != old_status and job['customer_email']:
             with get_db() as _tc:
                 trigger = _tc.execute("""
                     SELECT t.id, t.template_id, tmpl.name as template_name

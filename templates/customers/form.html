@@ -116,7 +116,7 @@
             {% if ct['notes'] %}<div style="color:var(--sd-muted); font-size:0.78rem; font-style:italic; margin-top:0.15rem;">{{ ct['notes'] }}</div>{% endif %}
           </div>
           <button type="button" class="btn-ghost" style="padding:0.2rem 0.5rem; font-size:0.75rem;"
-                  onclick="openContactForm({{ ct['id'] }}, {{ ct['name']|tojson }}, {{ (ct['phone'] or '')|tojson }}, {{ (ct['email'] or '')|tojson }}, {{ (ct['notes'] or '')|tojson }})">
+                  onclick="openContactForm({{ ct['id'] }})">
             <i class="bi bi-pencil"></i>
           </button>
           <button type="button" class="btn-ghost" style="padding:0.2rem 0.5rem; font-size:0.75rem; color:#f87171;"
@@ -251,10 +251,27 @@ var CUST_NAME = {{ (customer['name'] or '')|tojson }};
 
 // ── Contact CRUD ──────────────────────────────────────────────────────────────
 {% if is_edit %}
+var CONTACTS_MAP = {
+  {% for ct in contacts %}
+  {{ ct['id'] }}: {
+    name:  {{ (ct['name']  or '')|tojson }},
+    phone: {{ (ct['phone'] or '')|tojson }},
+    email: {{ (ct['email'] or '')|tojson }},
+    notes: {{ (ct['notes'] or '')|tojson }}
+  },
+  {% endfor %}
+};
 var CUSTOMER_ID = {{ customer['id'] }};
 var _ctEditId   = null;
 
-function openContactForm(id, name, phone, email, notes) {
+function openContactForm(id) {
+  var name = '', phone = '', email = '', notes = '';
+  if (id && CONTACTS_MAP[id]) {
+    name  = CONTACTS_MAP[id].name;
+    phone = CONTACTS_MAP[id].phone;
+    email = CONTACTS_MAP[id].email;
+    notes = CONTACTS_MAP[id].notes;
+  }
   _ctEditId = id || null;
   document.getElementById('contact-modal-title').textContent = id ? 'Edit Contact' : 'Add Contact';
   document.getElementById('ct-name').value  = name  || '';
