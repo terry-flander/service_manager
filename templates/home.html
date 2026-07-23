@@ -20,7 +20,7 @@
   <meta property="og:title"       content="Mobile Bike Repair Melbourne – The Flying Bike" />
   <meta property="og:description" content="Melbourne’s mobile bicycle workshop. On-site servicing and repairs at your home or office. No call-out fees. Book now!" />
   <meta property="og:url"         content="https://theflyingbike.com.au/" />
-  <meta property="og:image"       content="https://theflyingbike.com.au/wp-content/uploads/2019/10/IMG_0903.jpg" />
+  <meta property="og:image"       content="/static/img/site/IMG_0903.jpg" />
   <meta property="article:publisher"     content="https://www.facebook.com/The-Flying-Bike-393907894145951/" />
   <meta property="article:modified_time" content="2025-12-24T04:59:16+00:00" />
 
@@ -28,7 +28,7 @@
   <meta name="twitter:card"        content="summary_large_image" />
   <meta name="twitter:title"       content="Mobile Bike Repair Melbourne – The Flying Bike" />
   <meta name="twitter:description" content="Melbourne’s mobile bicycle workshop. On-site servicing and repairs at your home or office. No call-out fees." />
-  <meta name="twitter:image"       content="https://theflyingbike.com.au/wp-content/uploads/2019/10/IMG_0903.jpg" />
+  <meta name="twitter:image"       content="/static/img/site/IMG_0903.jpg" />
 
   <!-- Google Tag Manager -->
   <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
@@ -50,8 +50,8 @@
         "url": "https://theflyingbike.com.au/",
         "telephone": "+61403225135",
         "email": "info@theflyingbike.com.au",
-        "image": "https://theflyingbike.com.au/wp-content/uploads/2019/10/IMG_0903.jpg",
-        "logo": "https://theflyingbike.com.au/wp-content/uploads/2017/04/tfb_logo_60.png",
+        "image": "/static/img/site/IMG_0903.jpg",
+        "logo": "/static/img/site/tfb_logo_60.png",
         "priceRange": "$$",
         "currenciesAccepted": "AUD",
         "areaServed": {
@@ -1147,9 +1147,9 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         </div>
       </div>
       <div class="repairs-imgs">
-        <img src="https://theflyingbike.com.au/wp-content/uploads/2019/10/IMG_0903.jpg" alt="Bike mechanic at work" loading="lazy" />
-        <img src="https://theflyingbike.com.au/wp-content/uploads/2019/10/IMG_1398-960x720.jpg" alt="Mobile bike service" loading="lazy" />
-        <img src="https://theflyingbike.com.au/wp-content/uploads/2019/10/IMG_8445.jpg" alt="Bike repair tools" loading="lazy" />
+        <img src="/static/img/site/IMG_0903.jpg" alt="Bike mechanic at work" loading="lazy" />
+        <img src="/static/img/site/IMG_1398-960x720.jpg" alt="Mobile bike service" loading="lazy" />
+        <img src="/static/img/site/IMG_8445.jpg" alt="Bike repair tools" loading="lazy" />
       </div>
     </div>
   </div>
@@ -1178,9 +1178,9 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
         <a href="#section-contact" class="btn btn-primary" style="margin-top:1rem;">Get in Touch</a>
       </div>
       <div class="about-imgs">
-        <img src="https://theflyingbike.com.au/wp-content/uploads/2015/12/12188110_456830857853654_4704240768050235007_o-e1451007108595.jpg" alt="The Flying Bike team" loading="lazy" />
-        <img src="https://theflyingbike.com.au/wp-content/uploads/2016/03/IMG_4264.jpg" alt="On-site bike service" loading="lazy" />
-        <img src="https://theflyingbike.com.au/wp-content/uploads/2013/10/OSN4FUCU8C.jpg" alt="Professional bike tools" loading="lazy" />
+        <img src="/static/img/site/team.jpg" alt="The Flying Bike team" loading="lazy" />
+        <img src="/static/img/site/IMG_4264.jpg" alt="On-site bike service" loading="lazy" />
+        <img src="/static/img/site/OSN4FUCU8C.jpg" alt="Professional bike tools" loading="lazy" />
       </div>
     </div>
   </div>
@@ -1379,7 +1379,9 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
    * All mail routes through WP Mail SMTP / SendLayer via wp_mail().
    * ─────────────────────────────────────────────────────────────────────── */
 
-  const WP_AJAX_URL = 'https://theflyingbike.com.au/wp-admin/admin-ajax.php';
+  const API_URL = 'https://theflyingbike.com.au/api/v1/booking';
+  // TFB_API_SECRET must match TFB_API_SECRET in .env on the server
+  const TFB_SECRET = 'tfb-flyingbike-2026';
 
   const form       = document.getElementById('bookingForm');
   const successMsg = document.getElementById('formSuccess');
@@ -1403,18 +1405,14 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     const services = [...form.querySelectorAll('input[name="services"]:checked')]
       .map(cb => cb.value).join(', ') || 'None selected';
 
-    /* TFB_SECRET must match TFB_BOOKING_SECRET in tfb-booking-handler.php
-       (or the define() in wp-config.php if you overrode it there).         */
-    const TFB_SECRET = 'tfb-flyingbike-2026';
-
     const payload = {
-      _secret: TFB_SECRET,
-      name:    form.name.value.trim(),
-      email:   form.email.value.trim(),
-      phone:   form.phone.value.trim(),
-      suburb:  form.suburb.value.trim(),
+      _secret:  TFB_SECRET,
+      name:     form.name.value.trim(),
+      email:    form.email.value.trim(),
+      phone:    form.phone.value.trim(),
+      suburb:   form.suburb.value.trim(),
       services,
-      message: form.message.value.trim(),
+      message:  form.message.value.trim(),
     };
 
     const submitBtn = form.querySelector('.form-submit');
@@ -1424,10 +1422,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     errorMsg.style.display   = 'none';
 
     try {
-      /* action in URL so WordPress routes correctly without needing $_POST */
-      const url = WP_AJAX_URL + '?action=tfb_booking';
-
-      const res = await fetch(url, {
+      const res = await fetch(API_URL, {
         method:  'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1438,12 +1433,19 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
       const json = await res.json();
 
-      if (res.ok && json.success) {
+      if (res.ok && json.ok) {
+        // Show success and include portal link if returned
+        if (json.portal_url) {
+          successMsg.innerHTML =
+            '✅ <strong>Booking received!</strong> We'll be in touch to confirm your appointment. ' +
+            'You can <a href="' + json.portal_url + '" target="_blank" ' +
+            'style="color:inherit; font-weight:600;">track your job status here</a>.';
+        }
         successMsg.style.display = 'block';
         form.reset();
         successMsg.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       } else {
-        const msg = json?.data?.message || 'Submission failed. Please try again.';
+        const msg = json?.error || 'Submission failed. Please try again.';
         errorMsg.textContent = '⚠️ ' + msg;
         errorMsg.style.display = 'block';
         console.error('TFB server error:', json);

@@ -37,6 +37,7 @@ def create_app():
     from routes.job_queries import job_queries_bp
     from routes.column_visibility import column_visibility_bp
     from routes.portal import portal_bp
+    from routes.api import api_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(jobs_bp)
@@ -52,9 +53,12 @@ def create_app():
     app.register_blueprint(job_queries_bp)
     app.register_blueprint(column_visibility_bp)
     app.register_blueprint(portal_bp)
+    app.register_blueprint(api_bp)
 
     # ── Global auth gate ──────────────────────────────────────────────────────
-    PUBLIC_ENDPOINTS = {'auth.login', 'auth.totp_verify', 'static', 'portal.job_portal', 'portal.not_found'}
+    PUBLIC_ENDPOINTS = {'auth.login', 'auth.totp_verify', 'static',
+                        'portal.job_portal', 'portal.not_found',
+                        'api.create_booking'}
 
     @app.before_request
     def require_login():
