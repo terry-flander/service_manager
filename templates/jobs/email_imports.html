@@ -187,7 +187,7 @@
             <button onclick="openReplyModal({{ imp['job_id'] }}, CUST_EMAILS[{{ imp['id'] }}], CUST_NAMES[{{ imp['id'] }}])"
                     class="btn-ghost"
                     style="padding:0.2rem 0.6rem; font-size:0.75rem; white-space:nowrap;">
-              <i class="bi bi-reply"></i> Reply
+              <i class="bi bi-chat-left-text"></i> Thread
             </button>
             {% endif %}
             <button onclick="toggleRowReadUnread(this, {{ imp['id'] }}, {{ 1 if is_unread else 0 }}, {{ imp['job_id'] or 'null' }})"

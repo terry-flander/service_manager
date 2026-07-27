@@ -525,9 +525,13 @@
     <a href="{{ url_for('jobs.email_imports') }}" class="sidebar-link {% if request.endpoint == 'jobs.email_imports' %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-envelope-arrow-down"></i> Email
       {% if unread_email_count %}
-      <span style="margin-left:auto; background:var(--sd-accent); color:#fff;
+      <span id="nav-unread-badge" style="margin-left:auto; background:var(--sd-accent); color:#fff;
                    font-size:0.62rem; font-weight:700; border-radius:10px;
                    padding:0.1rem 0.4rem; line-height:1.4;">{{ unread_email_count }}</span>
+      {% else %}
+      <span id="nav-unread-badge" style="display:none; margin-left:auto; background:var(--sd-accent); color:#fff;
+                   font-size:0.62rem; font-weight:700; border-radius:10px;
+                   padding:0.1rem 0.4rem; line-height:1.4;"></span>
       {% endif %}
     </a>
     <div class="nav-section-label" style="margin-top:0.5rem;">Customers</div>
@@ -591,6 +595,9 @@
         </a>
         <a href="{{ url_for('jobs.status_triggers') }}" class="sidebar-link {% if request.endpoint == 'jobs.status_triggers' %}active{% endif %}" onclick="closeSidebar()" style="padding-left:2rem;">
           <i class="bi bi-envelope-check"></i> Status Triggers
+        </a>
+        <a href="{{ url_for('jobs.xero_settings') }}" class="sidebar-link {% if request.endpoint == 'jobs.xero_settings' %}active{% endif %}" onclick="closeSidebar()" style="padding-left:2rem;">
+          <i class="bi bi-receipt"></i> Xero Settings
         </a>
         <a href="{{ url_for('jobs.backup_db') }}" class="sidebar-link" onclick="closeSidebar()" style="padding-left:2rem;">
           <i class="bi bi-download"></i> Backup DB
@@ -2142,5 +2149,57 @@ function saveColumnSet() {
   </button>
 </nav>
 
+<!-- ── Background unread email poll ────────────────────────────────────────── -->
+<script>
+(function() {
+  var POLL_INTERVAL   = 60 * 1000;   // check every 60 seconds
+  var IDLE_THRESHOLD  = 2 * 60 * 1000;  // consider idle after 2 minutes no activity
+  var lastActivity    = Date.now();
+  var pollTimer       = null;
+
+  // Track user activity
+  ['mousemove', 'keydown', 'touchstart', 'scroll', 'click'].forEach(function(evt) {
+    document.addEventListener(evt, function() { lastActivity = Date.now(); }, { passive: true });
+  });
+
+  function isIdle() {
+    return (Date.now() - lastActivity) >= IDLE_THRESHOLD;
+  }
+
+  function updateBadge(count) {
+    var badge = document.getElementById('nav-unread-badge');
+    if (!badge) return;
+    if (count > 0) {
+      badge.textContent = count;
+      badge.style.display = '';
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+
+  function poll() {
+    // Don't poll if tab is hidden or user is active
+    if (document.hidden) return;
+    if (!isIdle()) return;
+
+    fetch('/api/unread-count', { credentials: 'same-origin' })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(data) {
+        if (data && typeof data.count === 'number') {
+          updateBadge(data.count);
+        }
+      })
+      .catch(function() { /* silent fail — network blip */ });
+  }
+
+  // Start polling
+  pollTimer = setInterval(poll, POLL_INTERVAL);
+
+  // Also poll when tab becomes visible again after being hidden
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden && isIdle()) poll();
+  });
+})();
+</script>
 </body>
 </html>

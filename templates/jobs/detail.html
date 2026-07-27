@@ -129,6 +129,22 @@ function silentSave(callback) {
       <i class="bi bi-trash3"></i>
     </button>
     <div style="flex:1;"></div>
+    <!-- Thread -->
+    {% if job['customer_email'] %}
+    <button type="button" class="btn-ghost"
+            style="padding:0.35rem 0.85rem; font-size:0.82rem; position:relative;"
+            onclick="openReplyModal({{ job['id'] }}, JOB_CUST_EMAIL, JOB_CUST_NAME)">
+      <i class="bi bi-chat-left-text"></i> Thread
+      {% if unread_emails %}
+      <span style="position:absolute; top:0; right:0; background:var(--sd-accent);
+                   color:#fff; font-size:0.6rem; font-weight:700; border-radius:50%;
+                   width:1.1rem; height:1.1rem; display:flex; align-items:center;
+                   justify-content:center; line-height:1; transform:translate(30%,-30%);">
+        {{ unread_emails }}
+      </span>
+      {% endif %}
+    </button>
+    {% endif %}
     <!-- Close -->
     <button type="button" id="btn-cancel" class="btn-ghost"
             style="padding:0.35rem 0.85rem; font-size:0.82rem;"
@@ -171,16 +187,17 @@ function silentSave(callback) {
         <a href="{{ url_for('invoice.xero_csv', job_id=job['id']) }}" class="detail-menu-item" onclick="closeDetailMenu()">
           <i class="bi bi-download"></i> Xero CSV
         </a>
-        <div style="border-top:1px solid var(--sd-border); margin:0.25rem 0;"></div>
+        {% if job['customer_email'] and job['status'] in ('invoiced', 'paid', 'complete') %}
         <button type="button" class="detail-menu-item"
-                onclick="closeDetailMenu(); openReplyModal({{ job['id'] }}, JOB_CUST_EMAIL, JOB_CUST_NAME)">
-          <i class="bi bi-reply"></i> Reply
-          {% if unread_emails %}
-          <span style="margin-left:auto; background:var(--sd-accent); color:#fff;
-                       font-size:0.65rem; font-weight:700; border-radius:10px;
-                       padding:0.1rem 0.45rem; line-height:1.4;">{{ unread_emails }}</span>
+                onclick="closeDetailMenu(); pushToXero({{ job['id'] }})">
+          <i class="bi bi-send-check"></i>
+          {% if job['xero_invoice_id'] %}Re-send to Xero{% else %}Send to Xero{% endif %}
+          {% if job['xero_status'] %}
+          <span style="margin-left:auto; font-size:0.7rem; color:var(--sd-muted);">{{ job['xero_status'] }}</span>
           {% endif %}
         </button>
+        {% endif %}
+        <div style="border-top:1px solid var(--sd-border); margin:0.25rem 0;"></div>
       </div>
     </div>
   </div>
@@ -278,6 +295,25 @@ function silentSave(callback) {
           {% endif %}
         </div>
       </div>
+
+
+      {% if portal_url %}
+      <div class="sd-card mb-3">
+        <div class="sd-card-header">Customer Portal Link</div>
+        <div style="padding:0.75rem 1.25rem; display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+          <input type="text" id="portal-url-input" value="{{ portal_url }}" readonly
+                 class="sd-input" style="flex:1; font-size:0.78rem; font-family:monospace; min-width:200px;">
+          <button type="button" class="btn-ghost" style="white-space:nowrap;"
+                  onclick="navigator.clipboard.writeText('{{ portal_url }}').then(function(){ this.textContent='Copied!'; setTimeout(function(){ document.querySelector('#portal-url-input+button').textContent='Copy'; },1500); }.bind(this))">
+            Copy
+          </button>
+          <button type="button" class="btn-ghost" style="white-space:nowrap; color:#f87171;"
+                  onclick="regeneratePortalToken()">
+            <i class="bi bi-arrow-clockwise"></i> Regenerate
+          </button>
+        </div>
+      </div>
+      {% endif %}
 
       <!-- Editable: Description + Address + Scheduling + Notes -->
       <div class="sd-card mb-3">
@@ -596,10 +632,23 @@ function silentSave(callback) {
       </div>
       <div style="padding:0.5rem 1.25rem; border-top:1px solid var(--sd-border);">
         <label class="sd-label" style="margin-bottom:0.35rem;">Invoice Number</label>
-        <input type="text" name="invoice_number" class="sd-input"
-               value="{{ job['invoice_number'] or '' }}"
-               placeholder="e.g. INV-0042"
-               style="max-width:200px;">
+        <div style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+          <input type="text" name="invoice_number" class="sd-input"
+                 value="{{ job['invoice_number'] or '' }}"
+                 placeholder="e.g. fb0042"
+                 style="max-width:140px;">
+          {% if job['xero_status'] %}
+          <span class="badge-status
+            {% if job['xero_status'] == 'paid' %}status-paid
+            {% elif job['xero_status'] == 'sent' %}status-invoiced
+            {% elif job['xero_status'] == 'voided' %}status-lost
+            {% else %}status-pending{% endif %}"
+            title="Xero status">
+            <i class="bi bi-receipt" style="margin-right:0.25rem;"></i>
+            Xero: {{ job['xero_status'] }}
+          </span>
+          {% endif %}
+        </div>
       </div>
       <div style="padding:0 1.25rem 0.6rem; border-top:1px solid var(--sd-border);">
         <div class="sd-label" style="margin-bottom:0.5rem;">Quick Pay</div>
@@ -832,26 +881,39 @@ function silentSave(callback) {
 <div class="detail-email">
 </div><!-- /email thread wrapper -->
 
-<!-- Portal link -->
-{% if portal_url %}
-<div class="sd-card mb-3" style="margin-top:0.75rem;">
-  <div class="sd-card-header">
-    Customer Portal Link
-  </div>
-  <div style="padding:0.75rem 1.25rem; display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-    <input type="text" id="portal-url-input" value="{{ portal_url }}" readonly
-           class="sd-input" style="flex:1; font-size:0.78rem; font-family:monospace; min-width:200px;">
-    <button type="button" class="btn-ghost" style="white-space:nowrap;"
-            onclick="navigator.clipboard.writeText('{{ portal_url }}').then(function(){ this.textContent='Copied!'; setTimeout(function(){ document.querySelector('#portal-url-input+button').textContent='Copy'; },1500); }.bind(this))">
-      Copy
-    </button>
-    <button type="button" class="btn-ghost" style="white-space:nowrap; color:#f87171;"
-            onclick="regeneratePortalToken()">
-      <i class="bi bi-arrow-clockwise"></i> Regenerate
-    </button>
+<!-- Xero push confirmation modal -->
+<div id="xero-modal-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65);
+            z-index:3100; align-items:center; justify-content:center; padding:1rem;">
+  <div style="background:var(--sd-surface); border:1px solid var(--sd-border);
+              border-radius:10px; padding:1.5rem; width:min(420px,97vw);">
+    <div style="font-size:1rem; font-weight:600; margin-bottom:0.75rem;">
+      <i class="bi bi-receipt" style="color:var(--sd-accent); margin-right:0.4rem;"></i>
+      Send Invoice to Xero?
+    </div>
+    <p style="font-size:0.85rem; color:var(--sd-muted); margin-bottom:0.25rem; line-height:1.5;">
+      This will:
+    </p>
+    <ul style="font-size:0.85rem; color:var(--sd-muted); margin:0 0 1rem 1.25rem; line-height:1.8;">
+      <li>Assign invoice number <strong id="xero-modal-inv-num" style="color:var(--sd-text);"></strong> (if not already set)</li>
+      <li>Create an authorised invoice in Xero</li>
+      <li>Email the invoice to <strong id="xero-modal-email" style="color:var(--sd-text);"></strong></li>
+    </ul>
+    <div id="xero-modal-error" style="display:none; color:#f87171; font-size:0.82rem; margin-bottom:0.75rem;"></div>
+    <div style="display:flex; justify-content:flex-end; gap:0.5rem;">
+      <button type="button" class="btn-ghost"
+              onclick="document.getElementById('xero-modal-overlay').style.display='none'">
+        Cancel
+      </button>
+      <button type="button" class="btn-accent" id="xero-modal-send-btn"
+              onclick="confirmPushToXero()">
+        <i class="bi bi-send-check"></i> Send to Xero
+      </button>
+    </div>
   </div>
 </div>
-{% endif %}
+
+
 
 <!-- Status trigger confirmation modal -->
 {% if pending_trigger %}
@@ -1627,6 +1689,48 @@ function sendTriggerEmail(jobId, templateId) {
       err.style.display = 'block';
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-send"></i> Send Email';
+    });
+}
+
+var _xeroJobId = null;
+
+function pushToXero(jobId) {
+  _xeroJobId = jobId;
+  // Pre-fill modal with current job data
+  var invNum = document.querySelector('input[name="invoice_number"]');
+  var nextPreview = invNum && invNum.value ? invNum.value : '(auto-assigned)';
+  document.getElementById('xero-modal-inv-num').textContent = nextPreview;
+  document.getElementById('xero-modal-email').textContent = JOB_CUST_EMAIL || '(no email)';
+  document.getElementById('xero-modal-error').style.display = 'none';
+  document.getElementById('xero-modal-overlay').style.display = 'flex';
+}
+
+function confirmPushToXero() {
+  var btn = document.getElementById('xero-modal-send-btn');
+  var err = document.getElementById('xero-modal-error');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Sending…';
+  err.style.display = 'none';
+
+  fetch('/jobs/' + _xeroJobId + '/push-to-xero', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-send-check"></i> Send to Xero';
+      if (!res.ok) {
+        err.textContent = res.error || 'Xero push failed.';
+        err.style.display = 'block';
+        return;
+      }
+      document.getElementById('xero-modal-overlay').style.display = 'none';
+      // Reload to show updated invoice number and xero_status
+      window.location.reload();
+    })
+    .catch(function() {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-send-check"></i> Send to Xero';
+      err.textContent = 'Network error — please try again.';
+      err.style.display = 'block';
     });
 }
 

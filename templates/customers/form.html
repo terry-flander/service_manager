@@ -25,7 +25,7 @@
 <div class="row {% if is_edit %}g-3{% else %}justify-content-center{% endif %}">
 
   <!-- Form column -->
-  <div class="{% if is_edit %}col-lg-4{% else %}col-lg-5{% endif %}">
+  <div class="{% if is_edit %}col-lg-6{% else %}col-lg-5{% endif %}">
     <div class="sd-card">
       <div class="sd-card-header">Customer Details</div>
       <div style="padding:1.5rem;">
@@ -94,7 +94,7 @@
 
   <!-- Contacts section (edit only) -->
   {% if is_edit %}
-  <div class="col-lg-8">
+  <div class="col-lg-6">
     <div class="sd-card mb-3">
       <div class="sd-card-header">
         Contacts
@@ -170,7 +170,7 @@
 
   <!-- Job history column (edit only) -->
   {% if is_edit and jobs is defined %}
-  <div class="col-lg-8">
+  <div class="col-12">
     <div class="sd-card">
       <div class="sd-card-header">
         Job History
@@ -187,7 +187,7 @@
             <th>Scheduled</th>
             <th>Status</th>
             <th style="text-align:right;">Total</th>
-            <th style="width:70px;"></th>
+            <th style="width:90px;"></th>
           </tr>
         </thead>
         <tbody>
@@ -218,7 +218,7 @@
               <button onclick="openReplyModal({{ job['id'] }}, CUST_EMAIL_MAP[{{ job['id'] }}], CUST_NAME)"
                       class="btn-ghost"
                       style="padding:0.2rem 0.5rem; font-size:0.75rem; white-space:nowrap;">
-                <i class="bi bi-reply"></i>
+                <i class="bi bi-chat-left-text"></i> Thread
               </button>
               {% endif %}
             </td>

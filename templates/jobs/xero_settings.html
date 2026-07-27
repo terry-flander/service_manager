@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% block title %}Xero Settings{% endblock %}
+{% block topbar_title %}Xero Invoice Settings{% endblock %}
+
+{% block content %}
+<div style="max-width:480px; margin:0 auto; padding:1rem;">
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in messages %}
+  <div class="alert alert-{{ cat }} mb-3" style="padding:0.75rem 1rem; border-radius:6px;
+       background:rgba(16,185,129,0.12); border:1px solid rgba(16,185,129,0.3);
+       color:#34d399; font-size:0.85rem; margin-bottom:1rem;">
+    {{ msg }}
+  </div>
+  {% endfor %}
+  {% endwith %}
+
+  <div class="sd-card mb-3">
+    <div class="sd-card-header">Invoice Number Sequence</div>
+    <div style="padding:1.25rem;">
+      <p style="font-size:0.82rem; color:var(--sd-muted); margin-bottom:1rem; line-height:1.5;">
+        Invoice numbers are assigned automatically when a job is pushed to Xero.
+        Format: <code style="font-size:0.82rem;">prefix + 4-digit sequence</code>
+        (e.g. <strong>fb0042</strong>).
+      </p>
+      <form method="post">
+        <div style="margin-bottom:0.75rem;">
+          <label class="sd-label">Prefix</label>
+          <input type="text" name="prefix" class="sd-input"
+                 value="{{ prefix }}" maxlength="10"
+                 style="text-transform:lowercase;"
+                 placeholder="fb">
+          <div style="font-size:0.75rem; color:var(--sd-muted); margin-top:0.3rem;">
+            Lowercase letters only. Default: <code>fb</code>
+          </div>
+        </div>
+        <div style="margin-bottom:1rem;">
+          <label class="sd-label">Next sequence number</label>
+          <input type="number" name="next_num" class="sd-input"
+                 value="{{ next_num }}" min="1" step="1">
+          <div style="font-size:0.75rem; color:var(--sd-muted); margin-top:0.3rem;">
+            Next invoice will be: <strong>{{ preview }}</strong>
+          </div>
+        </div>
+        <button type="submit" class="btn-accent">Save Settings</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="sd-card mb-3">
+    <div class="sd-card-header">Check Xero Payments</div>
+    <div style="padding:1.25rem;">
+      <p style="font-size:0.82rem; color:var(--sd-muted); margin-bottom:1rem; line-height:1.5;">
+        Check all invoiced jobs against Xero and mark any that have been paid
+        in Xero as <strong>paid</strong> in ServiceDesk.
+        Run this after completing a bank reconciliation in Xero.
+      </p>
+      <div id="xero-check-result" style="display:none; font-size:0.85rem;
+           margin-bottom:0.75rem; padding:0.5rem 0.75rem; border-radius:6px;
+           background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.3);
+           color:#34d399;"></div>
+      <div id="xero-check-error" style="display:none; font-size:0.85rem;
+           margin-bottom:0.75rem; padding:0.5rem 0.75rem; border-radius:6px;
+           background:rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.3);
+           color:#f87171;"></div>
+      <button type="button" class="btn-accent" id="xero-check-btn"
+              onclick="checkXeroPayments()">
+        <i class="bi bi-arrow-repeat"></i> Check Xero Payments Now
+      </button>
+    </div>
+  </div>
+
+  <div class="sd-card">
+    <div class="sd-card-header">Setup Notes</div>
+    <div style="padding:1.25rem; font-size:0.82rem; color:var(--sd-muted); line-height:1.7;">
+      <p>Required in <code>.env</code>:</p>
+      <ul style="margin-left:1rem; margin-top:0.4rem;">
+        <li><code>XERO_CLIENT_ID</code></li>
+        <li><code>XERO_CLIENT_SECRET</code></li>
+        <li><code>XERO_REFRESH_TOKEN</code></li>
+        <li><code>XERO_TENANT_ID</code></li>
+      </ul>
+      <p style="margin-top:0.75rem;">
+        Run <code>python3 xero_oauth_setup.py</code> locally to generate
+        the refresh token and tenant ID.
+      </p>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function checkXeroPayments() {
+  var btn    = document.getElementById('xero-check-btn');
+  var result = document.getElementById('xero-check-result');
+  var err    = document.getElementById('xero-check-error');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Checking…';
+  result.style.display = 'none';
+  err.style.display    = 'none';
+
+  fetch('/xero/check-payments', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Check Xero Payments Now';
+      if (!res.ok) {
+        err.textContent = 'Error: ' + (res.error || 'Unknown error');
+        err.style.display = 'block';
+        return;
+      }
+      var msg = 'Checked ' + res.checked + ' invoice(s). ';
+      if (res.paid > 0) {
+        msg += res.paid + ' marked as paid.';
+      } else {
+        msg += 'No new payments found.';
+      }
+      result.textContent = msg;
+      result.style.display = 'block';
+    })
+    .catch(function() {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Check Xero Payments Now';
+      err.textContent = 'Network error — please try again.';
+      err.style.display = 'block';
+    });
+}
+</script>
+{% endblock %}

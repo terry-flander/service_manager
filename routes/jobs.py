@@ -692,6 +692,18 @@ def job_detail(job_id):
             # the figures regardless of job type.
             recalc_job_totals(wconn, job_id)
 
+            # ── Auto-add region date if scheduled_date set and not present ──
+            if sched_date and region_id and jt == 'booking':
+                existing = wconn.execute(
+                    "SELECT id FROM region_dates WHERE region_id=? AND date=?",
+                    (region_id, sched_date)).fetchone()
+                if not existing:
+                    wconn.execute(
+                        "INSERT INTO region_dates (region_id, date, status) VALUES (?, ?, 'open')",
+                        (region_id, sched_date))
+                    wconn.commit()
+                    log.info(f"Auto-added region date {sched_date} for region {region_id}")
+
             # ── Google Calendar sync — booking/rental only ──────────────────
             if jt in ('booking', 'rental'):
                 gcal_enabled_row = wconn.execute(
@@ -1049,7 +1061,16 @@ def delete_job(job_id):
     return redirect(url_for('jobs.index'))
 
 
-@jobs_bp.route('/jobs/<int:job_id>/return-url')
+@jobs_bp.route('/api/unread-count')
+def unread_count():
+    """Return current unread email count — used by the background poll."""
+    with get_db() as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM email_imports WHERE read=1 OR read IS NULL"
+        ).fetchone()[0]
+    return jsonify({'count': count})
+
+
 @jobs_bp.route('/jobs/<int:job_id>/send-trigger-email', methods=['POST'])
 def send_trigger_email(job_id):
     """Send an automated trigger email after user confirmation."""
@@ -1607,6 +1628,156 @@ def calendar_settings():
     return render_template('jobs/calendar_settings.html',
                            gcal_enabled=gcal_enabled,
                            calendar_id=calendar_id)
+
+
+def _next_invoice_number(conn):
+    """Allocate the next invoice number using the configured prefix and sequence.
+    Atomically increments the sequence in the settings table.
+    Returns a string like 'fb0042'."""
+    row = conn.execute(
+        "SELECT value FROM settings WHERE key='xero_invoice_prefix'").fetchone()
+    prefix = (row['value'] if row else 'fb').strip().lower()
+
+    row = conn.execute(
+        "SELECT value FROM settings WHERE key='xero_invoice_next'").fetchone()
+    next_num = int(row['value']) if row else 1
+
+    invoice_number = f"{prefix}{next_num:04d}"
+
+    conn.execute(
+        "INSERT INTO settings (key, value) VALUES ('xero_invoice_next', ?) "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+        (str(next_num + 1),))
+    conn.commit()
+    return invoice_number
+
+
+@jobs_bp.route('/settings/xero', methods=['GET', 'POST'])
+def xero_settings():
+    """Admin page to configure Xero invoice number prefix and sequence."""
+    with get_db() as conn:
+        if request.method == 'POST':
+            prefix   = request.form.get('prefix', 'fb').strip().lower() or 'fb'
+            next_num = request.form.get('next_num', '1').strip()
+            try:
+                next_num = str(max(1, int(next_num)))
+            except ValueError:
+                next_num = '1'
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES ('xero_invoice_prefix', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (prefix,))
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES ('xero_invoice_next', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (next_num,))
+            conn.commit()
+            flash('Xero settings saved.', 'success')
+            return redirect(url_for('jobs.xero_settings'))
+
+        prefix_row   = conn.execute(
+            "SELECT value FROM settings WHERE key='xero_invoice_prefix'").fetchone()
+        next_row     = conn.execute(
+            "SELECT value FROM settings WHERE key='xero_invoice_next'").fetchone()
+        prefix   = prefix_row['value'] if prefix_row else 'fb'
+        next_num = next_row['value']   if next_row   else '1'
+
+        # Preview of next invoice number
+        try:
+            preview = f"{prefix}{int(next_num):04d}"
+        except ValueError:
+            preview = f"{prefix}0001"
+
+    return render_template('jobs/xero_settings.html',
+                           prefix=prefix, next_num=next_num, preview=preview)
+
+
+@jobs_bp.route('/jobs/<int:job_id>/push-to-xero', methods=['POST'])
+def push_to_xero(job_id):
+    """Push a job invoice to Xero. Assigns invoice number if not set."""
+    with get_db() as conn:
+        job = conn.execute(
+            "SELECT j.*, r.name as region_name FROM jobs j "
+            "JOIN regions r ON r.id=j.region_id WHERE j.id=?",
+            (job_id,)).fetchone()
+        if not job:
+            return jsonify({'ok': False, 'error': 'Job not found'}), 404
+        if not job['customer_email']:
+            return jsonify({'ok': False, 'error': 'No customer email on file'}), 400
+
+        job_parts = conn.execute(
+            "SELECT * FROM job_parts WHERE job_id=? ORDER BY id",
+            (job_id,)).fetchall()
+
+        # Assign invoice number if not already set
+        invoice_number = job['invoice_number']
+        if not invoice_number:
+            invoice_number = _next_invoice_number(conn)
+            conn.execute(
+                "UPDATE jobs SET invoice_number=? WHERE id=?",
+                (invoice_number, job_id))
+            conn.commit()
+
+    try:
+        from xero_sync import push_invoice
+        xero_id = push_invoice(dict(job), [dict(p) for p in job_parts], invoice_number)
+
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE jobs SET xero_invoice_id=?, xero_status='sent' WHERE id=?",
+                (xero_id, job_id))
+            conn.commit()
+
+        return jsonify({
+            'ok':             True,
+            'invoice_number': invoice_number,
+            'xero_id':        xero_id,
+        })
+
+    except Exception as e:
+        log.error(f"Xero push failed for job {job_id}: {e}", exc_info=True)
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@jobs_bp.route('/xero/check-payments', methods=['POST'])
+def xero_check_payments():
+    """Check all jobs with xero_status='sent' against Xero payment status."""
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT id, invoice_number, xero_invoice_id
+            FROM jobs
+            WHERE xero_status = 'sent'
+              AND invoice_number IS NOT NULL
+        """).fetchall()
+
+    if not rows:
+        return jsonify({'ok': True, 'checked': 0, 'paid': 0})
+
+    invoice_numbers = [r['invoice_number'] for r in rows]
+    id_map = {r['invoice_number']: r['id'] for r in rows}
+
+    try:
+        from xero_sync import check_paid_invoices
+        statuses = check_paid_invoices(invoice_numbers)
+    except Exception as e:
+        log.error(f"Xero payment check failed: {e}", exc_info=True)
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+    paid_count = 0
+    with get_db() as conn:
+        for inv_num, xero_status in statuses.items():
+            job_id = id_map.get(inv_num)
+            if not job_id:
+                continue
+            db_status = 'paid' if xero_status == 'PAID' else \
+                        'voided' if xero_status == 'VOIDED' else 'sent'
+            conn.execute(
+                "UPDATE jobs SET xero_status=? WHERE id=?",
+                (db_status, job_id))
+            if xero_status == 'PAID':
+                paid_count += 1
+                log.info(f"Xero: job {job_id} ({inv_num}) marked paid")
+        conn.commit()
+
+    return jsonify({'ok': True, 'checked': len(rows), 'paid': paid_count})
 
 
 @jobs_bp.route('/settings/status-triggers', methods=['GET', 'POST'])

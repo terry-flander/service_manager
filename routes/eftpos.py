@@ -96,12 +96,19 @@ def import_csv():
         rows, skipped, errors = _parse_csv(f)
 
         with get_db() as conn:
-            imported, dupes = 0, 0
+            imported, dupes, ref_date_conflicts = 0, 0, []
             for r in rows:
                 existing = conn.execute(
-                    "SELECT id FROM eftpos_transactions WHERE reference_number=?",
+                    "SELECT id, transaction_date FROM eftpos_transactions WHERE reference_number=?",
                     (r['reference_number'],)).fetchone()
                 if existing:
+                    if existing['transaction_date'] != r['transaction_date']:
+                        # Same reference number but different date — likely a
+                        # terminal reference number reset. Flag as a conflict.
+                        ref_date_conflicts.append(
+                            f"Ref {r['reference_number']}: "
+                            f"new date {r['transaction_date']} conflicts with "
+                            f"existing date {existing['transaction_date']} — skipped, edit CSV to re-import")
                     dupes += 1
                     continue
                 conn.execute("""
@@ -123,6 +130,9 @@ def import_csv():
         if skipped:  parts.append(f"{skipped} declined skipped")
         if errors:   parts.append(f"{len(errors)} error{'s' if len(errors)!=1 else ''}")
         flash(', '.join(parts) + '.', 'success' if not errors else 'danger')
+        if ref_date_conflicts:
+            for msg in ref_date_conflicts:
+                flash(f"⚠️ Reference number conflict: {msg}", 'warning')
         return redirect(url_for('eftpos.reconcile'))
 
     return render_template('eftpos/import.html')
