@@ -1,0 +1,1316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pista Bikes – Bicycle Workshop Caulfield Melbourne</title>
+  <meta name="description" content="Pista Bikes is a full-service bicycle workshop at 255 Hawthorn Road, Caulfield. Servicing, repairs, parts and cycling gear. Open daily except Saturday." />
+
+  <!-- Canonical & Robots -->
+  <link rel="canonical" href="https://pistabikes.com.au/" />
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+
+  <!-- Open Graph -->
+  <meta property="og:type"        content="website" />
+  <meta property="og:locale"      content="en_AU" />
+  <meta property="og:site_name"   content="Pista Bikes" />
+  <meta property="og:title"       content="Pista Bikes – Bicycle Workshop Caulfield" />
+  <meta property="og:description" content="Full-service bike workshop at 255 Hawthorn Road, Caulfield. Servicing, repairs, parts and gear. Open daily except Saturday." />
+  <meta property="og:url"         content="https://pistabikes.com.au/" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card"        content="summary_large_image" />
+  <meta name="twitter:title"       content="Pista Bikes – Bicycle Workshop Caulfield" />
+  <meta name="twitter:description" content="Full-service bike workshop at 255 Hawthorn Road, Caulfield. Open daily except Saturday." />
+
+  <!-- LocalBusiness Schema -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "LocalBusiness",
+        "@id": "https://pistabikes.com.au/#business",
+        "name": "Pista Bikes",
+        "description": "Full-service bicycle workshop providing servicing, repairs, parts and cycling gear at 255 Hawthorn Road, Caulfield.",
+        "url": "https://pistabikes.com.au/",
+        "telephone": "",
+        "email": "info@theflyingbike.com.au",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "255 Hawthorn Road",
+          "addressLocality": "Caulfield",
+          "addressRegion": "VIC",
+          "postalCode": "3162",
+          "addressCountry": "AU"
+        },
+        "openingHoursSpecification": [
+          { "@type": "OpeningHoursSpecification", "dayOfWeek": ["Tuesday","Wednesday","Thursday","Friday"], "opens": "11:00", "closes": "17:00" },
+          { "@type": "OpeningHoursSpecification", "dayOfWeek": ["Sunday"], "opens": "10:00", "closes": "16:00" }
+        ],
+        "areaServed": { "@type": "City", "name": "Melbourne", "addressCountry": "AU" },
+        "priceRange": "$$",
+        "currenciesAccepted": "AUD"
+      },
+      {
+        "@type": "WebPage",
+        "@id": "https://pistabikes.com.au/#webpage",
+        "url": "https://pistabikes.com.au/",
+        "name": "Pista Bikes – Bicycle Workshop Caulfield",
+        "isPartOf": { "@id": "https://pistabikes.com.au/#business" },
+        "inLanguage": "en-AU"
+      }
+    ]
+  }
+  </script>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Lora:ital,wght@0,400;0,600;1,400&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ── TOKENS ─────────────────────────────────────────────── */
+    :root {
+      --bg:          #0d1a2e;
+      --surface:     #122038;
+      --panel:       #182842;
+      --border:      #243d5e;
+      --blue:        #1a5fa8;
+      --blue-light:  #2a7fd4;
+      --copper:      #c87941;
+      --copper-dark: #a05e28;
+      --text:        #ffffff;
+      --muted:       #ffffff;
+      --white:       #ffffff;
+      --input-bg:    #f4f7fb;
+      --input-text:  #0d1a2e;
+      --input-border:#2a7fd4;
+      --r:           6px;
+    }
+
+    /* ── RESET ──────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Barlow', sans-serif;
+      font-size: 18px;
+      line-height: 1.8;
+      overflow-x: hidden;
+    }
+    img { display: block; max-width: 100%; }
+    a { color: inherit; text-decoration: none; }
+
+    /* ── UTILITY ────────────────────────────────────────────── */
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 1.5rem; }
+    .section    { padding: 6rem 0; }
+    .label {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 700;
+      font-size: .75rem;
+      letter-spacing: .22em;
+      text-transform: uppercase;
+      color: var(--copper);
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      margin-bottom: 1rem;
+    }
+    .label::before, .label::after {
+      content: '';
+      height: 1px;
+      flex: 0 0 24px;
+      background: var(--copper);
+      opacity: .5;
+    }
+    h1, h2, h3 { font-family: 'Barlow Condensed', sans-serif; line-height: 1.05; }
+
+    /* ── NAVBAR ─────────────────────────────────────────────── */
+    #navbar {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      padding: 1.1rem 0;
+      transition: background .3s, box-shadow .3s;
+    }
+    #navbar.scrolled {
+      background: rgba(13,26,46,.96);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 2px 20px rgba(0,0,0,.5);
+    }
+    #navbar .inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .logo {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 900;
+      font-size: 1.6rem;
+      letter-spacing: .05em;
+      color: var(--white);
+      display: flex;
+      align-items: center;
+      gap: .4rem;
+      text-transform: uppercase;
+    }
+    .logo span { color: var(--copper); }
+    nav { display: flex; gap: 2rem; }
+    nav a {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 600;
+      font-size: 1rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--white);
+      transition: color .2s;
+    }
+    nav a:hover { color: var(--copper); }
+
+    .btn {
+      display: inline-block;
+      padding: .75rem 1.75rem;
+      border-radius: var(--r);
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 700;
+      font-size: 1.05rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all .2s;
+      border: 2px solid transparent;
+    }
+    .btn-primary {
+      background: var(--copper);
+      color: #fff;
+      border-color: var(--copper);
+    }
+    .btn-primary:hover {
+      background: var(--copper-dark);
+      border-color: var(--copper-dark);
+      transform: translateY(-1px);
+    }
+    .btn-outline {
+      background: transparent;
+      color: var(--white);
+      border-color: rgba(255,255,255,.4);
+    }
+    .btn-outline:hover {
+      border-color: var(--white);
+      background: rgba(255,255,255,.08);
+    }
+
+    /* ── HAMBURGER ──────────────────────────────────────────── */
+    .hamburger {
+      display: none;
+      flex-direction: column;
+      gap: 5px;
+      cursor: pointer;
+      padding: 4px;
+    }
+    .hamburger span {
+      display: block; width: 24px; height: 2px;
+      background: var(--white); border-radius: 2px; transition: all .3s;
+    }
+    .nav-mobile {
+      display: none;
+      position: fixed;
+      top: 64px; left: 0; right: 0;
+      background: rgba(13,26,46,.98);
+      padding: 1.5rem;
+      flex-direction: column;
+      gap: 1.25rem;
+      z-index: 99;
+    }
+    .nav-mobile.open { display: flex; }
+    .nav-mobile a {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 700; font-size: 1.25rem;
+      letter-spacing: .08em; text-transform: uppercase;
+      color: var(--white);
+      border-bottom: 1px solid var(--border);
+      padding-bottom: .75rem;
+    }
+    .nav-mobile a:hover { color: var(--copper); }
+
+    /* ── HERO ────────────────────────────────────────────────── */
+    #top {
+      min-height: 100svh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+      padding: 8rem 0 5rem;
+    }
+    .hero-bg {
+      position: absolute;
+      inset: 0;
+      background-image: url('/static/img/site/WindowAtNight.jpg');
+      background-size: cover;
+      background-position: center 30%;
+    }
+    /* Dark overlay so text remains legible over the photo */
+    .hero-bg::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(to bottom,
+          rgba(13,26,46,.72) 0%,
+          rgba(13,26,46,.55) 40%,
+          rgba(13,26,46,.75) 75%,
+          rgba(13,26,46,1)   100%
+        ),
+        radial-gradient(ellipse at center, transparent 35%, rgba(5,10,20,.55) 100%);
+    }
+    /* Diagonal rule — the signature element: a raw steel-workshop angle */
+    .hero-rule {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .hero-rule::before {
+      content: '';
+      position: absolute;
+      top: -10%;
+      right: -5%;
+      width: 55%;
+      height: 130%;
+      background: linear-gradient(135deg, rgba(26,95,168,.12) 0%, rgba(42,127,212,.06) 50%, transparent 100%);
+      transform: skewX(-8deg);
+      border-left: 1px solid rgba(42,127,212,.2);
+    }
+    .hero-content { position: relative; z-index: 2; }
+    .hero-eyebrow {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 700; font-size: .75rem;
+      letter-spacing: .25em; text-transform: uppercase;
+      color: var(--copper); margin-bottom: 1.2rem;
+      opacity: 0; animation: fadeUp .6s .2s forwards;
+    }
+    h1.hero-title {
+      font-size: clamp(3.5rem, 8vw, 7rem);
+      font-weight: 900; color: var(--white);
+      max-width: 16ch; margin-bottom: 1.5rem;
+      text-shadow: 0 2px 20px rgba(0,0,0,.4);
+      opacity: 0; animation: fadeUp .7s .35s forwards;
+    }
+    h1.hero-title em { font-style: normal; color: var(--copper); }
+    .hero-sub {
+      font-size: 1.15rem; color: var(--white);
+      max-width: 46ch; margin-bottom: 2.5rem;
+      font-family: 'Lora', serif; font-style: italic;
+      text-shadow: 0 1px 8px rgba(0,0,0,.5);
+      opacity: 0; animation: fadeUp .7s .5s forwards;
+    }
+    .hero-ctas {
+      display: flex; gap: 1rem; flex-wrap: wrap;
+      opacity: 0; animation: fadeUp .7s .65s forwards;
+    }
+    .hero-badges {
+      display: flex; gap: 2.5rem; margin-top: 4rem;
+      flex-wrap: wrap;
+      opacity: 0; animation: fadeUp .7s .8s forwards;
+    }
+    .badge { display: flex; flex-direction: column; gap: .15rem; }
+    .badge-val {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 800; font-size: 1.9rem;
+      color: var(--white); line-height: 1;
+    }
+    .badge-val span { color: var(--copper); }
+    .badge-label {
+      font-size: .8rem; color: var(--white);
+      text-transform: uppercase; letter-spacing: .12em;
+    }
+
+    /* Hours strip */
+    .hours-strip {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      background: rgba(26,95,168,.25);
+      border-top: 1px solid rgba(42,127,212,.3);
+      backdrop-filter: blur(6px);
+      z-index: 2;
+      padding: .9rem 0;
+    }
+    .hours-inner {
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+      flex-wrap: wrap;
+    }
+    .hours-label {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 700; font-size: .7rem;
+      letter-spacing: .18em; text-transform: uppercase;
+      color: var(--copper);
+    }
+    .hours-days {
+      display: flex; gap: 1rem; flex-wrap: wrap;
+    }
+    .hours-day {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: .95rem; font-weight: 600;
+      color: var(--white);
+    }
+    .hours-day.closed { color: rgba(255,255,255,.35); text-decoration: line-through; }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── SHOP PHOTOS ─────────────────────────────────────────── */
+    .photos-section {
+      padding: 4rem 0;
+      background: var(--surface);
+    }
+    .photos-grid {
+      display: grid;
+      grid-template-columns: 1.6fr 1fr 1fr;
+      grid-template-rows: 320px;
+      gap: 1rem;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .photo-slot {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--r);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: .75rem;
+      color: rgba(255,255,255,.4);
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: .85rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      text-align: center;
+      padding: 1.5rem;
+      overflow: hidden;
+      position: relative;
+    }
+    .photo-slot img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0;
+      transition: opacity .4s;
+    }
+    .photo-slot img.loaded { opacity: 1; }
+    .photo-slot-icon { font-size: 2rem; }
+    .photo-slot-label { position: relative; z-index: 1; }
+
+    /* ── SERVICES ────────────────────────────────────────────── */
+    #section-services { background: var(--bg); }
+    .section-header { text-align: center; margin-bottom: 3.5rem; }
+    .section-header h2 {
+      font-size: clamp(2.5rem, 5vw, 4rem);
+      font-weight: 900; color: var(--white);
+    }
+    .section-header p {
+      max-width: 55ch; margin: 1rem auto 0;
+      color: var(--white);
+      font-family: 'Lora', serif; font-size: 1.05rem;
+    }
+    .services-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 1.5rem;
+    }
+    .service-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 2rem;
+      display: flex; flex-direction: column;
+      transition: border-color .3s, transform .3s;
+      position: relative; overflow: hidden;
+    }
+    .service-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, var(--blue), var(--blue-light));
+      opacity: 0; transition: opacity .3s;
+    }
+    .service-card:hover { border-color: var(--blue-light); transform: translateY(-3px); }
+    .service-card:hover::before { opacity: 1; }
+    .service-card.featured { border-color: var(--copper); }
+    .service-card.featured::before {
+      background: linear-gradient(90deg, var(--copper-dark), var(--copper));
+      opacity: 1;
+    }
+    .featured-badge {
+      position: absolute; top: 1rem; right: 1rem;
+      background: var(--copper); color: #fff;
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 800; font-size: .7rem;
+      letter-spacing: .1em; text-transform: uppercase;
+      padding: .2rem .6rem; border-radius: 3px;
+    }
+    .service-icon { font-size: 2rem; margin-bottom: 1rem; }
+    .service-name {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 800; font-size: 1.9rem;
+      color: var(--white); margin-bottom: .25rem;
+    }
+    .service-price {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 700; font-size: 2.6rem;
+      color: var(--copper); margin-bottom: 1.5rem;
+    }
+    .service-list {
+      list-style: none; flex: 1;
+      display: flex; flex-direction: column;
+      gap: .55rem; margin-bottom: 2rem;
+    }
+    .service-list li {
+      font-size: 1.05rem; color: var(--white);
+      display: flex; gap: .6rem; align-items: baseline;
+    }
+    .service-list li::before {
+      content: '✓'; color: var(--blue-light);
+      font-weight: 700; flex-shrink: 0;
+    }
+
+    /* ── REPAIRS SECTION ─────────────────────────────────────── */
+    .repairs-section { padding: 5rem 0; background: var(--surface); }
+    .repairs-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 4rem; align-items: center;
+    }
+    .repairs-text h2 {
+      font-size: clamp(2.2rem, 4.5vw, 3.5rem);
+      font-weight: 900; color: var(--white); margin-bottom: 1.25rem;
+    }
+    .repairs-text p {
+      color: var(--white);
+      font-family: 'Lora', serif; font-size: 1.05rem; margin-bottom: 2rem;
+    }
+    .repair-tags {
+      display: flex; flex-wrap: wrap; gap: .6rem; margin-bottom: 2rem;
+    }
+    .repair-tag {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 20px; padding: .35rem .9rem;
+      font-size: .9rem; color: var(--white);
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 600; letter-spacing: .04em;
+      transition: border-color .2s, color .2s;
+    }
+    .repair-tag:hover { border-color: var(--blue-light); color: var(--blue-light); }
+
+    /* ── SHOP / GEAR ─────────────────────────────────────────── */
+    .gear-section { padding: 5rem 0; background: var(--bg); }
+    .gear-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 1rem; margin-top: 2rem;
+    }
+    .gear-item {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 10px; padding: 1.5rem 1rem;
+      text-align: center;
+      transition: border-color .2s, transform .2s;
+    }
+    .gear-item:hover { border-color: var(--copper); transform: translateY(-2px); }
+    .gear-item-icon { font-size: 2rem; margin-bottom: .6rem; }
+    .gear-item-label {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 700; font-size: 1.05rem;
+      color: var(--white); letter-spacing: .04em;
+    }
+
+    /* ── VISIT CALLOUT ───────────────────────────────────────── */
+    .visit-section { padding: 4rem 0; background: var(--surface); }
+    .visit-box {
+      background: linear-gradient(135deg, var(--blue) 0%, #0f3a6e 100%);
+      border-radius: 12px; padding: 3rem;
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 3rem; align-items: center;
+      border: 1px solid var(--blue-light);
+      position: relative; overflow: hidden;
+    }
+    .visit-box::before {
+      content: '🔧';
+      position: absolute; right: 2rem; top: 50%;
+      transform: translateY(-50%);
+      font-size: 8rem; opacity: .07;
+    }
+    .visit-text h2 {
+      font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+      color: var(--white); margin-bottom: .75rem;
+    }
+    .visit-text p { color: rgba(255,255,255,.85); font-size: 1.05rem; }
+    .visit-details { display: flex; flex-direction: column; gap: 1rem; }
+    .visit-detail {
+      display: flex; align-items: flex-start; gap: .85rem;
+    }
+    .visit-detail-icon {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.1rem; flex-shrink: 0;
+    }
+    .visit-detail-text strong {
+      display: block; color: var(--white);
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 700; font-size: 1.05rem;
+    }
+    .visit-detail-text span { color: rgba(255,255,255,.8); font-size: .95rem; }
+
+    /* ── CONTACT FORM ────────────────────────────────────────── */
+    #section-contact { padding: 6rem 0; background: var(--bg); }
+    .contact-grid {
+      display: grid; grid-template-columns: 1fr 1.6fr;
+      gap: 4rem; align-items: start;
+    }
+    .contact-info h2 {
+      font-size: clamp(2rem, 4vw, 3.2rem);
+      font-weight: 900; color: var(--white); margin-bottom: 1rem;
+    }
+    .contact-info p {
+      color: var(--white);
+      font-family: 'Lora', serif; margin-bottom: 2rem;
+    }
+    .contact-detail {
+      display: flex; align-items: center;
+      gap: .85rem; margin-bottom: 1rem;
+    }
+    .contact-detail-icon {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: var(--panel); border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.1rem; flex-shrink: 0;
+    }
+    .contact-detail-text { font-size: .95rem; }
+    .contact-detail-text strong {
+      display: block; color: var(--white);
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 700; font-size: 1.05rem;
+    }
+    .contact-detail-text a,
+    .contact-detail-text span { color: var(--white); transition: color .2s; }
+    .contact-detail-text a:hover { color: var(--copper); }
+
+    /* ── FORM ────────────────────────────────────────────────── */
+    .form-card {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 12px; padding: 2.5rem;
+    }
+    .form-section-title {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 700; font-size: .85rem;
+      letter-spacing: .18em; text-transform: uppercase;
+      color: var(--copper); margin-bottom: 1rem; margin-top: 1.5rem;
+    }
+    .form-section-title:first-child { margin-top: 0; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .form-group { display: flex; flex-direction: column; gap: .45rem; margin-bottom: .85rem; }
+    .form-group label {
+      font-size: 1rem; font-weight: 600;
+      color: var(--white); letter-spacing: .05em;
+    }
+    .form-group label .req { color: var(--copper); margin-left: 2px; }
+    .form-group input[type="text"],
+    .form-group input[type="email"],
+    .form-group input[type="tel"],
+    .form-group input[type="date"],
+    .form-group input[type="time"],
+    .form-group select,
+    .form-group textarea {
+      background: var(--input-bg); color: var(--input-text);
+      border: 2px solid var(--input-border); border-radius: var(--r);
+      padding: .65rem .9rem; font-size: 1.05rem;
+      font-family: 'Barlow', sans-serif; width: 100%;
+      transition: border-color .2s, box-shadow .2s; outline: none;
+    }
+    .form-group input::placeholder,
+    .form-group textarea::placeholder { color: #7a9ab8; }
+    .form-group input:focus,
+    .form-group textarea:focus,
+    .form-group select:focus {
+      border-color: var(--copper);
+      box-shadow: 0 0 0 3px rgba(200,121,65,.18);
+    }
+    .form-group textarea { resize: vertical; min-height: 100px; }
+    .form-group select { cursor: pointer; }
+
+    .checkbox-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: .6rem; margin-bottom: .85rem;
+    }
+    .check-item {
+      display: flex; align-items: center; gap: .6rem;
+      cursor: pointer; padding: .6rem .8rem;
+      border-radius: var(--r); border: 1.5px solid var(--border);
+      transition: border-color .2s, background .2s;
+    }
+    .check-item:hover { border-color: var(--blue-light); background: rgba(42,127,212,.08); }
+    .check-item input[type="checkbox"] {
+      width: 16px; height: 16px;
+      accent-color: var(--blue-light); flex-shrink: 0; cursor: pointer;
+    }
+    .check-item span { font-size: 1.05rem; color: var(--white); user-select: none; }
+    .check-item:has(input:checked) {
+      border-color: var(--blue-light); background: rgba(42,127,212,.12);
+    }
+    .form-submit { width: 100%; padding: 1rem; font-size: 1.2rem; }
+    .form-msg {
+      display: none; padding: 1rem 1.2rem; border-radius: var(--r);
+      font-size: .9rem; font-weight: 600; margin-top: 1rem;
+    }
+    .form-msg.success {
+      display: block; background: rgba(42,127,212,.15);
+      border: 1px solid var(--blue-light); color: #7fc8f8;
+    }
+    .form-msg.error {
+      display: block; background: rgba(200,60,60,.15);
+      border: 1px solid #c83c3c; color: #f08080;
+    }
+
+    /* ── FOOTER ──────────────────────────────────────────────── */
+    footer {
+      background: #060e1a;
+      padding: 3rem 0 2rem;
+      border-top: 1px solid var(--border);
+    }
+    .footer-inner {
+      display: flex; justify-content: space-between;
+      align-items: center; flex-wrap: wrap; gap: 1.5rem;
+    }
+    .footer-logo {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 900; font-size: 1.3rem;
+      color: var(--white); text-transform: uppercase; letter-spacing: .05em;
+    }
+    .footer-logo span { color: var(--copper); }
+    .footer-tagline {
+      font-family: 'Lora', serif; font-style: italic;
+      color: var(--white); font-size: .9rem; margin-top: .2rem;
+    }
+    .footer-links { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+    .footer-links a { color: var(--white); font-size: .9rem; transition: color .2s; }
+    .footer-links a:hover { color: var(--copper); }
+    .footer-tfb {
+      display: flex; align-items: center; gap: .6rem;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: var(--r); padding: .6rem 1rem;
+      transition: border-color .2s;
+    }
+    .footer-tfb:hover { border-color: var(--copper); }
+    .footer-tfb-text {
+      font-size: .8rem; color: var(--white); line-height: 1.3;
+    }
+    .footer-tfb-text strong {
+      display: block; font-family: 'Barlow Condensed', sans-serif;
+      font-weight: 700; font-size: 1rem; color: var(--white);
+    }
+    .footer-bottom {
+      text-align: center; margin-top: 2.5rem; padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      color: var(--white); font-size: .8rem;
+    }
+
+    /* ── RESPONSIVE ──────────────────────────────────────────── */
+    @media (max-width: 900px) {
+      .photos-grid { grid-template-columns: 1fr 1fr; grid-template-rows: 220px 220px; }
+      .visit-box { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 768px) {
+      nav { display: none; }
+      .hamburger { display: flex; }
+      .repairs-grid, .contact-grid { grid-template-columns: 1fr; }
+      .form-row { grid-template-columns: 1fr; }
+      .hero-badges { gap: 1.5rem; }
+      .footer-inner { flex-direction: column; text-align: center; }
+      .footer-links { justify-content: center; }
+      .photos-grid { grid-template-columns: 1fr; grid-template-rows: repeat(3, 200px); }
+    }
+    @media (max-width: 500px) {
+      .checkbox-grid { grid-template-columns: 1fr; }
+      .gear-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── NAVBAR ──────────────────────────────────────────────── -->
+<header id="navbar">
+  <div class="container inner">
+    <a href="#top" class="logo">
+      Pista <span>Bikes</span>
+    </a>
+    <nav>
+      <a href="#top">Home</a>
+      <a href="#section-services">Services</a>
+      <a href="#section-repairs">Repairs</a>
+      <a href="#section-gear">Shop</a>
+      <a href="#section-contact">Book</a>
+    </nav>
+    <div class="hamburger" id="hamburgerBtn" aria-label="Open menu">
+      <span></span><span></span><span></span>
+    </div>
+  </div>
+</header>
+
+<div class="nav-mobile" id="mobileNav">
+  <a href="#top"               onclick="closeNav()">Home</a>
+  <a href="#section-services"  onclick="closeNav()">Services</a>
+  <a href="#section-repairs"   onclick="closeNav()">Repairs</a>
+  <a href="#section-gear"      onclick="closeNav()">Shop</a>
+  <a href="#section-contact"   onclick="closeNav()">Book a Visit</a>
+</div>
+
+<!-- ── HERO ────────────────────────────────────────────────── -->
+<section id="top">
+  <div class="hero-bg"></div>
+  <div class="hero-rule"></div>
+
+  <div class="container hero-content">
+    <p class="hero-eyebrow">255 Hawthorn Road, Caulfield · Open Daily Except Saturday</p>
+    <h1 class="hero-title">Your Bike Deserves a <em>Proper Workshop.</em></h1>
+    <p class="hero-sub">Full-service bicycle repairs, professional servicing, quality parts and cycling gear — all under one roof in Caulfield.</p>
+    <div class="hero-ctas">
+      <a href="#section-contact" class="btn btn-primary">Book a Visit</a>
+      <a href="#section-services" class="btn btn-outline">See Services</a>
+    </div>
+    <div class="hero-badges">
+      <div class="badge">
+        <div class="badge-val">6</div>
+        <div class="badge-label">Days a week</div>
+      </div>
+      <div class="badge">
+        <div class="badge-val">3<span>+</span></div>
+        <div class="badge-label">Service levels</div>
+      </div>
+      <div class="badge">
+        <div class="badge-val">∞</div>
+        <div class="badge-label">Repair types</div>
+      </div>
+      <div class="badge">
+        <div class="badge-val">✦</div>
+        <div class="badge-label">Parts &amp; gear in stock</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hours strip -->
+  <div class="hours-strip">
+    <div class="container hours-inner">
+      <div class="hours-label">Hours</div>
+      <div class="hours-days">
+        <span class="hours-day">Sun 10–4</span>
+        <span class="hours-day closed">Mon</span>
+        <span class="hours-day">Tue 11–5</span>
+        <span class="hours-day">Wed 11–5</span>
+        <span class="hours-day">Thu 11–5</span>
+        <span class="hours-day">Fri 11–5</span>
+        <span class="hours-day closed">Sat</span>
+      </div>
+      <div style="font-size:.9rem;color:var(--white);font-family:'Barlow Condensed',sans-serif;font-weight:600;">
+        Winter hours &nbsp;·&nbsp; <a href="#section-contact" style="color:var(--copper);">Spring Mon 11–5 opening soon</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── SHOP PHOTOS ───────────────────────────────────────────── -->
+<section class="photos-section">
+  <div class="container">
+    <div class="photos-grid">
+      <div class="photo-slot" style="padding:0;">
+        <img src="/static/img/site/ShopFront.png" alt="Pista Bikes shopfront at 255 Hawthorn Road Caulfield" style="position:static;width:100%;height:100%;object-fit:cover;opacity:1;border-radius:var(--r);" />
+      </div>
+      <div class="photo-slot" style="padding:0;">
+        <img src="/static/img/site/Workshop.jpg" alt="Pista Bikes workshop with tools and bikes" style="position:static;width:100%;height:100%;object-fit:cover;opacity:1;border-radius:var(--r);" />
+      </div>
+      <div class="photo-slot" style="padding:0;">
+        <img src="/static/img/site/PartsWall.jpg" alt="Pista Bikes parts and gear wall" style="position:static;width:100%;height:100%;object-fit:cover;opacity:1;border-radius:var(--r);" />
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── SERVICES ──────────────────────────────────────────────── -->
+<section class="section" id="section-services">
+  <div class="container">
+    <div class="section-header">
+      <div class="label">Workshop Services</div>
+      <h2>Professional Servicing</h2>
+      <p>Every service is carried out by experienced mechanics using quality parts. Safety is our number one priority.</p>
+    </div>
+
+    <div class="services-grid">
+
+      <div class="service-card">
+        <div class="service-icon">🔧</div>
+        <div class="service-name">General Service</div>
+        <div class="service-price">$120</div>
+        <ul class="service-list">
+          <li>Detailed clean</li>
+          <li>Brake inspection &amp; adjustment</li>
+          <li>Derailleur inspection &amp; adjustment</li>
+          <li>Cable lubrication (if needed)</li>
+          <li>Simple wheel truing (if needed)</li>
+          <li>Tyre inspection &amp; pressure correction</li>
+          <li>Chain wipe &amp; lubrication</li>
+          <li>Component adjustment</li>
+          <li>Safety check</li>
+          <li>Parts inspection &amp; recommendations</li>
+        </ul>
+        <a href="#section-contact" class="btn btn-outline">Book Now</a>
+      </div>
+
+      <div class="service-card featured">
+        <div class="featured-badge">Most Popular</div>
+        <div class="service-icon">⭐</div>
+        <div class="service-name">Deluxe Service</div>
+        <div class="service-price">$220</div>
+        <ul class="service-list">
+          <li>Full clean and polish</li>
+          <li>Safety check</li>
+          <li>Drivetrain removal &amp; degrease</li>
+          <li>Brake inspection &amp; adjustment</li>
+          <li>Derailleur inspection &amp; adjustment</li>
+          <li>Tyre inspection &amp; pressure correction</li>
+          <li>Headset degrease &amp; regrease</li>
+          <li>Bottom bracket degrease &amp; regrease</li>
+          <li>Wheel truing (if needed)</li>
+          <li>Chain clean &amp; lubrication</li>
+          <li>Full component inspection &amp; adjustment</li>
+          <li>Parts recommendations</li>
+        </ul>
+        <a href="#section-contact" class="btn btn-primary">Book Now</a>
+      </div>
+
+      <div class="service-card">
+        <div class="service-icon">⚡</div>
+        <div class="service-name">E-Bike Service</div>
+        <div class="service-price">$150</div>
+        <ul class="service-list">
+          <li>Brake inspection &amp; adjustment</li>
+          <li>Derailleur inspection &amp; adjustment</li>
+          <li>Detailed clean</li>
+          <li>Component check &amp; adjustment</li>
+          <li>Chain wipe &amp; lubrication</li>
+          <li>Tyre inspection &amp; pressure correction</li>
+          <li>Safety check</li>
+          <li>Repair recommendations</li>
+        </ul>
+        <a href="#section-contact" class="btn btn-outline">Book Now</a>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ── REPAIRS ───────────────────────────────────────────────── -->
+<section class="repairs-section" id="section-repairs">
+  <div class="container">
+    <div class="repairs-grid">
+      <div class="repairs-text">
+        <div class="label">All Repairs Welcome</div>
+        <h2>From Flat Tyres to Full Rebuilds</h2>
+        <p>No job is too small or too complex. Our workshop is equipped to handle everything from a quick puncture repair through to complete drivetrain upgrades and full bike rebuilds.</p>
+        <div class="repair-tags">
+          <span class="repair-tag">Flat tyres</span>
+          <span class="repair-tag">Brake replacement</span>
+          <span class="repair-tag">Cable replacement</span>
+          <span class="repair-tag">Gear indexing</span>
+          <span class="repair-tag">Wheel building</span>
+          <span class="repair-tag">Bearing replacement</span>
+          <span class="repair-tag">Drivetrain upgrade</span>
+          <span class="repair-tag">Fork replacement</span>
+          <span class="repair-tag">Bar &amp; stem fit</span>
+          <span class="repair-tag">Suspension service</span>
+          <span class="repair-tag">Full bike rebuild</span>
+          <span class="repair-tag">Custom builds</span>
+        </div>
+        <a href="#section-contact" class="btn btn-primary">Book a Repair</a>
+      </div>
+      <div>
+        <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:2rem;">
+          <div class="label">Why choose the workshop</div>
+          <div style="display:flex;flex-direction:column;gap:1rem;margin-top:.5rem;">
+            <div style="display:flex;gap:.85rem;align-items:flex-start;">
+              <div style="font-size:1.4rem;flex-shrink:0;">🏠</div>
+              <div>
+                <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1.1rem;color:var(--white);">Drop off &amp; collect</div>
+                <div style="font-size:.95rem;color:var(--white);">Leave your bike with us and pick it up when it's ready</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:.85rem;align-items:flex-start;">
+              <div style="font-size:1.4rem;flex-shrink:0;">⚙️</div>
+              <div>
+                <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1.1rem;color:var(--white);">Parts on hand</div>
+                <div style="font-size:.95rem;color:var(--white);">Broad stock means most repairs can be completed same day</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:.85rem;align-items:flex-start;">
+              <div style="font-size:1.4rem;flex-shrink:0;">💬</div>
+              <div>
+                <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1.1rem;color:var(--white);">Honest advice</div>
+                <div style="font-size:.95rem;color:var(--white);">We'll tell you what your bike actually needs, nothing more</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:.85rem;align-items:flex-start;">
+              <div style="font-size:1.4rem;flex-shrink:0;">💰</div>
+              <div>
+                <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:1.1rem;color:var(--white);">Competitive pricing</div>
+                <div style="font-size:.95rem;color:var(--white);">Quality workmanship at fair workshop rates</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── GEAR / SHOP ────────────────────────────────────────────── -->
+<section class="gear-section" id="section-gear">
+  <div class="container">
+    <div class="section-header">
+      <div class="label">In Stock</div>
+      <h2>Parts &amp; Cycling Gear</h2>
+      <p>We stock a broad range of parts for our services as well as general cycling gear to keep you riding safely and in style.</p>
+    </div>
+    <div class="gear-grid">
+      <div class="gear-item"><div class="gear-item-icon">💡</div><div class="gear-item-label">Lights</div></div>
+      <div class="gear-item"><div class="gear-item-icon">🔒</div><div class="gear-item-label">Locks</div></div>
+      <div class="gear-item"><div class="gear-item-icon">⛑️</div><div class="gear-item-label">Helmets</div></div>
+      <div class="gear-item"><div class="gear-item-icon">👕</div><div class="gear-item-label">Riding Apparel</div></div>
+      <div class="gear-item"><div class="gear-item-icon">🔧</div><div class="gear-item-label">Workshop Parts</div></div>
+      <div class="gear-item"><div class="gear-item-icon">⛓️</div><div class="gear-item-label">Chains &amp; Cables</div></div>
+      <div class="gear-item"><div class="gear-item-icon">🛞</div><div class="gear-item-label">Tyres &amp; Tubes</div></div>
+      <div class="gear-item"><div class="gear-item-icon">🧴</div><div class="gear-item-label">Lubricants</div></div>
+      <div class="gear-item"><div class="gear-item-icon">🎒</div><div class="gear-item-label">Bags &amp; Racks</div></div>
+      <div class="gear-item"><div class="gear-item-icon">🧰</div><div class="gear-item-label">Tools &amp; Kits</div></div>
+      <div class="gear-item"><div class="gear-item-icon">🚲</div><div class="gear-item-label">Accessories</div></div>
+      <div class="gear-item" style="border-color:var(--copper);">
+        <div class="gear-item-icon">✦</div>
+        <div class="gear-item-label" style="color:var(--copper);">And More</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── VISIT / ADDRESS ────────────────────────────────────────── -->
+<section class="visit-section">
+  <div class="container">
+    <div class="visit-box">
+      <div class="visit-text">
+        <div class="label" style="justify-content:flex-start;">Find Us</div>
+        <h2>Come Visit the Workshop</h2>
+        <p>We're located on Hawthorn Road in Caulfield — easy to find, with parking nearby. Walk-ins welcome, or book ahead to secure your time.</p>
+        <a href="#section-contact" class="btn btn-primary" style="margin-top:1.5rem;">Book a Visit</a>
+      </div>
+      <div class="visit-details">
+        <div class="visit-detail">
+          <div class="visit-detail-icon">📍</div>
+          <div class="visit-detail-text">
+            <strong>Address</strong>
+            <span>255 Hawthorn Road, Caulfield VIC 3162</span>
+          </div>
+        </div>
+        <div class="visit-detail">
+          <div class="visit-detail-icon">🕐</div>
+          <div class="visit-detail-text">
+            <strong>Hours</strong>
+            <span>Tue–Fri 11am–5pm · Sun 10am–4pm<br>Closed Mon &amp; Sat (winter)<br>Spring: also open Mon 11am–5pm</span>
+          </div>
+        </div>
+        <div class="visit-detail">
+          <div class="visit-detail-icon">✉️</div>
+          <div class="visit-detail-text">
+            <strong>Email</strong>
+            <span><a href="mailto:info@theflyingbike.com.au" style="color:var(--copper);">info@theflyingbike.com.au</a></span>
+          </div>
+        </div>
+        <div class="visit-detail">
+          <div class="visit-detail-icon">🚃</div>
+          <div class="visit-detail-text">
+            <strong>Getting Here</strong>
+            <span>Tram routes along Hawthorn Road · Street parking available</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── CONTACT / BOOKING FORM ─────────────────────────────────── -->
+<section class="section" id="section-contact">
+  <div class="container">
+    <div class="contact-grid">
+      <div class="contact-info">
+        <div class="label">Book a Visit</div>
+        <h2>Make an Enquiry</h2>
+        <p>Select a preferred day and time and we'll confirm your booking. Walk-ins are always welcome too.</p>
+
+        <div class="contact-detail">
+          <div class="contact-detail-icon">📍</div>
+          <div class="contact-detail-text">
+            <strong>Address</strong>
+            <span>255 Hawthorn Road, Caulfield VIC 3162</span>
+          </div>
+        </div>
+        <div class="contact-detail">
+          <div class="contact-detail-icon">🕐</div>
+          <div class="contact-detail-text">
+            <strong>Open</strong>
+            <span>Tue–Fri 11am–5pm · Sun 10am–4pm<br>Closed Mon &amp; Sat</span>
+          </div>
+        </div>
+        <div class="contact-detail">
+          <div class="contact-detail-icon">✉️</div>
+          <div class="contact-detail-text">
+            <strong>Email</strong>
+            <a href="mailto:info@theflyingbike.com.au">info@theflyingbike.com.au</a>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-card">
+        <form id="bookingForm" novalidate>
+
+          <div class="form-section-title">Your Details</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="fname">Full Name <span class="req">*</span></label>
+              <input type="text" id="fname" name="name" placeholder="e.g. Jane Smith" required />
+            </div>
+            <div class="form-group">
+              <label for="fsuburb">Suburb <span class="req">*</span></label>
+              <input type="text" id="fsuburb" name="suburb" placeholder="e.g. Caulfield" required />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="femail">Email Address <span class="req">*</span></label>
+              <input type="email" id="femail" name="email" placeholder="you@email.com" required />
+            </div>
+            <div class="form-group">
+              <label for="fphone">Phone Number</label>
+              <input type="tel" id="fphone" name="phone" placeholder="04xx xxx xxx" />
+            </div>
+          </div>
+
+          <div class="form-section-title">Preferred Visit Time</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="fdate">Preferred Date</label>
+              <input type="date" id="fdate" name="date" />
+            </div>
+            <div class="form-group">
+              <label for="ftime">Preferred Time</label>
+              <select id="ftime" name="time">
+                <option value="">-- Select a time --</option>
+                <option>Morning (9am – 12pm)</option>
+                <option>Midday (12pm – 2pm)</option>
+                <option>Afternoon (2pm – 5pm)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-section-title">Service Type</div>
+          <div class="checkbox-grid">
+            <label class="check-item">
+              <input type="checkbox" name="services" value="General Service" />
+              <span>🔧 General Service — $120</span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" name="services" value="Deluxe Service" />
+              <span>⭐ Deluxe Service — $220</span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" name="services" value="E-Bike Service" />
+              <span>⚡ E-Bike Service — $150</span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" name="services" value="Repair" />
+              <span>🔩 Repair / Other work</span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" name="services" value="Parts / Gear" />
+              <span>🛒 Parts or Gear enquiry</span>
+            </label>
+            <label class="check-item">
+              <input type="checkbox" name="services" value="Not sure" />
+              <span>💬 Not sure yet</span>
+            </label>
+          </div>
+
+          <div class="form-section-title">Message</div>
+          <div class="form-group">
+            <label for="fmessage">Tell us about your bike or what you need</label>
+            <textarea id="fmessage" name="message" placeholder="Describe your bike, the issue, or any questions…"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary form-submit">Send Booking Request →</button>
+
+          <div class="form-msg" id="formSuccess">
+            ✅ Thanks! We've received your request and will confirm your booking shortly.
+          </div>
+          <div class="form-msg" id="formError">
+            ⚠️ Something went wrong. Please email us at <a href="mailto:info@theflyingbike.com.au" style="color:inherit;text-decoration:underline;">info@theflyingbike.com.au</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── FOOTER ────────────────────────────────────────────────── -->
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div>
+        <div class="footer-logo">Pista <span>Bikes</span></div>
+        <div class="footer-tagline">Bicycle Workshop · 255 Hawthorn Rd, Caulfield</div>
+      </div>
+      <div class="footer-links">
+        <a href="#top">Home</a>
+        <a href="#section-services">Services</a>
+        <a href="#section-repairs">Repairs</a>
+        <a href="#section-gear">Shop</a>
+        <a href="#section-contact">Book</a>
+      </div>
+      <!-- Link back to The Flying Bike -->
+      <a href="https://theflyingbike.com.au" target="_blank" rel="noopener" class="footer-tfb">
+        <div style="font-size:1.5rem;">🚲</div>
+        <div class="footer-tfb-text">
+          <strong>The Flying Bike</strong>
+          Our mobile repair service · Melbourne
+        </div>
+      </a>
+    </div>
+    <div class="footer-bottom">
+      © <span id="fyear"></span> Pista Bikes · 255 Hawthorn Road, Caulfield VIC 3162 · <a href="mailto:info@theflyingbike.com.au" style="color:inherit;">info@theflyingbike.com.au</a>
+    </div>
+  </div>
+</footer>
+
+<!-- ── SCRIPTS ───────────────────────────────────────────────── -->
+<script>
+  /* ── Navbar scroll ── */
+  const navbar = document.getElementById('navbar');
+  window.addEventListener('scroll', () => {
+    navbar.classList.toggle('scrolled', window.scrollY > 40);
+  });
+
+  /* ── Mobile nav ── */
+  const hamburger = document.getElementById('hamburgerBtn');
+  const mobileNav = document.getElementById('mobileNav');
+  hamburger.addEventListener('click', () => mobileNav.classList.toggle('open'));
+  function closeNav() { mobileNav.classList.remove('open'); }
+
+  /* ── Prevent Saturday date selection ── */
+  const dateInput = document.getElementById('fdate');
+  if (dateInput) {
+    // Set min date to today
+    const today = new Date().toISOString().split('T')[0];
+    dateInput.setAttribute('min', today);
+    dateInput.addEventListener('change', () => {
+      const d = new Date(dateInput.value);
+      if (d.getDay() === 6) { // Saturday = 6
+        dateInput.setCustomValidity('We are closed on Saturdays. Please choose another day.');
+        dateInput.reportValidity();
+        dateInput.value = '';
+      } else {
+        dateInput.setCustomValidity('');
+      }
+    });
+  }
+
+  /* ── Footer year ── */
+  document.getElementById('fyear').textContent = new Date().getFullYear();
+
+  /* ── Form submission ─────────────────────────────────────────────────────
+   * Posts to the WordPress AJAX endpoint on theflyingbike.com.au via the
+   * tfb-booking-handler plugin. A separate action (pistbikes_booking) should
+   * be added to that plugin to route Pista Bikes enquiries — or the same
+   * tfb_booking action can be used initially to deliver to the same inbox.
+   *
+   * Change TFB_SECRET to match TFB_BOOKING_SECRET in the plugin.
+   * ─────────────────────────────────────────────────────────────────────── */
+  const WP_AJAX_URL = 'https://theflyingbike.com.au/wp-admin/admin-ajax.php';
+  const TFB_SECRET  = 'tfb-flyingbike-2026';
+
+  const form        = document.getElementById('bookingForm');
+  const successMsg  = document.getElementById('formSuccess');
+  const errorMsg    = document.getElementById('formError');
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!form.checkValidity()) { form.reportValidity(); return; }
+
+    const ack = form.querySelector('#fack');
+    if (!ack.checked) {
+      ack.setCustomValidity('Please acknowledge the booking conditions.');
+      ack.reportValidity(); return;
+    }
+    ack.setCustomValidity('');
+
+    const services = [...form.querySelectorAll('input[name="services"]:checked')]
+      .map(cb => cb.value).join(', ') || 'None selected';
+
+    const visitDate = form.date?.value || '';
+    const visitTime = form.time?.value || '';
+    const visitStr  = visitDate
+      ? `${visitDate}${visitTime ? ' · ' + visitTime : ''}`
+      : 'Not specified';
+
+    const payload = {
+      _secret:  TFB_SECRET,
+      _source:  'Pista Bikes',
+      name:     form.name.value.trim(),
+      email:    form.email.value.trim(),
+      phone:    form.phone.value.trim(),
+      suburb:   form.suburb.value.trim(),
+      services,
+      message:  `Preferred visit: ${visitStr}\n\n${form.message.value.trim()}`,
+    };
+
+    const submitBtn = form.querySelector('.form-submit');
+    submitBtn.disabled    = true;
+    submitBtn.textContent = 'Sending…';
+    successMsg.style.display = 'none';
+    errorMsg.style.display   = 'none';
+
+    try {
+      const res  = await fetch(WP_AJAX_URL + '?action=tfb_booking', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body:    JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        successMsg.style.display = 'block';
+        form.reset();
+        successMsg.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } else {
+        const msg = json?.data?.message || 'Submission failed.';
+        errorMsg.textContent = '⚠️ ' + msg;
+        errorMsg.style.display = 'block';
+      }
+    } catch (err) {
+      errorMsg.textContent = '⚠️ Could not reach the server. Please email info@theflyingbike.com.au directly.';
+      errorMsg.style.display = 'block';
+    } finally {
+      submitBtn.disabled    = false;
+      submitBtn.textContent = 'Send Booking Request →';
+    }
+  });
+</script>
+
+</body>
+</html>

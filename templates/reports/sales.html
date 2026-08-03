@@ -10,13 +10,6 @@
     <a href="{{ url_for('reports.sales_pdf', query_id=query_id) }}" class="btn-accent" target="_blank">
       <i class="bi bi-file-pdf"></i> <span>PDF</span>
     </a>
-    {% else %}
-    <a href="{{ url_for('reports.sales_csv', date_from=date_from, date_to=date_to, job_types=job_types) }}" class="btn-ghost">
-      <i class="bi bi-download"></i> <span>CSV</span>
-    </a>
-    <a href="{{ url_for('reports.sales_pdf', date_from=date_from, date_to=date_to, job_types=job_types) }}" class="btn-accent" target="_blank">
-      <i class="bi bi-file-pdf"></i> <span>PDF</span>
-    </a>
     {% endif %}
   {% endif %}
 {% endblock %}
@@ -56,18 +49,6 @@
              style="accent-color:var(--sd-accent); width:14px; height:14px;">
       Daily subtotals
     </label>
-
-    <div style="display:flex; gap:0.5rem; align-items:center; font-size:0.85rem; color:var(--sd-text);">
-      <span style="color:var(--sd-muted);">Sort by:</span>
-      {% for val, lbl in [('paid','Date Paid'),('scheduled','Scheduled')] %}
-      <label style="display:flex; align-items:center; gap:0.3rem; cursor:pointer;">
-        <input type="radio" name="sort_by" value="{{ val }}" onchange="this.form.submit()"
-               {% if sort_by == val %}checked{% endif %}
-               style="accent-color:var(--sd-accent); width:13px; height:13px;">
-        {{ lbl }}
-      </label>
-      {% endfor %}
-    </div>
 
     <span style="font-size:0.78rem; color:var(--sd-muted); margin-left:auto;">
       {% if show_cash %}

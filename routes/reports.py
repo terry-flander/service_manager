@@ -217,11 +217,10 @@ def sales():
         #    form on the report posts just these two fields.
         if 'display_prefs' in request.form:
             show_daily = 'show_daily' in request.form
-            sort_by    = request.form.get('sort_by', 'paid')
             conn.execute(
                 "INSERT INTO settings (key,value) VALUES (?,?) "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                (DISPLAY_PREFS_KEY, _json.dumps({'show_daily': show_daily, 'sort_by': sort_by})))
+                (DISPLAY_PREFS_KEY, _json.dumps({'show_daily': show_daily})))
             conn.commit()
         else:
             row = conn.execute(
@@ -231,7 +230,6 @@ def sales():
             except Exception:
                 display_prefs = {}
             show_daily = display_prefs.get('show_daily', False)
-            sort_by    = display_prefs.get('sort_by', 'paid')
 
         if query_id:
             row = conn.execute(
@@ -240,33 +238,19 @@ def sales():
 
         if saved_query:
             date_from, date_to = get_resolved_date_range(saved_query)
-            # "All Time" (or any preset with no bound) -> wide-open range,
-            # not a silent fallback to "this month" which would be wrong.
             date_from = date_from or '1900-01-01'
             date_to   = date_to   or today.isoformat()
             job_types  = saved_query.get('job_types') or ['booking', 'workshop', 'sale']
-            from job_queries import get_report_sort_by
-            query_sort_by = get_report_sort_by(saved_query)
-            if query_sort_by:
-                sort_by = query_sort_by
+            # Sort order derived from the query's date_field — no user override
+            sort_by = 'scheduled' if saved_query.get('date_field') == 'scheduled' else 'paid'
+            # Save this query_id as the last-used filter for this user
             conn.execute(
                 "INSERT INTO settings (key,value) VALUES (?,?) "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                 (f'report_prefs_{user_id}', _json.dumps({'query_id': query_id})))
             conn.commit()
-        elif request.method == 'POST' and 'display_prefs' not in request.form:
-            date_from = request.form.get('date_from', first_of_month)
-            date_to   = request.form.get('date_to',   default_to)
-            job_types  = request.form.getlist('job_types') or ['booking', 'workshop', 'sale']
-            # Save to settings
-            prefs = {'date_from': date_from, 'date_to': date_to,
-                     'job_types': job_types}
-            conn.execute(
-                "INSERT INTO settings (key,value) VALUES (?,?) "
-                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                (f'report_prefs_{user_id}', _json.dumps(prefs)))
-            conn.commit()
-        else:
+        elif not query_id:
+            # Plain GET with no query_id — restore last used query if saved
             is_clear = request.args.get('clear') == '1'
             if is_clear:
                 conn.execute(
@@ -275,30 +259,40 @@ def sales():
                 date_from  = first_of_month
                 date_to    = default_to
                 job_types  = ['booking', 'workshop', 'sale']
+                sort_by    = 'paid'
             else:
-                # Restore saved prefs if available
                 row = conn.execute(
                     "SELECT value FROM settings WHERE key=?",
                     (f'report_prefs_{user_id}',)).fetchone()
                 if row:
                     try:
                         prefs = _json.loads(row['value'])
-                        if prefs.get('query_id'):
-                            return redirect(url_for('reports.sales', query_id=prefs['query_id'], run='1'))
-                        date_from = prefs.get('date_from', first_of_month)
-                        date_to   = prefs.get('date_to',   default_to)
-                        job_types  = prefs.get('job_types',  ['booking', 'workshop', 'sale'])
+                        saved_qid = prefs.get('query_id')
+                        if saved_qid:
+                            # Load the saved query directly — no redirect needed
+                            qrow = conn.execute(
+                                "SELECT * FROM job_queries WHERE id=?",
+                                (saved_qid,)).fetchone()
+                            if qrow:
+                                saved_query = query_row_to_dict(qrow)
+                                query_id    = str(saved_qid)
+                                date_from, date_to = get_resolved_date_range(saved_query)
+                                date_from  = date_from or '1900-01-01'
+                                date_to    = date_to   or today.isoformat()
+                                job_types  = saved_query.get('job_types') or ['booking', 'workshop', 'sale']
+                                sort_by    = 'scheduled' if saved_query.get('date_field') == 'scheduled' else 'paid'
+                                # Don't fall through to defaults
+                                return_early = False
                     except Exception:
-                        date_from  = first_of_month
-                        date_to    = default_to
-                        job_types  = ['booking', 'workshop', 'sale']
-                else:
+                        pass
+                if not saved_query:
+                    # No saved query — show current month as default
                     date_from  = first_of_month
                     date_to    = default_to
                     job_types  = ['booking', 'workshop', 'sale']
                     sort_by    = 'paid'
 
-    ran = bool(request.method == 'POST' or request.args.get('run'))
+    ran = True  # always run — shows saved query or current month default
 
     # Get show_cash_payments from current user
     try:

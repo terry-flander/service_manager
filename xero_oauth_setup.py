@@ -22,7 +22,7 @@ Xero Developer Portal setup (one-time):
      - OAuth 2.0 redirect URI: http://localhost:8787/callback
      - App type: Web app
   3. Note the Client ID and Client Secret
-  4. Add scopes: accounting.contacts accounting.transactions offline_access
+  4. Add scopes: accounting.contacts accounting.invoices accounting.payments offline_access
   5. Set XERO_CLIENT_ID and XERO_CLIENT_SECRET in .env before running this script
 
 Requirements:
@@ -77,7 +77,7 @@ env = load_env()
 CLIENT_ID     = env.get('XERO_CLIENT_ID', '').strip()
 CLIENT_SECRET = env.get('XERO_CLIENT_SECRET', '').strip()
 REDIRECT_URI  = 'http://localhost:8787/callback'
-SCOPES        = 'accounting.contacts accounting.transactions offline_access'
+SCOPES        = 'accounting.contacts accounting.invoices accounting.payments offline_access'
 
 XERO_AUTH_URL  = 'https://login.xero.com/identity/connect/authorize'
 XERO_TOKEN_URL = 'https://identity.xero.com/connect/token'
