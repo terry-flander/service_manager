@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="en" data-theme="{{ theme }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Schedule — The Flying Bike</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    /* ── Theme variables ─────────────────────────────────────────────────── */
+    :root, [data-theme="dark"] {
+      --bg:      #0f172a;
+      --surface: #1e293b;
+      --border:  #334155;
+      --text:    #e2e8f0;
+      --muted:   #94a3b8;
+      --accent:  #f97316;
+    }
+    [data-theme="light"] {
+      --bg:      #f1f5f9;
+      --surface: #ffffff;
+      --border:  #e2e8f0;
+      --text:    #0f172a;
+      --muted:   #64748b;
+      --accent:  #ea580c;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15px;
+      min-height: 100dvh;
+      padding-bottom: env(safe-area-inset-bottom);
+      overscroll-behavior: none;
+    }
+
+    /* ── Header ─────────────────────────────────────────────────────────── */
+    .m-header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1rem;
+      padding-top: calc(0.75rem + env(safe-area-inset-top));
+    }
+    .m-header-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .m-header-sub { font-size: 0.75rem; color: var(--muted); }
+    .m-btn-full {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 6px;
+      padding: 0.35rem 0.75rem;
+      font-size: 0.78rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      text-decoration: none;
+    }
+
+    /* ── Schedule list ───────────────────────────────────────────────────── */
+    #schedule-list {
+      padding: 0 0 5rem;
+    }
+
+    /* Date separator */
+    .date-sep {
+      position: sticky;
+      top: 56px;
+      z-index: 50;
+      background: var(--bg);
+      padding: 0.5rem 1rem 0.25rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    .date-sep.today { color: var(--accent); }
+
+    /* ── Job card ────────────────────────────────────────────────────────── */
+    .job-card {
+      border: 1px solid var(--border);
+      border-left: 4px solid transparent;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      background: var(--surface);
+      margin: 4px 0.75rem;
+    }
+    .job-card.status-pending     { border-left-color: #fbbf24; border-color: rgba(251,191,36,0.3); }
+    .job-card.status-scheduled   { border-left-color: #60a5fa; border-color: rgba(96,165,250,0.3); }
+    .job-card.status-in_progress { border-left-color: #a78bfa; border-color: rgba(167,139,250,0.3); }
+    .job-card.status-complete    { border-left-color: #34d399; border-color: rgba(52,211,153,0.3); }
+    .job-card.status-invoiced    { border-left-color: #9ca3af; border-color: rgba(156,163,175,0.3); }
+    .job-card.status-paid        { border-left-color: #6ee7b7; border-color: rgba(110,231,183,0.3); }
+    .job-card.status-quote       { border-left-color: #38bdf8; border-color: rgba(56,189,248,0.3); }
+
+    .job-time {
+      font-size: 0.78rem;
+      color: var(--accent);
+      font-weight: 600;
+      font-family: monospace;
+      margin-bottom: 0.25rem;
+    }
+    .job-name {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 0.2rem;
+    }
+    .job-phone {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 0.2rem;
+    }
+    .job-phone a { color: var(--accent); text-decoration: none; }
+    .job-addr {
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.4rem;
+    }
+    .job-addr a { color: var(--muted); text-decoration: none; }
+    .job-addr a:hover { color: var(--text); }
+    .job-actions {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.4rem;
+    }
+    .m-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      padding: 0.4rem 0.85rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      border: none;
+    }
+    .m-btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .m-btn-ghost {
+      background: rgba(255,255,255,0.06);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    /* ── Calendar event card ─────────────────────────────────────────────── */
+    .cal-card {
+      border: 1px solid rgba(99,102,241,0.3);
+      border-left: 4px solid #6366f1;
+      border-radius: 8px;
+      padding: 0.6rem 1rem;
+      background: rgba(99,102,241,0.08);
+      margin: 4px 0.75rem;
+    }
+    .cal-card-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin-bottom: 0.15rem;
+    }
+    .cal-card-time {
+      font-size: 0.75rem;
+      color: var(--muted);
+      font-family: monospace;
+    }
+    .cal-card-desc {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 0.2rem;
+    }
+
+
+    /* ── Loading sentinel ────────────────────────────────────────────────── */
+    .load-sentinel {
+      text-align: center;
+      padding: 1.5rem;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+    .spinner {
+      display: inline-block;
+      width: 18px; height: 18px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 0.4rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<header class="m-header">
+  <div>
+    <div class="m-header-title">🚲 Schedule</div>
+    <div class="m-header-sub" id="header-date"></div>
+  </div>
+  <div style="display:flex; gap:0.5rem; align-items:center;">
+    <button type="button" class="m-btn-full" onclick="scrollToToday()" id="today-btn">
+      <i class="bi bi-calendar-check"></i> Today
+    </button>
+    <form method="post" action="{{ url_for('mechanic.toggle_mode') }}" style="display:inline;">
+      <button type="submit" class="m-btn-full">
+        <i class="bi bi-grid-3x3-gap"></i> Full View
+      </button>
+    </form>
+  </div>
+</header>
+
+<div id="schedule-list">
+  <div class="load-sentinel" id="load-top">↑ Tap to load earlier</div>
+
+  <!-- Initial entries rendered server-side -->
+  {% set ns = namespace(last_date='') %}
+  {% set all_entries = [] %}
+
+  {# Build and sort combined entry list #}
+  {% for job in jobs %}
+    {% if job.scheduled_date %}
+      {% set _ = all_entries.append({'type':'job', 'date': job.scheduled_date,
+         'time': job.scheduled_time or '', 'data': job}) %}
+    {% endif %}
+  {% endfor %}
+  {% for e in cal_events %}
+    {% set _ = all_entries.append({'type':'cal', 'date': e.date,
+       'time': e.start_time or '', 'data': e}) %}
+  {% endfor %}
+  {% for g in gcal_events %}
+    {% set _ = all_entries.append({'type':'gcal', 'date': g.date,
+       'time': g.start_time or '', 'data': g}) %}
+  {% endfor %}
+
+  {% for entry in all_entries | sort(attribute='date') %}
+    {% set d = entry.date %}
+    {% if d != ns.last_date %}
+      {% set ns.last_date = d %}
+      <div class="date-sep {% if d == today %}today{% endif %}"
+           data-date="{{ d }}">
+        {{ d | fmt_date('weekday_full') }}
+      </div>
+    {% endif %}
+
+    {% if entry.type == 'cal' %}
+    {% set e = entry.data %}
+    <div class="cal-card" style="border-left-color:{{ e.color or '#6366f1' }};">
+      {% if e.all_day %}
+      <div class="cal-card-time">All day</div>
+      {% elif e.start_time %}
+      <div class="cal-card-time">
+        {{ e.start_time[:5] }}{% if e.end_time %} – {{ e.end_time[:5] }}{% endif %}
+      </div>
+      {% endif %}
+      <div class="cal-card-title">{{ e.title }}</div>
+      {% if e.description %}
+      <div class="cal-card-desc">{{ e.description }}</div>
+      {% endif %}
+    </div>
+
+    {% elif entry.type == 'gcal' %}
+    {% set g = entry.data %}
+    <div class="cal-card" style="border-left-color:{{ g.color or '#6366f1' }}; background:rgba(99,102,241,0.05);">
+      {% if g.all_day %}
+      <div class="cal-card-time">All day</div>
+      {% elif g.start_time %}
+      <div class="cal-card-time">{{ g.start_time[11:16] }}</div>
+      {% endif %}
+      <div class="cal-card-title">{{ g.title }}</div>
+      {% if g.description %}
+      <div class="cal-card-desc">{{ g.description[:120] }}</div>
+      {% endif %}
+    </div>
+
+    {% elif entry.type == 'job' %}
+    {% set job = entry.data %}
+    {% set dest = ((job.address or '') ~ (', ' ~ job.suburb if job.suburb else '')) | urlencode %}
+    {% set status_colors = {
+      'pending': '#fbbf24', 'scheduled': '#60a5fa', 'in_progress': '#a78bfa',
+      'complete': '#34d399', 'invoiced': '#9ca3af', 'paid': '#6ee7b7',
+      'quote': '#38bdf8'
+    } %}
+    <a href="{{ url_for('mechanic.job_view', job_id=job.id) }}"
+       class="job-card status-{{ job.status }}" data-job-id="{{ job.id }}" data-date="{{ job.scheduled_date }}"
+       style="display:block; text-decoration:none; color:inherit;">
+      <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.3rem;">
+        <span style="display:inline-block; width:10px; height:10px; border-radius:50%;
+                     background:{{ status_colors.get(job.status, '#94a3b8') }};
+                     flex-shrink:0;"></span>
+        {% if job.scheduled_time %}
+        <span class="job-time" style="margin-bottom:0;">
+          {{ job.scheduled_time[:5] }}{% if job.end_time %} – {{ job.end_time[:5] }}{% endif %}
+        </span>
+        {% endif %}
+        <span style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.06em;
+                     color:{{ status_colors.get(job.status, '#94a3b8') }}; font-weight:600;">
+          {{ job.status|replace('_',' ') }}
+        </span>
+      </div>
+      <div class="job-name">{{ job.customer_name }}</div>
+      {% if job.customer_phone %}
+      <div class="job-phone">
+        <span class="job-tel" data-phone="{{ job.customer_phone }}"
+              style="cursor:pointer; color:var(--accent);">
+          {{ job.customer_phone | fmt_phone }}
+        </span>
+      </div>
+      {% endif %}
+      {% if job.address or job.suburb %}
+      <div class="job-addr">
+        <i class="bi bi-geo-alt" style="flex-shrink:0; margin-top:2px;"></i>
+        <span class="job-maps" data-url="https://maps.apple.com/?daddr={{ dest }}&dirflg=d"
+              style="cursor:pointer;">
+          {{ job.address or '' }}{% if job.address and job.suburb %}, {% endif %}{{ job.suburb or '' }}
+        </span>
+      </div>
+      {% endif %}
+      {% if job.customer_email %}
+      <div class="job-actions">
+        <span class="m-btn m-btn-ghost job-thread"
+              data-url="{{ url_for('mechanic.job_thread', job_id=job.id) }}">
+          <i class="bi bi-chat-left-text"></i> Thread
+        </span>
+      </div>
+      {% endif %}
+    </a>
+    {% endif %}
+
+  {% else %}
+  <div style="text-align:center; color:var(--muted); padding:3rem 1rem;">
+    No scheduled jobs yet.
+  </div>
+  {% endfor %}
+
+  <div class="load-sentinel" id="load-bottom">↓ Tap to load more</div>
+</div>
+
+<script>
+var TODAY       = {{ today|tojson }};
+var PAGE_SIZE   = {{ page_size }};
+var loadingTop  = false;
+var loadingBot  = false;
+var exhaustedTop = false;  // can always scroll back from today
+var exhaustedBot = false;
+
+// Set header date
+document.getElementById('header-date').textContent =
+  new Date().toLocaleDateString('en-AU', {weekday:'long', day:'numeric', month:'long'});
+
+// ── Infinite scroll via IntersectionObserver ──────────────────────────────
+var topSentinel = document.getElementById('load-top');
+var botSentinel = document.getElementById('load-bottom');
+// Keep top sentinel hidden initially — shown once user triggers backward load
+// by scrolling near the top of the list
+topSentinel.style.display = 'none';
+
+// Scroll to today's separator on load so past dates require scrolling up
+window.addEventListener('DOMContentLoaded', function() {
+  // Restore scroll to previously viewed job card, or default to today
+  var savedJobId = sessionStorage.getItem('mechanic_scroll_job');
+  sessionStorage.removeItem('mechanic_scroll_job');
+  var scrolled = false;
+  if (savedJobId) {
+    var jobCard = document.querySelector('.job-card[data-job-id="' + savedJobId + '"]');
+    if (jobCard) {
+      jobCard.scrollIntoView({behavior: 'instant', block: 'center'});
+      jobCard.style.outline = '2px solid var(--accent)';
+      setTimeout(function() { jobCard.style.outline = ''; }, 1500);
+      scrolled = true;
+    }
+  }
+  if (!scrolled) {
+    var todaySep = document.querySelector('.date-sep.today');
+    if (todaySep) todaySep.scrollIntoView({behavior: 'instant', block: 'start'});
+  }
+});
+
+// Delegated handlers for phone/maps spans inside job card links
+document.getElementById('schedule-list').addEventListener('click', function(e) {
+  var tel = e.target.closest('.job-tel');
+  if (tel) {
+    e.preventDefault();
+    e.stopPropagation();
+    window.location = 'tel:' + tel.dataset.phone;
+    return;
+  }
+  var maps = e.target.closest('.job-maps');
+  if (maps) {
+    e.preventDefault();
+    e.stopPropagation();
+    window.open(maps.dataset.url, '_blank');
+    return;
+  }
+  var thread = e.target.closest('.job-thread');
+  if (thread) {
+    e.preventDefault();
+    e.stopPropagation();
+    window.location = thread.dataset.url;
+    return;
+  }
+});
+
+function scrollToToday() {
+  var todaySep = document.querySelector('.date-sep.today');
+  if (todaySep) {
+    todaySep.scrollIntoView({behavior: 'smooth', block: 'start'});
+  } else {
+    // Today not in DOM — reload fresh
+    window.location.href = '/mechanic/';
+  }
+}
+
+// Top sentinel always visible — tap to load earlier entries
+topSentinel.style.display = '';
+
+function getLastDate(direction) {
+  var seps = document.querySelectorAll('.date-sep[data-date]');
+  if (!seps.length) return TODAY;
+  if (direction === 'forward') return seps[seps.length - 1].dataset.date;
+  return seps[0].dataset.date;
+}
+
+function loadMore(direction) {
+  if (direction === 'forward' && (loadingBot || exhaustedBot)) return;
+  if (direction === 'backward' && (loadingTop || exhaustedTop)) return;
+
+  var sentinel = direction === 'forward' ? botSentinel : topSentinel;
+  sentinel.innerHTML = '<span class="spinner"></span> Loading…';
+
+  if (direction === 'forward') loadingBot = true;
+  else loadingTop = true;
+
+  var cursorDate = getLastDate(direction);
+  fetch('/mechanic/schedule-page?cursor_date=' + cursorDate + '&direction=' + direction)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (direction === 'forward') {
+        loadingBot = false;
+        sentinel.innerHTML = data.has_more ? '↓ Tap to load more' : 'No more entries';
+        if (!data.has_more) exhaustedBot = true;
+        appendEntries(data.entries, 'bottom');
+      } else {
+        loadingTop = false;
+        sentinel.innerHTML = data.has_more ? '↑ Tap to load earlier' : 'No earlier entries';
+        if (!data.has_more) exhaustedTop = true;
+        prependEntries(data.entries);
+      }
+    })
+    .catch(function() {
+      loadingBot = false;
+      loadingTop = false;
+      sentinel.innerHTML = direction === 'forward' ? '↓ Tap to load more' : '↑ Tap to load earlier';
+    });
+}
+
+// Manual load triggers — tap sentinels to load more
+topSentinel.addEventListener('click', function() { loadMore('backward'); });
+botSentinel.addEventListener('click', function() { loadMore('forward'); });
+topSentinel.style.cursor = 'pointer';
+botSentinel.style.cursor = 'pointer';
+
+// ── Render entries ────────────────────────────────────────────────────────
+function fmtTime(t) {
+  if (!t) return '';
+  return t.length >= 5 ? t.substring(0, 5) : t;
+}
+
+function fullDate(dateStr) {
+  if (!dateStr) return '';
+  var d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-AU', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+  }).toUpperCase();
+}
+
+function entryHTML(e) {
+  if (e.type === 'cal_event' || e.type === 'gcal') {
+    var timeStr = e.all_day ? 'All day' : (fmtTime(e.time) || '');
+    return '<div class="cal-card" style="border-left-color:' + (e.color||'#6366f1') + ';">' +
+      (timeStr ? '<div class="cal-card-time">' + timeStr + '</div>' : '') +
+      '<div class="cal-card-title">' + esc(e.title||'') + '</div>' +
+      (e.description ? '<div class="cal-card-desc">' + esc(e.description.substring(0,120)) + '</div>' : '') +
+      '</div>';
+  }
+  if (e.type === 'job') {
+    var dest = encodeURIComponent((e.address||'') + (e.suburb ? ', '+e.suburb : ''));
+    var timeStr = e.time ? fmtTime(e.time) + (e.end_time ? ' – ' + fmtTime(e.end_time) : '') : '';
+    var addr = (e.address||'') + (e.address && e.suburb ? ', ' : '') + (e.suburb||'');
+    var statusColors = {
+      pending:'#fbbf24', scheduled:'#60a5fa', in_progress:'#a78bfa',
+      complete:'#34d399', invoiced:'#9ca3af', paid:'#6ee7b7', quote:'#38bdf8'
+    };
+    var sc = statusColors[e.status] || '#94a3b8';
+    var statusLabel = (e.status||'').replace('_',' ').toUpperCase();
+    return '<a href="/mechanic/job/' + e.id + '" class="job-card status-' + e.status +
+      '" data-job-id="' + e.id + '" data-date="' + e.date +
+      '" style="display:block; text-decoration:none; color:inherit;">' +
+      '<div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.3rem;">' +
+        '<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:' + sc + ';flex-shrink:0;"></span>' +
+        (timeStr ? '<span class="job-time" style="margin-bottom:0;">' + timeStr + '</span>' : '') +
+        '<span style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.06em;color:' + sc + ';font-weight:600;">' + statusLabel + '</span>' +
+      '</div>' +
+      '<div class="job-name">' + esc(e.customer_name||'') + '</div>' +
+      (e.customer_phone ? '<div class="job-phone"><span class="job-tel" data-phone="' + e.customer_phone + '" style="cursor:pointer;color:var(--accent);">' + fmtPhone(e.customer_phone) + '</span></div>' : '') +
+      (addr ? '<div class="job-addr"><i class="bi bi-geo-alt"></i><span class="job-maps" data-url="https://maps.apple.com/?daddr=' + dest + '&dirflg=d" style="cursor:pointer;">' + esc(addr) + '</span></div>' : '') +
+      (e.customer_email ? '<div class="job-actions"><span class="m-btn m-btn-ghost job-thread" data-url="/mechanic/job/' + e.id + '/thread"><i class="bi bi-chat-left-text"></i> Thread</span></div>' : '') +
+      '</a>';
+  }
+  return '';
+}
+
+function renderDateSep(dateStr) {
+  var isToday = dateStr === TODAY;
+  return '<div class="date-sep' + (isToday ? ' today' : '') + '" data-date="' + dateStr + '">' +
+    fullDate(dateStr) + '</div>';
+}
+
+function appendEntries(entries, position) {
+  var list   = document.getElementById('schedule-list');
+  var bot    = document.getElementById('load-bottom');
+  var lastDate = '';
+  var seps   = document.querySelectorAll('.date-sep');
+  if (seps.length) lastDate = seps[seps.length-1].dataset.date;
+
+  entries.forEach(function(e) {
+    if (e.date !== lastDate) {
+      lastDate = e.date;
+      bot.insertAdjacentHTML('beforebegin', renderDateSep(e.date));
+    }
+    bot.insertAdjacentHTML('beforebegin', entryHTML(e));
+  });
+}
+
+function prependEntries(entries) {
+  var list   = document.getElementById('schedule-list');
+  var top    = document.getElementById('load-top');
+  var firstDate = '';
+  var seps   = document.querySelectorAll('.date-sep');
+  if (seps.length) firstDate = seps[0].dataset.date;
+
+  var reversed = entries.slice().reverse();
+  reversed.forEach(function(e) {
+    if (e.date !== firstDate) {
+      firstDate = e.date;
+      top.insertAdjacentHTML('afterend', renderDateSep(e.date));
+    }
+    var sep = document.querySelector('.date-sep[data-date="' + e.date + '"]');
+    if (sep) sep.insertAdjacentHTML('afterend', entryHTML(e));
+    else top.insertAdjacentHTML('afterend', entryHTML(e));
+  });
+  topSentinel.style.display = '';
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtPhone(n) {
+  var d = (n||'').replace(/\D/g,'');
+  if (d.length===10) return d.slice(0,4)+' '+d.slice(4,7)+' '+d.slice(7);
+  return n;
+}
+</script>
+</body>
+</html>

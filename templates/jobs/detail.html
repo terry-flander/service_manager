@@ -263,12 +263,6 @@ function silentSave(callback) {
             </tr>
             {% endfor %}
           </table>
-          {% if job['description'] %}
-          <div style="margin-top:1rem;">
-            <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--sd-muted); margin-bottom:0.4rem;">Message</div>
-            <div style="font-size:0.875rem; color:var(--sd-text); background:rgba(0,0,0,0.15); border-radius:6px; padding:0.75rem; border-left:3px solid var(--sd-accent);">{{ job['description'] }}</div>
-          </div>
-          {% endif %}
           {% if job['bike_description'] and not is_workshop %}
           <div style="margin-top:0.75rem;">
             <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--sd-muted); margin-bottom:0.4rem;">Bike</div>

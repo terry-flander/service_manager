@@ -43,7 +43,19 @@ def _get_access_token():
 
     client_id     = os.environ.get('XERO_CLIENT_ID', '')
     client_secret = os.environ.get('XERO_CLIENT_SECRET', '')
-    refresh_token = os.environ.get('XERO_REFRESH_TOKEN', '')
+    # Prefer DB-stored token (updated on rotation) over env var
+    refresh_token = ''
+    try:
+        from models import get_db
+        with get_db() as _conn:
+            _row = _conn.execute(
+                "SELECT value FROM settings WHERE key='xero_refresh_token'").fetchone()
+            if _row:
+                refresh_token = _row['value']
+    except Exception:
+        pass
+    if not refresh_token:
+        refresh_token = os.environ.get('XERO_REFRESH_TOKEN', '')
 
     if not all([client_id, client_secret, refresh_token]):
         raise RuntimeError(
@@ -68,12 +80,22 @@ def _get_access_token():
     with urllib.request.urlopen(req, timeout=15) as resp:
         tokens = json.loads(resp.read().decode())
 
-    # If Xero rotated the refresh token, save the new one back to .env
+    # If Xero rotated the refresh token, save the new one
     new_refresh = tokens.get('refresh_token', refresh_token)
     if new_refresh != refresh_token:
-        _save_env_key('XERO_REFRESH_TOKEN', new_refresh)
         os.environ['XERO_REFRESH_TOKEN'] = new_refresh
-        log.info("Xero: refresh token rotated and saved to .env")
+        # Save to DB settings so it persists across container restarts
+        try:
+            from models import get_db
+            with get_db() as _conn:
+                _conn.execute(
+                    "INSERT INTO settings (key,value) VALUES ('xero_refresh_token',?) "
+                    "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    (new_refresh,))
+                _conn.commit()
+        except Exception as _e:
+            log.warning(f"Xero: could not save rotated refresh token to DB: {_e}")
+        log.info("Xero: refresh token rotated and saved")
 
     _cached_token = {
         'token':      tokens['access_token'],
@@ -125,8 +147,8 @@ def _xero_request(method, path, payload=None):
             return json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
         body = e.read().decode()
-        log.error(f"Xero API {method} {path} → {e.code}: {body[:400]}")
-        raise RuntimeError(f"Xero API error {e.code}: {body[:200]}")
+        log.error(f"Xero API {method} {path} → {e.code}: {body}")
+        raise RuntimeError(f"Xero API error {e.code}: {body}")
 
 
 def _tax_type_and_inclusive(job):
@@ -136,11 +158,11 @@ def _tax_type_and_inclusive(job):
     gst_exempt = (tax_raw == 2)
 
     if payment == 'cash' or gst_exempt:
-        return 'EXEMPTOUTPUT', 'EXCLUSIVE'  # GST Free Income, exclusive
+        return 'EXEMPTOUTPUT', None          # GST Free — no LineAmountTypes needed
     elif tax_raw == 1:
-        return 'OUTPUT', 'INCLUSIVE'        # GST on Income, inclusive
+        return 'OUTPUT', 'Inclusive'         # Tax inclusive — Xero format
     else:
-        return 'OUTPUT', 'EXCLUSIVE'        # GST on Income, exclusive
+        return 'OUTPUT', None                # Tax exclusive — Xero default
 
 
 def push_invoice(job, job_parts, invoice_number):
@@ -167,27 +189,28 @@ def push_invoice(job, job_parts, invoice_number):
     pc_match = _re.search(r'\b(\d{4})\b', address)
     postcode = pc_match.group(1) if pc_match else ''
 
-    # Build line items
-    line_items = []
-    if job_parts:
-        for jp in job_parts:
-            line_items.append({
-                'ItemCode':   jp['part_number'] or '',
-                'Description': jp['description'] or '',
-                'Quantity':    float(jp['quantity']),
-                'UnitAmount':  float(jp['unit_cost']),
-                'AccountCode': '240',
-                'TaxType':     tax_type,
-            })
+    # Send a single consolidated line item using the job's stored total.
+    # For tax-inclusive jobs, send the full inclusive amount with LineAmountTypes=Inclusive.
+    # For tax-exclusive jobs, send the subtotal (ex-GST).
+    if line_amount_type == 'Inclusive':
+        unit_amount = float(job.get('total') or 0)
     else:
-        # No parts — single line with total
-        line_items.append({
-            'Description': f"Bicycle service — {job['reference']}",
-            'Quantity':    1.0,
-            'UnitAmount':  float(job['total'] or 0),
-            'AccountCode': '240',
-            'TaxType':     tax_type,
-        })
+        unit_amount = float(job.get('subtotal') or job.get('total') or 0)
+
+    if job_parts:
+        desc_lines = [f"{float(jp['quantity']):.0f}x {jp['description']} ${float(jp['unit_cost']):.2f}"
+                      for jp in job_parts]
+        description = '\n'.join(desc_lines)
+    else:
+        description = f"Bicycle service — {job['reference']}"
+
+    line_items = [{
+        'Description': description,
+        'Quantity':    1.0,
+        'UnitAmount':  unit_amount,
+        'AccountCode': '240',
+        'TaxType':     tax_type,
+    }]
 
     payload = {
         'Type':    'ACCREC',
@@ -206,13 +229,15 @@ def push_invoice(job, job_parts, invoice_number):
         },
         'InvoiceNumber':   invoice_number,
         'Reference':       job['reference'] or '',
-        'DueDate':         f'/Date({int(date.fromisoformat(due_date).strftime("%s")) * 1000})/',
-        'LineAmountTypes': line_amount_type,
+        'DueDate':         due_date,
         'LineItems':       line_items,
         'CurrencyCode':    'AUD',
         'SentToContact':   True,
     }
+    if line_amount_type:
+        payload['LineAmountTypes'] = line_amount_type
 
+    log.info(f"Xero invoice payload: {json.dumps(payload, default=str)[:800]}")
     result = _xero_request('POST', 'Invoices', {'Invoices': [payload]})
     invoices = result.get('Invoices', [])
     if not invoices:

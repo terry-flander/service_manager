@@ -2115,10 +2115,13 @@ function saveColumnSet() {
     <i class="bi bi-plus-circle-fill"></i>
     <span>New Job</span>
   </a>
-  <a href="{{ url_for('jobs.new_sale') }}" class="lr-item {% if request.endpoint == 'jobs.new_sale' %}active{% endif %}">
-    <i class="bi bi-cash-coin"></i>
-    <span>Counter Sale</span>
-  </a>
+  <form method="post" action="{{ url_for('mechanic.toggle_mode') }}" style="display:contents;">
+    <input type="hidden" name="next" value="{{ request.url }}">
+    <button type="submit" class="lr-item {% if request.endpoint and request.endpoint.startswith('mechanic.') %}active{% endif %}">
+      <i class="bi bi-tools"></i>
+      <span>Mechanic</span>
+    </button>
+  </form>
   <button class="lr-item" onclick="toggleSidebar()" aria-label="Menu">
     <i class="bi bi-grid-3x3-gap"></i>
     <span>Menu</span>
@@ -2139,10 +2142,13 @@ function saveColumnSet() {
     <i class="bi bi-plus-circle-fill"></i>
     <span>New Job</span>
   </a>
-  <a href="{{ url_for('jobs.new_sale') }}" class="bn-item {% if request.endpoint == 'jobs.new_sale' %}active{% endif %}">
-    <i class="bi bi-cash-coin"></i>
-    <span>Counter Sale</span>
-  </a>
+  <form method="post" action="{{ url_for('mechanic.toggle_mode') }}" style="display:contents;">
+    <input type="hidden" name="next" value="{{ request.url }}">
+    <button type="submit" class="bn-item {% if request.endpoint and request.endpoint.startswith('mechanic.') %}active{% endif %}">
+      <i class="bi bi-tools"></i>
+      <span>Mechanic</span>
+    </button>
+  </form>
   <button class="bn-item" onclick="toggleSidebar()" aria-label="Menu">
     <i class="bi bi-grid-3x3-gap"></i>
     <span>Menu</span>

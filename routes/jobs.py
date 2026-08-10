@@ -2,6 +2,9 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from models import get_db
 from datetime import date
 import secrets
+import logging
+
+log = logging.getLogger('app')
 
 
 def _get_or_create_portal_token(conn, job_id):
@@ -1722,7 +1725,7 @@ def push_to_xero(job_id):
 
         with get_db() as conn:
             conn.execute(
-                "UPDATE jobs SET xero_invoice_id=?, xero_status='sent' WHERE id=?",
+                "UPDATE jobs SET xero_invoice_id=?, xero_status='sent', status='invoiced' WHERE id=?",
                 (xero_id, job_id))
             conn.commit()
 
@@ -1744,8 +1747,9 @@ def xero_check_payments():
         rows = conn.execute("""
             SELECT id, invoice_number, xero_invoice_id
             FROM jobs
-            WHERE xero_status = 'sent'
-              AND invoice_number IS NOT NULL
+            WHERE invoice_number IS NOT NULL
+              AND xero_invoice_id IS NOT NULL
+              AND status = 'invoiced'
         """).fetchall()
 
     if not rows:
@@ -1769,12 +1773,16 @@ def xero_check_payments():
                 continue
             db_status = 'paid' if xero_status == 'PAID' else \
                         'voided' if xero_status == 'VOIDED' else 'sent'
-            conn.execute(
-                "UPDATE jobs SET xero_status=? WHERE id=?",
-                (db_status, job_id))
             if xero_status == 'PAID':
+                conn.execute(
+                    "UPDATE jobs SET xero_status=?, status='paid' WHERE id=?",
+                    (db_status, job_id))
                 paid_count += 1
                 log.info(f"Xero: job {job_id} ({inv_num}) marked paid")
+            else:
+                conn.execute(
+                    "UPDATE jobs SET xero_status=? WHERE id=?",
+                    (db_status, job_id))
         conn.commit()
 
     return jsonify({'ok': True, 'checked': len(rows), 'paid': paid_count})

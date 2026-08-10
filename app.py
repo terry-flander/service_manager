@@ -38,6 +38,7 @@ def create_app():
     from routes.column_visibility import column_visibility_bp
     from routes.portal import portal_bp
     from routes.api import api_bp
+    from routes.mechanic import mechanic_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(jobs_bp)
@@ -54,6 +55,7 @@ def create_app():
     app.register_blueprint(column_visibility_bp)
     app.register_blueprint(portal_bp)
     app.register_blueprint(api_bp)
+    app.register_blueprint(mechanic_bp)
 
     # ── Global auth gate ──────────────────────────────────────────────────────
     PUBLIC_ENDPOINTS = {'auth.login', 'auth.totp_verify', 'static',
@@ -90,6 +92,8 @@ def create_app():
             return value.strftime('%d/%m/%Y')
         if fmt == 'short':
             return value.strftime('%a %-d %b %Y')
+        if fmt == 'weekday_full':
+            return value.strftime('%A %-d %B %Y').upper()
         return value.strftime('%A %-d %B %Y')
 
     def _fmt_datetime_local(value, fmt='%d/%m/%Y %H:%M'):

@@ -1,0 +1,755 @@
+<!doctype html>
+<html lang="en" data-theme="{{ theme }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>{{ job['reference'] }} — TFB Field</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    /* ── Theme variables ─────────────────────────────────────────────────── */
+    :root, [data-theme="dark"] {
+      --bg:      #0f172a;
+      --surface: #1e293b;
+      --border:  #334155;
+      --text:    #e2e8f0;
+      --muted:   #94a3b8;
+      --accent:  #f97316;
+    }
+    [data-theme="light"] {
+      --bg:      #f1f5f9;
+      --surface: #ffffff;
+      --border:  #e2e8f0;
+      --text:    #0f172a;
+      --muted:   #64748b;
+      --accent:  #ea580c;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 15px;
+      min-height: 100dvh;
+      padding-bottom: calc(1rem + env(safe-area-inset-bottom));
+    }
+
+    /* Header */
+    .m-header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      padding-top: calc(0.75rem + env(safe-area-inset-top));
+    }
+    .m-back {
+      background: none;
+      border: none;
+      color: var(--accent);
+      font-size: 1.1rem;
+      cursor: pointer;
+      padding: 0.2rem;
+      text-decoration: none;
+    }
+    .m-header-info { flex: 1; }
+    .m-ref { font-size: 0.72rem; color: var(--muted); font-family: monospace; }
+    .m-name { font-size: 1rem; font-weight: 700; }
+
+    /* Status badge */
+    .status-badge {
+      display: inline-block;
+      padding: 0.2rem 0.6rem;
+      border-radius: 4px;
+      font-size: 0.68rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .status-pending     { background:rgba(245,158,11,0.15);  color:#fbbf24; }
+    .status-scheduled   { background:rgba(59,130,246,0.15);  color:#60a5fa; }
+    .status-in_progress { background:rgba(139,92,246,0.15);  color:#a78bfa; }
+    .status-complete    { background:rgba(16,185,129,0.15);   color:#34d399; }
+    .status-invoiced    { background:rgba(107,114,128,0.15);  color:#9ca3af; }
+    .status-paid        { background:rgba(16,185,129,0.18);   color:#6ee7b7; }
+    .status-lost        { background:rgba(239,68,68,0.12);    color:#fca5a5; }
+    .status-quote       { background:rgba(14,165,233,0.15);   color:#38bdf8; }
+
+    /* Cards */
+    .m-card {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem;
+      margin-bottom: 2px;
+    }
+    .m-card-header {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      font-weight: 700;
+      margin-bottom: 0.6rem;
+    }
+
+    /* Detail rows */
+    .m-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.6rem;
+      padding: 0.3rem 0;
+      font-size: 0.88rem;
+    }
+    .m-row i { color: var(--muted); margin-top: 2px; flex-shrink: 0; }
+    .m-row a { color: var(--text); text-decoration: none; }
+    .m-row a:active { color: var(--accent); }
+
+    /* Contacts */
+    .contact-row {
+      padding: 0.35rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.85rem;
+    }
+    .contact-row:last-child { border-bottom: none; }
+    .contact-name { font-weight: 600; }
+    .contact-phone { color: var(--accent); }
+
+    /* Notes */
+    .m-notes {
+      width: 100%;
+      background: rgba(0,0,0,0.2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.9rem;
+      padding: 0.75rem;
+      resize: none;
+      min-height: 100px;
+      outline: none;
+    }
+    .m-notes:focus { border-color: var(--accent); }
+    .m-save-indicator {
+      font-size: 0.72rem;
+      color: var(--muted);
+      text-align: right;
+      margin-top: 0.3rem;
+      height: 1rem;
+    }
+    .m-save-indicator.saving { color: var(--accent); }
+    .m-save-indicator.saved  { color: #34d399; }
+
+    /* Parts table */
+    .parts-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .parts-table th {
+      text-align: left;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      padding: 0.3rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .parts-table td { padding: 0.45rem 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .parts-table .r { text-align: right; }
+    .parts-table tfoot td {
+      font-weight: 700;
+      font-size: 1rem;
+      border-top: 2px solid var(--border);
+      padding-top: 0.6rem;
+    }
+    .part-del-btn {
+      background: none;
+      border: none;
+      color: #f87171;
+      cursor: pointer;
+      padding: 0.2rem;
+      font-size: 0.85rem;
+    }
+
+    /* jp-inline-input (mirrors jobs/detail) */
+    .jp-inline-input {
+      background: transparent;
+      border: none;
+      border-bottom: 1px solid transparent;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 0.85rem;
+      padding: 0.1rem 0.2rem;
+      width: 100%;
+      outline: none;
+    }
+    .jp-inline-input:focus { border-bottom-color: var(--accent); }
+
+    /* Add Part button */
+    .add-part-btn {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: none;
+      border: 1px dashed var(--border);
+      color: var(--muted);
+      border-radius: 6px;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.82rem;
+      cursor: pointer;
+      width: 100%;
+      margin-top: 0.75rem;
+    }
+    .add-part-btn:active { border-color: var(--accent); color: var(--accent); }
+
+    /* Status + total bar */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1rem;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 2px;
+    }
+    .total-price {
+      font-size: 1.15rem;
+      font-weight: 700;
+    }
+
+    /* Action buttons */
+    .action-row {
+      display: flex;
+      gap: 0.75rem;
+      padding: 1rem;
+    }
+    .m-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      padding: 0.75rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      text-decoration: none;
+    }
+    .m-btn-complete { background: #10b981; color: #fff; }
+    .m-btn-reopen   { background: #8b5cf6; color: #fff; }
+    .m-btn-close    { background: rgba(255,255,255,0.07); color: var(--text); border: 1px solid var(--border); flex: 0 0 auto; padding: 0.75rem 1.25rem; }
+
+    /* Payment sheet */
+    #pay-sheet-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 200;
+      align-items: flex-end;
+    }
+    #pay-sheet {
+      background: var(--surface);
+      border-radius: 16px 16px 0 0;
+      padding: 1.5rem 1rem;
+      padding-bottom: calc(1.5rem + env(safe-area-inset-bottom));
+      width: 100%;
+    }
+    .pay-title {
+      font-size: 1rem;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+    .pay-options { display: flex; flex-direction: column; gap: 0.5rem; }
+    .pay-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 1rem;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+    }
+    .pay-eftpos   { background: #3b82f6; color: #fff; }
+    .pay-cash     { background: #10b981; color: #fff; }
+    .pay-nti      { background: rgba(255,255,255,0.07); color: var(--text); border: 1px solid var(--border); }
+    .pay-cancel   { background: none; color: var(--muted); font-size: 0.85rem; text-align: center; padding: 0.75rem; cursor: pointer; border: none; width: 100%; margin-top: 0.25rem; }
+
+    /* Add Part overlay (matches jobs/detail) */
+    #add-part-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 300;
+      align-items: flex-end;
+    }
+    #add-part-panel {
+      background: var(--surface);
+      border-radius: 16px 16px 0 0;
+      padding: 1.25rem 1rem;
+      padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
+      width: 100%;
+      max-height: 80dvh;
+      overflow-y: auto;
+    }
+    .ap-title { font-size: 1rem; font-weight: 700; margin-bottom: 1rem; }
+    .ap-input {
+      width: 100%;
+      background: rgba(0,0,0,0.2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 0.9rem;
+      padding: 0.6rem 0.75rem;
+      outline: none;
+      margin-bottom: 0.75rem;
+    }
+    .ap-input:focus { border-color: var(--accent); }
+    .ap-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+    }
+    .ap-row:active { background: rgba(249,115,22,0.1); }
+    .ap-name { font-size: 0.88rem; }
+    .ap-price { font-size: 0.85rem; color: var(--muted); }
+    .ap-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      margin-top: 0.75rem;
+    }
+    .ap-field label {
+      display: block;
+      font-size: 0.7rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.25rem;
+    }
+    .ap-btn-row { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+    .ap-btn-add { flex: 1; background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 0.75rem; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
+    .ap-btn-cancel { background: rgba(255,255,255,0.07); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 0.75rem 1.25rem; font-size: 0.9rem; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+<header class="m-header">
+  <a href="#" class="m-back" id="back-btn" onclick="goBack(); return false;">
+    <i class="bi bi-chevron-left"></i>
+  </a>
+  <div class="m-header-info">
+    <div class="m-ref">{{ job['reference'] }}</div>
+    <div class="m-name">{{ job['customer_name'] }}</div>
+  </div>
+</header>
+
+<!-- Customer info card -->
+<div class="m-card">
+  <div class="m-card-header">Customer</div>
+  {% if job['customer_phone'] %}
+  <div class="m-row">
+    <i class="bi bi-telephone"></i>
+    <a href="tel:{{ job['customer_phone'] }}">{{ job['customer_phone']|fmt_phone }}</a>
+  </div>
+  {% endif %}
+  {% if contacts %}
+  {% for ct in contacts %}
+  <div class="contact-row">
+    <span class="contact-name">{{ ct['name'] }}</span>
+    {% if ct['phone'] %}
+    — <a href="tel:{{ ct['phone'] }}" class="contact-phone">{{ ct['phone']|fmt_phone }}</a>
+    {% endif %}
+    {% if ct['notes'] %}<div style="font-size:0.78rem; color:var(--muted);">{{ ct['notes'] }}</div>{% endif %}
+  </div>
+  {% endfor %}
+  {% endif %}
+  {% set dest = ((job['address'] or '') ~ (', ' ~ job['suburb'] if job['suburb'] else '')) | urlencode %}
+  {% if job['address'] or job['suburb'] %}
+  <div class="m-row">
+    <i class="bi bi-geo-alt"></i>
+    <a href="https://maps.apple.com/?daddr={{ dest }}&dirflg=d" target="_blank">
+      {{ job['address'] or '' }}{% if job['address'] and job['suburb'] %}, {% endif %}{{ job['suburb'] or '' }}
+    </a>
+  </div>
+  {% endif %}
+  {% if job['description'] %}
+  <div style="margin-top:0.5rem; padding-top:0.5rem; border-top:1px solid var(--border);">
+    <div style="font-size:0.68rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin-bottom:0.3rem;">Request</div>
+    <div class="m-row" style="font-size:0.85rem; color:var(--text); white-space:pre-wrap;">{{ job['description'] }}</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Status + total -->
+<div class="status-bar">
+  <span id="status-badge" class="status-badge status-{{ job['status'] }}">
+    {{ job['status']|replace('_',' ') }}
+  </span>
+  <span class="total-price" id="total-display">${{ '%.2f'|format(job['total'] or 0) }}</span>
+</div>
+
+<!-- Internal notes -->
+<div class="m-card">
+  <div class="m-card-header">Internal Notes</div>
+  <textarea class="m-notes" id="notes-field"
+            placeholder="Add notes…">{{ job['notes'] or '' }}</textarea>
+  <div class="m-save-indicator" id="notes-status"></div>
+</div>
+
+<!-- Parts -->
+<div class="m-card">
+  <div class="m-card-header">Parts & Labour</div>
+  <table class="parts-table">
+    <thead>
+      <tr>
+        <th>Description</th>
+        <th class="r" style="width:40px;">Qty</th>
+        <th class="r" style="width:70px;">Price</th>
+        <th style="width:30px;"></th>
+      </tr>
+    </thead>
+    <tbody id="parts-tbody">
+      {% for p in job_parts %}
+      <tr data-part-id="{{ p['id'] }}">
+        <td>
+          <input class="jp-inline-input" value="{{ p['description'] }}"
+                 data-field="description"
+                 onblur="savePartField({{ p['id'] }}, 'description', this.value)">
+        </td>
+        <td class="r">
+          <input class="jp-inline-input r" type="number" min="0" step="0.5"
+                 value="{{ p['quantity']|int if p['quantity'] == p['quantity']|int else p['quantity'] }}"
+                 style="width:40px; text-align:right;"
+                 data-field="quantity"
+                 onblur="savePartField({{ p['id'] }}, 'quantity', this.value)">
+        </td>
+        <td class="r">
+          <input class="jp-inline-input r" type="number" min="0" step="0.01"
+                 value="{{ '%.2f'|format(p['unit_cost']) }}"
+                 style="width:65px; text-align:right;"
+                 data-field="unit_cost"
+                 onblur="savePartField({{ p['id'] }}, 'unit_cost', this.value)">
+        </td>
+        <td>
+          <button class="part-del-btn" onclick="deletePart({{ p['id'] }})">
+            <i class="bi bi-trash3"></i>
+          </button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr>
+        <td colspan="2">Total</td>
+        <td class="r" id="total-tfoot">${{ '%.2f'|format(job['total'] or 0) }}</td>
+        <td></td>
+      </tr>
+    </tfoot>
+  </table>
+  <button class="add-part-btn" onclick="openAddPart()">
+    <i class="bi bi-plus-circle"></i> Add Part
+  </button>
+</div>
+
+<!-- Complete / Close row -->
+<div class="action-row">
+  {% set done = job['status'] in ('complete', 'paid', 'invoiced') %}
+  {% if done %}
+  <button class="m-btn m-btn-reopen" id="action-btn" onclick="doReopen()">
+    <i class="bi bi-arrow-counterclockwise"></i> Reopen
+  </button>
+  {% else %}
+  <button class="m-btn m-btn-complete" id="action-btn" onclick="showPaySheet()">
+    <i class="bi bi-check-circle"></i> Complete
+  </button>
+  {% endif %}
+  <button class="m-btn m-btn-close" onclick="goBack()">
+    <i class="bi bi-x-lg"></i>
+  </button>
+</div>
+
+<!-- Payment bottom sheet -->
+<div id="pay-sheet-overlay" onclick="if(event.target===this)hidePaySheet()">
+  <div id="pay-sheet">
+    <div class="pay-title">How was this job paid?</div>
+    <div class="pay-options">
+      <button class="pay-btn pay-eftpos" onclick="doComplete('eftpos')">
+        <i class="bi bi-credit-card"></i> EFTPOS
+      </button>
+      <button class="pay-btn pay-cash" onclick="doComplete('cash')">
+        <i class="bi bi-cash"></i> Cash
+      </button>
+      <button class="pay-btn pay-nti" onclick="doSendToXero()">
+        <i class="bi bi-receipt"></i> Send to Xero
+      </button>
+    </div>
+    <button class="pay-cancel" onclick="hidePaySheet()">Cancel</button>
+  </div>
+</div>
+
+<!-- Add Part bottom sheet -->
+<div id="add-part-overlay" onclick="if(event.target===this)closeAddPart()">
+  <div id="add-part-panel">
+    <div class="ap-title">Add Part</div>
+    <input type="text" class="ap-input" id="ap-search" placeholder="Search parts…"
+           oninput="filterParts(this.value)" autocomplete="off">
+    <div id="ap-list">
+      {% for p in parts %}
+      <div class="ap-row" onclick="selectPart({{ p['id'] }}, {{ p['name']|tojson }}, {{ p['part_number']|tojson }}, {{ p['unit_cost'] }})">
+        <span class="ap-name">{{ p['name'] }}</span>
+        <span class="ap-price">${{ '%.2f'|format(p['unit_cost']) }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <div id="ap-controls" style="display:none;">
+      <div class="ap-controls">
+        <div class="ap-field">
+          <label>Description</label>
+          <input type="text" class="ap-input" id="ap-desc" style="margin-bottom:0;">
+        </div>
+        <div class="ap-field">
+          <label>Price</label>
+          <input type="number" class="ap-input" id="ap-price" step="0.01" min="0" style="margin-bottom:0;">
+        </div>
+        <div class="ap-field">
+          <label>Qty</label>
+          <input type="number" class="ap-input" id="ap-qty" step="0.5" min="0.5" value="1" style="margin-bottom:0;">
+        </div>
+      </div>
+      <div class="ap-btn-row">
+        <button class="ap-btn-cancel" onclick="closeAddPart()">Cancel</button>
+        <button class="ap-btn-add" onclick="addPart()">Add to Job</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+var JOB_ID    = {{ job['id'] }};
+var ALL_PARTS = {{ parts|tojson }};
+var _notesSaveTimer = null;
+var _selectedPartId = null;
+
+// ── Back navigation ───────────────────────────────────────────────────────
+function goBack() {
+  // Store job_id in sessionStorage so schedule can restore scroll
+  sessionStorage.setItem('mechanic_scroll_job', JOB_ID);
+  history.back();
+}
+
+// ── Notes auto-save ───────────────────────────────────────────────────────
+var notesField = document.getElementById('notes-field');
+var notesStat  = document.getElementById('notes-status');
+
+notesField.addEventListener('blur', function() { saveNotes(); });
+notesField.addEventListener('input', function() {
+  clearTimeout(_notesSaveTimer);
+  _notesSaveTimer = setTimeout(saveNotes, 2000);
+});
+
+function saveNotes() {
+  clearTimeout(_notesSaveTimer);
+  var notes = notesField.value;
+  notesStat.textContent = 'Saving…';
+  notesStat.className   = 'm-save-indicator saving';
+  fetch('/mechanic/job/' + JOB_ID + '/notes', {
+    method:  'POST',
+    headers: {'Content-Type': 'application/json'},
+    body:    JSON.stringify({notes: notes}),
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (res.ok) {
+        notesStat.textContent = 'Saved ✓';
+        notesStat.className   = 'm-save-indicator saved';
+        setTimeout(function() { notesStat.textContent = ''; notesStat.className = 'm-save-indicator'; }, 2000);
+      }
+    })
+    .catch(function() { notesStat.textContent = 'Save failed'; });
+}
+
+// ── Parts ─────────────────────────────────────────────────────────────────
+function savePartField(partId, field, value) {
+  fetch('/jobs/' + JOB_ID + '/parts/' + partId, {
+    method:  'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body:    JSON.stringify({[field]: value}),
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(res) { if (res.total !== undefined) updateTotal(res.total); });
+}
+
+function deletePart(partId) {
+  if (!confirm('Remove this part?')) return;
+  fetch('/jobs/' + JOB_ID + '/parts/' + partId, {method: 'DELETE'})
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (res.ok) {
+        var row = document.querySelector('tr[data-part-id="' + partId + '"]');
+        if (row) row.remove();
+        if (res.total !== undefined) updateTotal(res.total);
+      }
+    });
+}
+
+function updateTotal(total) {
+  var fmt = '$' + parseFloat(total).toFixed(2);
+  document.getElementById('total-display').textContent = fmt;
+  document.getElementById('total-tfoot').textContent   = fmt;
+}
+
+// ── Add Part sheet ────────────────────────────────────────────────────────
+function openAddPart() {
+  document.getElementById('add-part-overlay').style.display = 'flex';
+  document.getElementById('ap-search').value  = '';
+  document.getElementById('ap-controls').style.display = 'none';
+  filterParts('');
+  setTimeout(function() { document.getElementById('ap-search').focus(); }, 100);
+}
+
+function closeAddPart() {
+  document.getElementById('add-part-overlay').style.display = 'none';
+  _selectedPartId = null;
+}
+
+function filterParts(q) {
+  var list = document.getElementById('ap-list');
+  var rows = list.querySelectorAll('.ap-row');
+  var ql   = q.toLowerCase();
+  rows.forEach(function(r) {
+    r.style.display = r.textContent.toLowerCase().includes(ql) ? '' : 'none';
+  });
+}
+
+function selectPart(id, name, partNum, price) {
+  _selectedPartId = id;
+  document.getElementById('ap-desc').value  = name;
+  document.getElementById('ap-price').value = price;
+  document.getElementById('ap-qty').value   = 1;
+  document.getElementById('ap-controls').style.display = '';
+  document.getElementById('ap-list').style.display     = 'none';
+  document.getElementById('ap-search').style.display   = 'none';
+}
+
+function addPart() {
+  var desc  = document.getElementById('ap-desc').value.trim();
+  var price = parseFloat(document.getElementById('ap-price').value) || 0;
+  var qty   = parseFloat(document.getElementById('ap-qty').value)   || 1;
+  if (!desc) return;
+
+  fetch('/jobs/' + JOB_ID + '/parts', {
+    method:  'POST',
+    headers: {'Content-Type': 'application/json'},
+    body:    JSON.stringify({
+      part_id:     _selectedPartId,
+      description: desc,
+      unit_cost:   price,
+      quantity:    qty,
+    }),
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (res.ok) {
+        closeAddPart();
+        // Re-fetch parts list
+        location.reload();
+      }
+    });
+}
+
+// ── Payment sheet ─────────────────────────────────────────────────────────
+function showPaySheet() {
+  document.getElementById('pay-sheet-overlay').style.display = 'flex';
+}
+function hidePaySheet() {
+  document.getElementById('pay-sheet-overlay').style.display = 'none';
+}
+
+function doComplete(action) {
+  hidePaySheet();
+  fetch('/mechanic/job/' + JOB_ID + '/complete', {
+    method:  'POST',
+    headers: {'Content-Type': 'application/json'},
+    body:    JSON.stringify({action: action}),
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (res.ok) {
+        updateStatusBadge(res.status);
+        var btn = document.getElementById('action-btn');
+        btn.className = 'm-btn m-btn-reopen';
+        btn.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> Reopen';
+        btn.onclick   = doReopen;
+      }
+    });
+}
+
+function doSendToXero() {
+  hidePaySheet();
+  var btn = document.getElementById('action-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Sending to Xero…';
+  fetch('/jobs/' + JOB_ID + '/push-to-xero', {method: 'POST'})
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      btn.disabled = false;
+      if (res.ok) {
+        updateStatusBadge('invoiced');
+        btn.className = 'm-btn m-btn-reopen';
+        btn.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> Reopen';
+        btn.onclick   = doReopen;
+      } else {
+        alert('Xero error: ' + (res.error || 'Unknown error'));
+        btn.className = 'm-btn m-btn-complete';
+        btn.innerHTML = '<i class="bi bi-check-circle"></i> Complete';
+        btn.onclick   = showPaySheet;
+      }
+    })
+    .catch(function() {
+      btn.disabled = false;
+      alert('Network error — please try again');
+      btn.className = 'm-btn m-btn-complete';
+      btn.innerHTML = '<i class="bi bi-check-circle"></i> Complete';
+      btn.onclick   = showPaySheet;
+    });
+}
+
+function doReopen() {
+  fetch('/mechanic/job/' + JOB_ID + '/complete', {
+    method:  'POST',
+    headers: {'Content-Type': 'application/json'},
+    body:    JSON.stringify({action: 'reopen'}),
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (res.ok) {
+        updateStatusBadge(res.status);
+        var btn = document.getElementById('action-btn');
+        btn.className = 'm-btn m-btn-complete';
+        btn.innerHTML = '<i class="bi bi-check-circle"></i> Complete';
+        btn.onclick   = showPaySheet;
+      }
+    });
+}
+
+function updateStatusBadge(status) {
+  var badge = document.getElementById('status-badge');
+  badge.className = 'status-badge status-' + status;
+  badge.textContent = status.replace('_', ' ');
+}
+</script>
+
+</body>
+</html>
