@@ -846,9 +846,9 @@ function silentSave(callback) {
       <!-- Part number + qty + cost -->
       <div class="row g-2 align-items-end" style="margin-bottom:1rem;">
         <div class="col-12 col-sm-5">
-          <label class="sd-label">Part Number</label>
+          <label class="sd-label">Part Number <span style="color:var(--sd-accent);">*</span></label>
           <input type="text" name="part_number" id="part-number"
-                 class="sd-input" placeholder="Optional — saves to master list">
+                 class="sd-input" placeholder="Required — e.g. brand/model variant" required>
         </div>
         <div class="col-6 col-sm-3">
           <label class="sd-label">Qty</label>

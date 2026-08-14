@@ -77,7 +77,8 @@
               <label class="sd-label">Name *</label>
               <input type="text" name="customer_name" id="f_name" class="sd-input"
                      required placeholder="Full name"
-                     value="{{ prefill_customer['name'] if prefill_customer else '' }}">
+                     value="{{ prefill_customer['name'] if prefill_customer else '' }}"
+                     onblur="if (!document.getElementById('customer_id_field').value) { lookupGcalAddress(this.value); }">
             </div>
             <div class="col-md-6">
               <label class="sd-label">Phone</label>
@@ -431,6 +432,29 @@ function selectCustomer(el) {
   banner.style.display = 'flex';
   document.getElementById('clear-btn').style.display = 'inline-flex';
   hideResults();
+  // If address still empty, try GCal lookup by name
+  if (addrInput && !addrInput.value) {
+    lookupGcalAddress(el.dataset.name);
+  }
+}
+
+function lookupGcalAddress(name) {
+  if (!name) return;
+  fetch('/gcal/address-for-name?name=' + encodeURIComponent(name))
+    .then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (res.ok && res.address) {
+        const addrInput = document.getElementById('address-input');
+        if (addrInput && !addrInput.value) {
+          addrInput.value = res.address;
+          document.getElementById('customer_address_field').value = res.address;
+          // Flash the field briefly so user notices it was filled
+          addrInput.style.borderColor = 'var(--sd-accent)';
+          setTimeout(function() { addrInput.style.borderColor = ''; }, 1500);
+        }
+      }
+    })
+    .catch(function() {});  // silent fail — GCal may not be enabled
 }
 
 function clearCustomer() {

@@ -68,8 +68,7 @@
         <table style="width:100%; border-collapse:collapse; margin-bottom:1.5rem;">
           <thead>
             <tr style="border-bottom: 2px solid var(--sd-border);">
-              <th style="text-align:left; padding:0.5rem 0; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--sd-muted);">Description</th>
-              <th style="text-align:left; padding:0.5rem; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--sd-muted);">Part #</th>
+              <th style="text-align:left; padding:0.5rem 0; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--sd-muted);">Item</th>
               <th style="text-align:right; padding:0.5rem; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--sd-muted);">Qty</th>
               <th style="text-align:right; padding:0.5rem; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--sd-muted);">Unit</th>
               <th style="text-align:right; padding:0.5rem 0; font-size:0.7rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--sd-muted);">Total</th>
@@ -78,9 +77,13 @@
           <tbody>
             {% for jp in job_parts %}
             <tr style="border-bottom: 1px solid rgba(51,65,85,0.4);">
-              <td style="padding:0.75rem 0; font-size:0.875rem;">{{ jp['description'] }}</td>
-              <td style="padding:0.75rem 0.5rem; font-size:0.78rem; font-family:'IBM Plex Mono',monospace; color:var(--sd-muted);">{{ jp['part_number'] or '—' }}</td>
-              <td style="text-align:right; padding:0.75rem 0.5rem; font-family:'IBM Plex Mono',monospace; font-size:0.85rem;">{{ jp['quantity'] }}</td>
+              <td style="padding:0.75rem 0; font-size:0.875rem;">
+                {{ jp['part_number'] or jp['description'] }}
+                {% if jp['part_number'] and jp['description'] and jp['part_number'] != jp['description'] %}
+                <div style="font-size:0.75rem; color:var(--sd-muted); margin-top:0.1rem;">{{ jp['description'] }}</div>
+                {% endif %}
+              </td>
+              <td style="padding:0.75rem 0.5rem; text-align:right; font-family:'IBM Plex Mono',monospace; font-size:0.85rem;">{{ jp['quantity'] }}</td>
               <td style="text-align:right; padding:0.75rem 0.5rem; font-family:'IBM Plex Mono',monospace; font-size:0.85rem;">${{ '%.2f'|format(jp['unit_cost']) }}</td>
               <td style="text-align:right; padding:0.75rem 0; font-family:'IBM Plex Mono',monospace; font-size:0.875rem; font-weight:600;">${{ '%.2f'|format(jp['quantity'] * jp['unit_cost']) }}</td>
             </tr>

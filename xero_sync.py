@@ -198,8 +198,21 @@ def push_invoice(job, job_parts, invoice_number):
         unit_amount = float(job.get('subtotal') or job.get('total') or 0)
 
     if job_parts:
-        desc_lines = [f"{float(jp['quantity']):.0f}x {jp['description']} ${float(jp['unit_cost']):.2f}"
-                      for jp in job_parts]
+        desc_lines = []
+        for jp in job_parts:
+            pnum = (jp.get('part_number') or '').strip()
+            pdesc = (jp.get('description') or '').strip()
+            qty  = float(jp['quantity'])
+            price = float(jp['unit_cost'])
+            # Show part_number as primary label, description as subtitle if different
+            if pnum and pdesc and pnum != pdesc:
+                label = f"{pnum} ({pdesc})"
+            elif pnum:
+                label = pnum
+            else:
+                label = pdesc
+            desc_lines.append(
+                f"{qty:.0f}x {label} ${price:.2f}")
         description = '\n'.join(desc_lines)
     else:
         description = f"Bicycle service — {job['reference']}"

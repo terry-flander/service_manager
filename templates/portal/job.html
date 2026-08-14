@@ -275,7 +275,12 @@
         <tbody>
           {% for p in job_parts %}
           <tr>
-            <td>{{ p['description'] }}</td>
+            <td>
+              {{ p['part_number'] or p['description'] }}
+              {% if p['part_number'] and p['description'] and p['part_number'] != p['description'] %}
+              <div style="font-size:0.78rem; color:#64748b;">{{ p['description'] }}</div>
+              {% endif %}
+            </td>
             <td class="r">{{ p['quantity']|int if p['quantity'] == p['quantity']|int else p['quantity'] }}</td>
             <td class="r">${{ '%.2f'|format(p['unit_cost']) }}</td>
             <td class="r">${{ '%.2f'|format(p['quantity'] * p['unit_cost']) }}</td>

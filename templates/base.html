@@ -1164,6 +1164,7 @@ function replyModalSend() {
         '<option value="">— Choose a template —</option>';
       _replySubject = null;
       _replyLoadThread();
+      closeReplyModal();
     })
     .catch(function() {
       sendBtn.disabled = false;

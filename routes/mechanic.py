@@ -234,6 +234,81 @@ def job_view(job_id):
                            theme=session.get('theme', 'dark'))
 
 
+@mechanic_bp.route('/mechanic/job/<int:job_id>/part/<int:jp_id>/update', methods=['POST'])
+def update_part(job_id, jp_id):
+    """Update a job part field — returns JSON."""
+    from routes.jobs import recalc_job_totals
+    data  = request.get_json() or {}
+    field = data.get('field')
+    value = data.get('value')
+    allowed = {'description', 'quantity', 'unit_cost'}
+    if field not in allowed:
+        return jsonify({'ok': False, 'error': 'Invalid field'}), 400
+    with get_db() as conn:
+        if field in ('quantity', 'unit_cost'):
+            conn.execute(
+                f"UPDATE job_parts SET {field}=? WHERE id=? AND job_id=?",
+                (float(value), jp_id, job_id))
+        else:
+            conn.execute(
+                f"UPDATE job_parts SET {field}=? WHERE id=? AND job_id=?",
+                (str(value), jp_id, job_id))
+        conn.commit()
+        recalc_job_totals(conn, job_id)
+        job = conn.execute("SELECT total FROM jobs WHERE id=?", (job_id,)).fetchone()
+    return jsonify({'ok': True, 'total': job['total'] or 0})
+
+
+@mechanic_bp.route('/mechanic/job/<int:job_id>/part/<int:jp_id>/delete', methods=['POST'])
+def delete_part(job_id, jp_id):
+    """Delete a job part — returns JSON."""
+    from routes.jobs import recalc_job_totals
+    with get_db() as conn:
+        conn.execute(
+            "DELETE FROM job_parts WHERE id=? AND job_id=?", (jp_id, job_id))
+        conn.commit()
+        recalc_job_totals(conn, job_id)
+        job = conn.execute("SELECT total FROM jobs WHERE id=?", (job_id,)).fetchone()
+    return jsonify({'ok': True, 'total': job['total'] or 0})
+
+
+@mechanic_bp.route('/mechanic/job/<int:job_id>/add-part', methods=['POST'])
+def add_part(job_id):
+    """Add a part to a job — returns JSON for mechanic view fetch calls."""
+    from routes.jobs import recalc_job_totals
+    part_id     = request.form.get('part_id', '').strip()
+    description = request.form.get('description', '').strip()
+    unit_cost   = float(request.form.get('unit_cost') or 0)
+    quantity    = float(request.form.get('quantity') or 1)
+
+    with get_db() as conn:
+        if part_id:
+            part = conn.execute(
+                "SELECT * FROM parts WHERE id=?", (int(part_id),)).fetchone()
+            if part:
+                description = description or part['name']
+                unit_cost   = unit_cost or part['unit_cost']
+                conn.execute("""
+                    INSERT INTO job_parts
+                        (job_id, part_id, description, part_number, quantity, unit_cost)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (job_id, part['id'], description,
+                      part['part_number'] or '', quantity, unit_cost))
+        else:
+            if not description:
+                return jsonify({'ok': False, 'error': 'Description required'}), 400
+            conn.execute("""
+                INSERT INTO job_parts
+                    (job_id, part_id, description, part_number, quantity, unit_cost)
+                VALUES (?, NULL, ?, '', ?, ?)
+            """, (job_id, description, quantity, unit_cost))
+        conn.commit()
+        recalc_job_totals(conn, job_id)
+        job = conn.execute("SELECT total FROM jobs WHERE id=?", (job_id,)).fetchone()
+
+    return jsonify({'ok': True, 'total': job['total'] or 0})
+
+
 @mechanic_bp.route('/mechanic/job/<int:job_id>/notes', methods=['POST'])
 def save_notes(job_id):
     """Auto-save internal notes."""

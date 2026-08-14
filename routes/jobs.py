@@ -690,6 +690,13 @@ def job_detail(job_id):
                     "UPDATE jobs SET paid_date=coalesce(paid_date, scheduled_date) WHERE id=?",
                     (job_id,))
             wconn.commit()
+            # ── Sync address back to customer record ──────────────────────
+            if job['customer_id'] and address:
+                wconn.execute(
+                    "UPDATE customers SET address=? WHERE id=?",
+                    (address, job['customer_id']))
+                wconn.commit()
+
             # Recalculate stored subtotal/gst/total — tax_inclusive and/or
             # payment_type may have just changed, both of which affect
             # the figures regardless of job type.
@@ -981,52 +988,59 @@ def update_part(job_id, jp_id):
 
 @jobs_bp.route('/jobs/<int:job_id>/add-part', methods=['POST'])
 def add_part(job_id):
-    part_id = request.form.get('part_id')
-    if part_id and part_id.strip():
+    part_id     = request.form.get('part_id', '').strip()
+    part_number = request.form.get('part_number', '').strip()
+    description = request.form.get('description', '').strip()
+    quantity    = float(request.form.get('quantity', 1) or 1)
+    unit_cost   = float(request.form.get('unit_cost', 0) or 0)
+
+    # Part number is required in all cases
+    if not part_number:
+        flash('Part number is required.', 'danger')
+        return redirect(url_for('jobs.job_detail', job_id=job_id) + '#add-part')
+
+    if part_id:
+        # Existing part selected — use submitted part_number (may differ from master)
+        # This allows job-specific variant descriptions while keeping the parts link
         with get_db() as conn:
             part = conn.execute(
                 "SELECT * FROM parts WHERE id=?", (int(part_id),)).fetchone()
+            if not part:
+                flash('Part not found.', 'danger')
+                return redirect(url_for('jobs.job_detail', job_id=job_id) + '#add-part')
             conn.execute("""
                 INSERT INTO job_parts (job_id, part_id, description, part_number, quantity, unit_cost)
                 VALUES (?, ?, ?, ?, ?, ?)
-            """, (job_id, part['id'], part['name'], part['part_number'],
-                  float(request.form.get('quantity', 1)),
-                  float(request.form.get('unit_cost') or part['unit_cost'])))
+            """, (job_id, part['id'],
+                  description or part['name'],
+                  part_number,           # use submitted value, not part['part_number']
+                  quantity,
+                  unit_cost or part['unit_cost']))
             conn.commit()
             recalc_job_totals(conn, job_id)
     else:
-        description = request.form.get('description', '').strip()
-        part_number = request.form.get('part_number', '').strip()
-        quantity    = float(request.form.get('quantity', 1))
-        unit_cost   = float(request.form.get('unit_cost', 0))
-
+        # New part — upsert into master parts table
         with get_db() as conn:
-            # Upsert into master parts table when a part number is given
-            master_part_id = None
-            if part_number:
-                conn.execute("""
-                    INSERT INTO parts (name, part_number, unit_cost, unit, active)
-                    VALUES (?, ?, ?, 'each', 1)
-                    ON CONFLICT(part_number) DO UPDATE SET
-                        name=excluded.name,
-                        unit_cost=excluded.unit_cost,
-                        active=1
-                """, (description, part_number, unit_cost))
-                # Ensure active=1 regardless of pre-existing state
-                conn.execute(
-                    "UPDATE parts SET active=1 WHERE part_number=?",
-                    (part_number,))
-                master_part_id = conn.execute(
-                    "SELECT id FROM parts WHERE part_number=?",
-                    (part_number,)).fetchone()['id']
-
+            conn.execute("""
+                INSERT INTO parts (name, part_number, unit_cost, unit, active)
+                VALUES (?, ?, ?, 'each', 1)
+                ON CONFLICT(part_number) DO UPDATE SET
+                    name=excluded.name,
+                    unit_cost=excluded.unit_cost,
+                    active=1
+            """, (description, part_number, unit_cost))
+            conn.execute(
+                "UPDATE parts SET active=1 WHERE part_number=?", (part_number,))
+            master_part_id = conn.execute(
+                "SELECT id FROM parts WHERE part_number=?",
+                (part_number,)).fetchone()['id']
             conn.execute("""
                 INSERT INTO job_parts (job_id, part_id, description, part_number, quantity, unit_cost)
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (job_id, master_part_id, description, part_number, quantity, unit_cost))
-
             conn.commit()
             recalc_job_totals(conn, job_id)
+
     flash('Part added.', 'success')
     return redirect(url_for('jobs.job_detail', job_id=job_id) + '#add-part')
 
@@ -1144,6 +1158,27 @@ def send_trigger_email(job_id):
 
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@jobs_bp.route('/gcal/address-for-name')
+def gcal_address_for_name():
+    """Search GCal for a customer name and return their most recent event location."""
+    name = request.args.get('name', '').strip()
+    if not name:
+        return jsonify({'ok': False, 'address': ''})
+    try:
+        with get_db() as conn:
+            r = conn.execute(
+                "SELECT value FROM settings WHERE key='gcal_enabled'").fetchone()
+            if not (r and r['value'] == '1'):
+                return jsonify({'ok': False, 'address': ''})
+        from gcal_sync import search_events_by_name
+        address = search_events_by_name(name)
+        if address:
+            return jsonify({'ok': True, 'address': address})
+    except Exception as e:
+        log.debug(f"gcal_address_for_name: {e}")
+    return jsonify({'ok': False, 'address': ''})
 
 
 @jobs_bp.route('/jobs/<int:job_id>/regenerate-portal-token', methods=['POST'])
@@ -1382,11 +1417,17 @@ def email_imports():
         imports = conn.execute(f"""
             SELECT
                 MIN(ei.id) as id,
-                MIN(ei.subject) as subject,
-                MIN(ei.sender) as sender,
+                (SELECT ei2.subject FROM email_imports ei2
+                 WHERE ei2.job_id = ei.job_id
+                 ORDER BY ei2.id ASC LIMIT 1) as subject,
+                (SELECT ei2.sender FROM email_imports ei2
+                 WHERE ei2.job_id = ei.job_id
+                 ORDER BY ei2.id ASC LIMIT 1) as sender,
                 ei.job_id,
                 MIN(ei.status) as status,
-                MIN(ei.body) as body,
+                (SELECT ei2.body FROM email_imports ei2
+                 WHERE ei2.job_id = ei.job_id
+                 ORDER BY ei2.id ASC LIMIT 1) as body,
                 j.reference,
                 MIN(coalesce(ei.received_at, ei.imported_at)) as first_received,
                 MAX(coalesce(ei.received_at, ei.imported_at)) as last_received,

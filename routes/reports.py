@@ -631,7 +631,7 @@ def parts_usage():
         adhoc_rows = []
         if include_adhoc:
             adhoc_rows = conn.execute("""
-                SELECT NULL              AS id,
+                SELECT jp.id * -1       AS id,
                        jp.description   AS name,
                        jp.part_number   AS part_number,
                        NULL             AS unit_cost,
@@ -654,11 +654,11 @@ def parts_usage():
     if export_csv:
         out = _io.StringIO()
         w   = _csv.writer(out)
-        w.writerow(['Name','Part Number','List Price','Active',
+        w.writerow(['ID','Name','Part Number','List Price','Active',
                     'Jobs Used','Total Qty','Min Charged','Max Charged','Ad-hoc'])
         for r in rows:
             w.writerow([
-                r['name'], r['part_number'] or '',
+                r['id'], r['name'], r['part_number'] or '',
                 f"{r['unit_cost']:.2f}" if r['unit_cost'] is not None else '',
                 'Yes' if r['active'] else 'No',
                 r['usage_count'] or 0,

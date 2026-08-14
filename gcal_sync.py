@@ -318,6 +318,71 @@ def upsert_region_date_event(region_name, date):
     return None
 
 
+def search_events_by_name(customer_name, max_results=5):
+    """Search calendar events by customer name, return location from most recent match."""
+    token = _get_access_token()
+    if not token:
+        return None
+    cal_id = _calendar_id()
+    if not cal_id:
+        return None
+
+    params = urllib.parse.urlencode({
+        'q':            customer_name,
+        'singleEvents': 'true',
+        'orderBy':      'startTime',
+        'maxResults':   str(max_results),
+    })
+    url = (f"{CALENDAR_API}/calendars/{urllib.parse.quote(cal_id, safe='')}"
+           f"/events?{params}")
+    req = urllib.request.Request(
+        url, headers={'Authorization': f'Bearer {token}'})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read())
+    except Exception as e:
+        log.debug(f"search_events_by_name({customer_name}) -> {e}")
+        return None
+
+    # Return location from the most recent event that has one
+    items = sorted(
+        [i for i in data.get('items', []) if i.get('status') != 'cancelled'],
+        key=lambda i: (i.get('start', {}).get('date') or
+                       i.get('start', {}).get('dateTime', '')),
+        reverse=True)
+
+    for item in items:
+        loc = (item.get('location') or '').strip()
+        if loc:
+            return loc
+    return None
+
+
+def get_event(event_id):
+    """Fetch a single calendar event by ID. Returns dict or None."""
+    token = _get_access_token()
+    if not token:
+        return None
+    cal_id = _calendar_id()
+    if not cal_id:
+        return None
+    url = (f"{CALENDAR_API}/calendars/{urllib.parse.quote(cal_id, safe='')}"
+           f"/events/{urllib.parse.quote(event_id, safe='')}")
+    req = urllib.request.Request(
+        url, headers={'Authorization': f'Bearer {token}'})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            item = json.loads(resp.read())
+        return {
+            'id':       item.get('id'),
+            'summary':  item.get('summary', ''),
+            'location': item.get('location', ''),
+        }
+    except Exception as e:
+        log.debug(f"get_event({event_id}) -> {e}")
+        return None
+
+
 def list_calendar_events(time_min, time_max):
     """Fetch all events on the calendar within [time_min, time_max)
     (ISO date or datetime strings). singleEvents=true means Google

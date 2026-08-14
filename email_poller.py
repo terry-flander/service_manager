@@ -459,6 +459,25 @@ def _create_job(conn, parsed, message_id, thread_id=None, in_reply_to=None):
         parsed['phone'], parsed['suburb'], ''
     )
 
+    # If no address stored yet, try GCal search by customer name
+    if not stored_address:
+        try:
+            gcal_row = conn.execute(
+                "SELECT value FROM settings WHERE key='gcal_enabled'").fetchone()
+            if gcal_row and gcal_row['value'] == '1':
+                from gcal_sync import search_events_by_name
+                gcal_address = search_events_by_name(parsed['name'])
+                if gcal_address:
+                    stored_address = gcal_address
+                    # Update customer record with found address
+                    conn.execute(
+                        "UPDATE customers SET address=? WHERE id=?",
+                        (gcal_address, customer_id))
+                    conn.commit()
+                    log.info(f"GCal address found for '{parsed['name']}': {gcal_address[:60]}")
+        except Exception as _gcal_err:
+            log.debug(f"GCal address lookup skipped: {_gcal_err}")
+
     row = conn.execute(
         "SELECT region_id FROM suburbs WHERE LOWER(name)=LOWER(?)",
         (parsed['suburb'],)).fetchone()
