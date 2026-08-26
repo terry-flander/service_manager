@@ -1,0 +1,306 @@
+{% extends "base.html" %}
+{% block title %}Stock Take #{{ count['id'] }}{% endblock %}
+{% block topbar_title %}Stock Take — {{ count['location_name'] or 'All Locations' }}{% endblock %}
+
+{% block content %}
+<div style="padding:1rem;">
+  <div class="sd-card">
+    <div class="sd-card-header">
+      {{ count['count_date'] }} — {{ count['location_name'] or 'All Locations' }}
+      <span class="badge-status {% if count['status']=='finalised' %}status-paid{% else %}status-scheduled{% endif %}"
+            style="font-size:0.7rem;">{{ count['status'] }}</span>
+      {% if count['status'] == 'open' %}
+      <span style="font-size:0.78rem; color:var(--sd-muted); font-weight:400; margin-left:0.5rem;">
+        Check parts to include in adjustments. Enter actual count in the Counted field.
+      </span>
+      {% endif %}
+    </div>
+
+    <div style="padding:0.75rem 1.25rem 1.25rem;">
+
+      <!-- Controls -->
+      <div style="display:flex; gap:0.75rem; align-items:center; margin-bottom:1rem; flex-wrap:wrap;">
+        {% if count['status'] == 'open' %}
+        <button type="button" class="btn-ghost" style="font-size:0.8rem;"
+                onclick="toggleAll(true)">
+          <i class="bi bi-check2-all"></i> Include All
+        </button>
+        <button type="button" class="btn-ghost" style="font-size:0.8rem;"
+                onclick="toggleAll(false)">
+          <i class="bi bi-x-lg"></i> Exclude All
+        </button>
+        <button type="button" class="btn-ghost" style="font-size:0.8rem;"
+                onclick="fillCounted()">
+          <i class="bi bi-arrow-left-right"></i> Fill Counted = System
+        </button>
+        <div style="margin-left:auto; display:flex; gap:0.5rem;">
+          <button type="button" class="btn-ghost" onclick="saveCount()">
+            <i class="bi bi-floppy"></i> Save Progress
+          </button>
+          <button type="button" class="btn-accent" onclick="confirmFinalise()">
+            <i class="bi bi-check-circle"></i> Finish Count
+          </button>
+        </div>
+        {% else %}
+        <span style="color:var(--sd-muted); font-size:0.85rem;">
+          <i class="bi bi-lock"></i> This count is finalised and cannot be edited.
+        </span>
+        {% endif %}
+      </div>
+
+      <!-- Summary stats -->
+      {% set counted_lines = lines|selectattr('qty_counted','ne',None)|list %}
+      {% set adj_lines = [] %}
+      {% for l in counted_lines %}{% if l['adjustment'] and l['adjustment'] != 0 %}{% set _ = adj_lines.append(l) %}{% endif %}{% endfor %}
+      <div style="display:flex; gap:1.5rem; margin-bottom:1rem; font-size:0.82rem; color:var(--sd-muted);">
+        <span>{{ lines|length }} parts total</span>
+        <span>{{ counted_lines|length }} counted</span>
+        <span>{{ adj_lines|length }} with adjustments</span>
+      </div>
+
+      <!-- Filter -->
+      <div style="margin-bottom:0.75rem;">
+        <input type="text" id="filter-input" class="sd-input" style="max-width:260px;"
+               placeholder="Filter by name or part number…"
+               oninput="filterLines(this.value)">
+      </div>
+
+      <form id="count-form" method="post">
+        <input type="hidden" name="count_id" value="{{ count['id'] }}">
+
+        <div style="overflow-x:auto;">
+        <table class="sd-table" style="width:100%; font-size:0.85rem;" id="count-table">
+          <thead>
+            <tr>
+              <th style="width:32px;">
+                {% if count['status'] == 'open' %}
+                <input type="checkbox" id="check-all" checked
+                       onchange="toggleAll(this.checked)">
+                {% endif %}
+              </th>
+              <th style="min-width:180px;">Part Name</th>
+              <th style="width:110px;">Part Number</th>
+              <th style="width:75px;">Type</th>
+              <th style="width:90px; text-align:right;">System Qty</th>
+              <th style="width:110px; text-align:right;">Counted</th>
+              <th style="width:90px; text-align:right;">Adjustment</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for line in lines %}
+            <tr id="lr-{{ line['id'] }}"
+                data-name="{{ line['part_name']|lower }}"
+                data-num="{{ (line['part_number'] or '')|lower }}"
+                {% if count['status'] == 'open' and line['qty_counted'] is not none and line['adjustment'] and line['adjustment'] != 0 %}
+                style="background:rgba(249,115,22,0.07);"
+                {% endif %}>
+              <td>
+                <input type="checkbox" name="include_line" value="{{ line['id'] }}"
+                       id="chk-{{ line['id'] }}"
+                       class="line-chk"
+                       {% if count['status'] != 'open' %}disabled{% endif %}
+                       {% if count['status'] == 'open' or line['qty_counted'] is not none %}checked{% endif %}
+                       onchange="rowToggle({{ line['id'] }})">
+                <input type="hidden" name="line_id" value="{{ line['id'] }}">
+              </td>
+              <td style="font-weight:500;">{{ line['part_name'] }}</td>
+              <td class="mono" style="font-size:0.78rem; color:var(--sd-muted);">
+                {{ line['part_number'] or '—' }}
+              </td>
+              <td>
+                <span class="badge-status
+                  {% if line['part_type']=='service' %}status-scheduled
+                  {% elif line['part_type']=='ad_hoc' %}status-pending
+                  {% else %}status-complete{% endif %}"
+                  style="font-size:0.65rem;">{{ line['part_type'] or 'stock' }}</span>
+              </td>
+              <td style="text-align:right; font-family:monospace;">
+                {{ line['qty_system']|int if (line['qty_system'] or 0) == (line['qty_system'] or 0)|int else '%.1f'|format(line['qty_system'] or 0) }}
+              </td>
+              <td style="text-align:right;">
+                {% if count['status'] == 'open' %}
+                <input type="number" name="qty_{{ line['id'] }}"
+                       id="qty-{{ line['id'] }}"
+                       class="sd-input qty-input"
+                       style="text-align:right; font-size:0.82rem; padding:0.2rem 0.4rem;
+                              width:90px; font-family:monospace;"
+                       value="{{ line['qty_counted'] if line['qty_counted'] is not none else '' }}"
+                       step="any" min="0" placeholder="—"
+                       oninput="updateAdj({{ line['id'] }}, {{ line['qty_system'] or 0 }})">
+                {% else %}
+                <span class="mono">
+                  {{ '%.1f'|format(line['qty_counted']) if line['qty_counted'] is not none else '—' }}
+                </span>
+                {% endif %}
+              </td>
+              <td style="text-align:right; font-family:monospace; font-size:0.85rem;"
+                  id="adj-{{ line['id'] }}">
+                {% if line['adjustment'] is not none and line['adjustment'] != 0 %}
+                <span style="color:{% if line['adjustment'] > 0 %}#34d399{% else %}#f87171{% endif %}">
+                  {{ '%+.1f'|format(line['adjustment']) }}
+                </span>
+                {% elif line['qty_counted'] is not none %}
+                <span style="color:var(--sd-muted);">0</span>
+                {% else %}
+                <span style="color:var(--sd-muted);">—</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" style="text-align:center; color:var(--sd-muted); padding:2rem;">
+              No parts in this count.
+            </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        </div>
+      </form>
+
+      <!-- Bottom actions -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:1rem;">
+        <a href="{{ url_for('inventory.stock_takes') }}" class="btn-ghost">
+          <i class="bi bi-arrow-left"></i> Back
+        </a>
+        {% if count['status'] == 'open' %}
+        <form method="post"
+              action="{{ url_for('inventory.stock_take_delete', count_id=count['id']) }}"
+              onsubmit="return confirm('Delete this stock take?')">
+          <button type="submit" class="btn-ghost" style="color:#f87171;">
+            <i class="bi bi-trash3"></i> Delete
+          </button>
+        </form>
+        {% endif %}
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Finalise confirmation modal -->
+<div id="finalise-modal"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65);
+            z-index:3000; align-items:center; justify-content:center;"
+     onclick="if(event.target===this)document.getElementById('finalise-modal').style.display='none'">
+  <div style="background:var(--sd-surface); border:1px solid var(--sd-border);
+              border-radius:10px; padding:1.5rem; width:min(420px,96vw);">
+    <div style="font-weight:700; font-size:1rem; margin-bottom:0.75rem;">
+      <i class="bi bi-exclamation-triangle" style="color:var(--sd-accent);"></i>
+      Finish Stock Take?
+    </div>
+    <p style="font-size:0.85rem; color:var(--sd-muted); margin-bottom:1rem;">
+      This will create adjustment transactions for all <strong>checked</strong> lines where
+      the counted quantity differs from the system quantity. This cannot be undone.
+    </p>
+    <div id="finalise-summary" style="font-size:0.85rem; margin-bottom:1rem;
+         padding:0.75rem; background:var(--sd-surface2); border-radius:6px;"></div>
+    <div style="display:flex; justify-content:flex-end; gap:0.5rem;">
+      <button type="button" class="btn-ghost"
+              onclick="document.getElementById('finalise-modal').style.display='none'">
+        Cancel
+      </button>
+      <button type="button" class="btn-accent" onclick="doFinalise()">
+        <i class="bi bi-check-circle"></i> Finish Count
+      </button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var SYS_QTY = {};
+{% for line in lines %}SYS_QTY[{{ line['id'] }}] = {{ line['qty_system'] or 0 }};{% endfor %}
+
+// ── Filter ────────────────────────────────────────────────────────────────────
+function filterLines(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('#count-table tbody tr').forEach(function(row) {
+    var name = row.dataset.name || '';
+    var num  = row.dataset.num  || '';
+    row.style.display = (!q || name.includes(q) || num.includes(q)) ? '' : 'none';
+  });
+}
+
+// ── Toggle all checkboxes ─────────────────────────────────────────────────────
+function toggleAll(checked) {
+  document.querySelectorAll('.line-chk').forEach(function(c) {
+    c.checked = checked;
+    rowToggle(parseInt(c.value));
+  });
+  var hdr = document.getElementById('check-all');
+  if (hdr) hdr.checked = checked;
+}
+
+// ── Dim/undim row when unchecked ──────────────────────────────────────────────
+function rowToggle(lineId) {
+  var chk = document.getElementById('chk-' + lineId);
+  var row = document.getElementById('lr-' + lineId);
+  if (chk && row) row.style.opacity = chk.checked ? '' : '0.4';
+}
+
+// ── Fill counted = system ─────────────────────────────────────────────────────
+function fillCounted() {
+  document.querySelectorAll('.qty-input').forEach(function(inp) {
+    if (!inp.value) {
+      var lid = parseInt(inp.name.replace('qty_',''));
+      inp.value = SYS_QTY[lid] || 0;
+      updateAdj(lid, SYS_QTY[lid] || 0);
+    }
+  });
+}
+
+// ── Live adjustment calculation ───────────────────────────────────────────────
+function updateAdj(lineId, sysQty) {
+  var inp    = document.getElementById('qty-' + lineId);
+  var adjEl  = document.getElementById('adj-' + lineId);
+  if (!inp || !adjEl) return;
+  var val = inp.value.trim();
+  if (val === '') {
+    adjEl.innerHTML = '<span style="color:var(--sd-muted);">—</span>';
+    return;
+  }
+  var counted = parseFloat(val);
+  if (isNaN(counted)) return;
+  var adj = counted - sysQty;
+  var color = adj > 0 ? '#34d399' : adj < 0 ? '#f87171' : 'var(--sd-muted)';
+  adjEl.innerHTML = '<span style="color:' + color + ';">' +
+    (adj >= 0 ? '+' : '') + adj.toFixed(adj === Math.floor(adj) ? 0 : 1) + '</span>';
+}
+
+// ── Save progress ─────────────────────────────────────────────────────────────
+function saveCount() {
+  var form = document.getElementById('count-form');
+  var old  = form.action;
+  form.action = '{{ url_for("inventory.stock_take_save", count_id=count["id"]) }}';
+  form.method = 'post';
+  form.submit();
+}
+
+// ── Finalise ──────────────────────────────────────────────────────────────────
+function confirmFinalise() {
+  // Count checked lines with adjustments
+  var withAdj = 0, checked = 0;
+  document.querySelectorAll('.line-chk').forEach(function(c) {
+    if (!c.checked) return;
+    checked++;
+    var lid  = parseInt(c.value);
+    var inp  = document.getElementById('qty-' + lid);
+    if (!inp || inp.value.trim() === '') return;
+    var adj = parseFloat(inp.value) - (SYS_QTY[lid] || 0);
+    if (adj !== 0) withAdj++;
+  });
+  document.getElementById('finalise-summary').innerHTML =
+    '<strong>' + checked + '</strong> lines included, ' +
+    '<strong>' + withAdj + '</strong> will have adjustment transactions created.';
+  document.getElementById('finalise-modal').style.display = 'flex';
+}
+
+function doFinalise() {
+  var form = document.getElementById('count-form');
+  form.action = '{{ url_for("inventory.stock_take_finalise", count_id=count["id"]) }}';
+  form.method = 'post';
+  document.getElementById('finalise-modal').style.display = 'none';
+  form.submit();
+}
+</script>
+{% endblock %}

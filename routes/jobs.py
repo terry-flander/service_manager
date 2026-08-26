@@ -52,13 +52,35 @@ TIME_LABELS = {
     '19:30': '7:30 PM'
 }
 
-SERVICE_TYPES = [
-    'General Service',
-    'eBike Service',
-    'Tribe/Cargo Bike Service',
-    '3 or More Bikes',
-    'Other',
-]
+def _load_service_types(conn, job_group=None):
+    """Load active service types from DB for a given group.
+    job_group: 'booking' | 'workshop' | None (returns all).
+    Returns list of dicts with id, code, label, part_id, part_name, unit_cost.
+    Falls back to hardcoded list if table missing."""
+    try:
+        where = "WHERE st.active=1"
+        params = []
+        if job_group:
+            where += " AND COALESCE(st.job_group,'booking')=?"
+            params.append(job_group)
+        rows = conn.execute(f"""
+            SELECT st.id, st.code, st.label, st.part_id, st.sort_order,
+                   st.job_group, p.name as part_name, p.unit_cost
+            FROM service_types st
+            LEFT JOIN parts p ON p.id = st.part_id
+            {where}
+            ORDER BY st.sort_order, st.label
+        """, params).fetchall()
+        if rows:
+            return [dict(r) for r in rows]
+    except Exception:
+        pass
+    # Fallback labels only
+    return [{'label': l, 'id': None, 'code': l.lower().replace(' ','_'),
+             'part_id': None, 'part_name': None, 'unit_cost': 0,
+             'job_group': 'booking'}
+            for l in ['General Service', 'eBike Service',
+                      'Tribe/Cargo Bike Service', '3 or More Bikes', 'Other']]
 
 JOB_TYPES = {
     'booking':  {'label': 'Booking',  'prefix': 'FB'},
@@ -88,22 +110,27 @@ def upsert_customer(conn, name, email, phone, suburb, address=''):
     """
     Find or create a customer by email.
     Returns (customer_id, customer_address).
+    Name-only matching is read-only — never overwrites existing customer details.
     """
     email = (email or '').strip().lower()
     name  = (name  or '').strip()
     if not email:
-        # Try to match on name, phone, or email (any non-empty field)
+        # Try to match on name or phone — read-only, never overwrite
         existing = None
         if name:
             existing = conn.execute(
-                "SELECT id, address FROM customers WHERE LOWER(name)=LOWER(?)",
+                "SELECT id, address FROM customers "
+                "WHERE LOWER(name)=LOWER(?) "
+                "AND email NOT LIKE '%flyingbike.internal%'",
                 (name,)).fetchone()
         if not existing and phone:
             existing = conn.execute(
                 "SELECT id, address FROM customers WHERE phone=?",
                 (phone,)).fetchone()
         if existing:
+            # Return as-is — do NOT update their details from unverified data
             return existing['id'], existing['address'] or ''
+        # No match — create with generated email
         email = f"unknown_{name.lower().replace(' ','_')}@unknown.local"
 
     existing = conn.execute(
@@ -131,39 +158,71 @@ def new_sale():
     """Create a new cash sale (CS- prefix) — minimal form, lands on detail."""
     from datetime import date as _date
     if request.method == 'POST':
-        sale_date    = request.form.get('sale_date') or _date.today().isoformat()
-        payment_type = request.form.get('payment_type', '').strip()
-        notes        = request.form.get('notes', '').strip()
+        sale_date       = request.form.get('sale_date') or _date.today().isoformat()
+        payment_type    = request.form.get('payment_type', '').strip()
+        notes           = request.form.get('notes', '').strip()
+        cust_name_field = request.form.get('customer_name', '').strip()
+        cust_id_field   = request.form.get('customer_id', '').strip()
         if not payment_type:
             flash('Payment type is required.', 'danger')
             return render_template('jobs/new_sale.html',
                                    today=_date.today().isoformat())
 
         with get_db() as conn:
-            # Get or create Counter Sales customer (migrate legacy email if present)
-            cust = conn.execute(
-                "SELECT id FROM customers WHERE email='counter.sales@flyingbike.internal'"
-            ).fetchone()
-            if not cust:
-                legacy = conn.execute(
-                    "SELECT id FROM customers WHERE email='cash.sales@flyingbike.internal'"
+            # If a customer_id was selected via the dropdown, use it directly
+            named_cust = None
+            if cust_id_field and cust_id_field.isdigit():
+                named_cust = conn.execute(
+                    "SELECT id, name, email, phone FROM customers WHERE id=? "
+                    "AND email NOT LIKE '%flyingbike.internal%'",
+                    (int(cust_id_field),)).fetchone()
+            elif cust_name_field:
+                # Fallback: try exact then partial name match
+                named_cust = conn.execute(
+                    "SELECT id, name, email, phone FROM customers "
+                    "WHERE LOWER(name)=LOWER(?) "
+                    "AND email NOT LIKE '%flyingbike.internal%' LIMIT 1",
+                    (cust_name_field,)).fetchone()
+                if not named_cust:
+                    named_cust = conn.execute(
+                        "SELECT id, name, email, phone FROM customers "
+                        "WHERE LOWER(name) LIKE LOWER(?) "
+                        "AND email NOT LIKE '%flyingbike.internal%' LIMIT 1",
+                        (f'%{cust_name_field}%',)).fetchone()
+
+            if named_cust:
+                cust_id    = named_cust['id']
+                cust_name  = named_cust['name']
+                cust_email = named_cust['email'] or ''
+                cust_phone = named_cust['phone'] or ''
+            else:
+                # Get or create the generic Counter Sales customer
+                cust = conn.execute(
+                    "SELECT id FROM customers WHERE email='counter.sales@flyingbike.internal'"
                 ).fetchone()
-                if legacy:
-                    conn.execute(
-                        "UPDATE customers SET email='counter.sales@flyingbike.internal' WHERE id=?",
-                        (legacy['id'],))
-                    conn.commit()
-                    cust = legacy
-                else:
-                    conn.execute("""
-                        INSERT INTO customers (name, email, phone, suburb, address)
-                        VALUES ('Counter Sales','counter.sales@flyingbike.internal','','','')
-                    """)
-                    conn.commit()
-                    cust = conn.execute(
-                        "SELECT id FROM customers WHERE email='counter.sales@flyingbike.internal'"
+                if not cust:
+                    legacy = conn.execute(
+                        "SELECT id FROM customers WHERE email='cash.sales@flyingbike.internal'"
                     ).fetchone()
-            cust_id = cust['id']
+                    if legacy:
+                        conn.execute(
+                            "UPDATE customers SET email='counter.sales@flyingbike.internal' WHERE id=?",
+                            (legacy['id'],))
+                        conn.commit()
+                        cust = legacy
+                    else:
+                        conn.execute("""
+                            INSERT INTO customers (name, email, phone, suburb, address)
+                            VALUES ('Counter Sales','counter.sales@flyingbike.internal','','','')
+                        """)
+                        conn.commit()
+                        cust = conn.execute(
+                            "SELECT id FROM customers WHERE email='counter.sales@flyingbike.internal'"
+                        ).fetchone()
+                cust_id    = cust['id']
+                cust_name  = cust_name_field or 'Counter Sales'
+                cust_email = 'counter.sales@flyingbike.internal'
+                cust_phone = ''
 
             ref = generate_reference('sale', conn)
             conn.execute("""
@@ -171,10 +230,10 @@ def new_sale():
                     customer_email, customer_phone, suburb, address, description,
                     region_id, tax_inclusive, scheduled_date, status,
                     payment_type, paid_date, notes)
-                VALUES (?, 'sale', ?, 'Counter Sales',
-                    'counter.sales@flyingbike.internal', '', '', '', '',
+                VALUES (?, 'sale', ?, ?, ?, ?, '', '', '',
                     1, 1, ?, 'paid', ?, ?, ?)
-            """, (ref, cust_id, sale_date, payment_type, sale_date, notes))
+            """, (ref, cust_id, cust_name, cust_email, cust_phone,
+                  sale_date, payment_type, sale_date, notes))
             conn.commit()
             job_id = conn.execute(
                 "SELECT id FROM jobs WHERE reference=?", (ref,)).fetchone()['id']
@@ -478,19 +537,19 @@ def new_job():
                     _suburb       = '' if job_type == 'rental' else suburb
                     _region_id    = region_id
                     _bike_desc    = '' if job_type == 'rental' else request.form.get('bike_description', '')
-                    # service_types: for workshop, only accept SR- part names to avoid
-                    # picking up hidden booking SERVICE_TYPES checkboxes in the form
-                    if job_type == 'workshop':
-                        _sr_names = {r['name'] for r in conn.execute(
-                            "SELECT name FROM parts WHERE active=1 AND part_number LIKE 'SR-%'"
-                        ).fetchall()}
-                        _svc_types = ', '.join(
-                            v for v in request.form.getlist('service_types')
-                            if v in _sr_names)
-                    elif job_type == 'rental':
+                    # service_types: filter submitted values to only labels
+                    # valid for this job's group (booking/workshop)
+                    if job_type == 'rental':
                         _svc_types = ''
                     else:
-                        _svc_types = ', '.join(request.form.getlist('service_types'))
+                        _group = 'workshop' if job_type == 'workshop' else 'booking'
+                        _valid_labels = {r['label'] for r in conn.execute(
+                            "SELECT label FROM service_types "
+                            "WHERE active=1 AND COALESCE(job_group,'booking')=?",
+                            (_group,)).fetchall()}
+                        _svc_types = ', '.join(
+                            v for v in request.form.getlist('service_types')
+                            if v in _valid_labels)
                     conn.execute("""
                         INSERT INTO jobs (reference, job_type, customer_id, customer_name,
                             customer_email, customer_phone, suburb, address, description,
@@ -507,20 +566,26 @@ def new_job():
                         "SELECT id FROM jobs WHERE reference=?", (ref,)).fetchone()['id']
 
                     # Auto-add a job_part for each selected service type
-                    # Booking: all selected types; Workshop: SR- parts with unit_cost > 0
+                    # Uses service_types.part_id — only types valid for this job_group
                     selected_types = request.form.getlist('service_types') \
                                      if job_type in ('booking', 'workshop') else []
+                    _group = 'workshop' if job_type == 'workshop' else 'booking'
                     for stype in selected_types:
-                        part = conn.execute(
-                            """SELECT id, name, part_number, unit_cost FROM parts
-                                WHERE LOWER(name) = LOWER(?) AND active = 1
-                                AND (? = 'booking' OR part_number LIKE 'SR-%')
-                                LIMIT 1""",
-                            (stype, job_type)).fetchone()
+                        st_row = conn.execute(
+                            "SELECT st.part_id FROM service_types st "
+                            "WHERE st.label=? AND st.active=1 "
+                            "AND COALESCE(st.job_group,'booking')=? "
+                            "AND st.part_id IS NOT NULL",
+                            (stype, _group)).fetchone()
+                        if st_row:
+                            part = conn.execute(
+                                "SELECT id, name, part_number, unit_cost FROM parts "
+                                "WHERE id=? AND active=1", (st_row['part_id'],)).fetchone()
+                        else:
+                            part = None
                         if part:
-                            # Workshop SR- parts: only add to job_parts if billable
                             if job_type == 'workshop' and part['unit_cost'] == 0:
-                                continue  # cost=0 → reference only in service_types
+                                continue
                             conn.execute(
                                 """INSERT INTO job_parts
                                     (job_id, part_id, description, part_number,
@@ -561,16 +626,13 @@ def new_job():
             FROM suburbs s JOIN regions r ON s.region_id=r.id
             ORDER BY s.name
         """).fetchall()
-        sr_parts = conn.execute("""
-            SELECT name, part_number, unit_cost FROM parts
-            WHERE active=1 AND part_number LIKE 'SR-%'
-            ORDER BY name
-        """).fetchall()
+        booking_types  = _load_service_types(conn, 'booking')
+        workshop_types = _load_service_types(conn, 'workshop')
     return render_template('jobs/new.html', regions=regions,
                            TIME_SLOTS=TIME_SLOTS, TIME_LABELS=TIME_LABELS,
                            JOB_TYPES={k:v for k,v in JOB_TYPES.items() if k != 'sale'},
-                           SERVICE_TYPES=SERVICE_TYPES,
-                           SR_PARTS=sr_parts,
+                           BOOKING_TYPES=booking_types,
+                           WORKSHOP_TYPES=workshop_types,
                            suburbs_list=suburbs_list,
                            today=date.today().isoformat(),
                            prefill_customer=prefill_customer)
@@ -619,7 +681,7 @@ def job_detail(job_id):
         jt          = job['job_type']
         description = request.form.get('description', '').strip()
         address     = request.form.get('address', '').strip()
-        bike_desc   = request.form.get('bike_description', '').strip() if jt == 'workshop' else (job['bike_description'] or '')
+        bike_desc   = request.form.get('bike_description', '').strip() if jt in ('workshop', 'booking') else (job['bike_description'] or '')
         notes       = request.form.get('notes', '').strip()
         tax_incl    = int(request.form.get('tax_inclusive', '1') or 1)
         # Status & Payment (merged from separate update_status form)
@@ -705,14 +767,34 @@ def job_detail(job_id):
             # ── Auto-add region date if scheduled_date set and not present ──
             if sched_date and region_id and jt == 'booking':
                 existing = wconn.execute(
-                    "SELECT id FROM region_dates WHERE region_id=? AND date=?",
+                    "SELECT id, gcal_event_id FROM region_dates WHERE region_id=? AND date=?",
                     (region_id, sched_date)).fetchone()
                 if not existing:
                     wconn.execute(
                         "INSERT INTO region_dates (region_id, date, status) VALUES (?, ?, 'open')",
                         (region_id, sched_date))
                     wconn.commit()
+                    new_rd = wconn.execute(
+                        "SELECT id FROM region_dates WHERE region_id=? AND date=?",
+                        (region_id, sched_date)).fetchone()
                     log.info(f"Auto-added region date {sched_date} for region {region_id}")
+                    # Push to GCal
+                    try:
+                        gcal_row = wconn.execute(
+                            "SELECT value FROM settings WHERE key='gcal_enabled'").fetchone()
+                        if gcal_row and gcal_row['value'] == '1':
+                            region = wconn.execute(
+                                "SELECT name FROM regions WHERE id=?", (region_id,)).fetchone()
+                            if region:
+                                from gcal_sync import upsert_region_date_event
+                                ev_id = upsert_region_date_event(region['name'], sched_date)
+                                if ev_id and new_rd:
+                                    wconn.execute(
+                                        "UPDATE region_dates SET gcal_event_id=? WHERE id=?",
+                                        (ev_id, new_rd['id']))
+                                    wconn.commit()
+                    except Exception as _rde:
+                        log.debug(f"Region date GCal sync skipped: {_rde}")
 
             # ── Google Calendar sync — booking/rental only ──────────────────
             if jt in ('booking', 'rental'):
@@ -812,11 +894,7 @@ def job_detail(job_id):
         region_dates_list = [r['date'] for r in conn.execute(
             "SELECT date FROM region_dates WHERE region_id=?",
             (job['region_id'],)).fetchall()] if job['region_id'] else []
-        sr_parts = conn.execute("""
-            SELECT name, part_number, unit_cost FROM parts
-            WHERE active=1 AND part_number LIKE 'SR-%'
-            ORDER BY name
-        """).fetchall()
+        workshop_types = _load_service_types(conn, 'workshop')
 
         is_repeat_customer = False
         if job['customer_id']:
@@ -848,7 +926,7 @@ def job_detail(job_id):
                            thread_emails=thread_emails,
                            unread_emails=unread_emails,
                            region_dates_list=region_dates_list,
-                           SR_PARTS=sr_parts,
+                           WORKSHOP_TYPES=workshop_types,
                            is_repeat_customer=is_repeat_customer,
                            customer_contacts=customer_contacts,
                            portal_url=portal_url,
@@ -945,7 +1023,9 @@ def edit_job_legacy(job_id):
         """).fetchall()
     return render_template('jobs/edit.html', job=job, regions=regions,
                            TIME_SLOTS=TIME_SLOTS, TIME_LABELS=TIME_LABELS,
-                           JOB_TYPES=JOB_TYPES, SERVICE_TYPES=SERVICE_TYPES,
+                           JOB_TYPES=JOB_TYPES,
+                           BOOKING_TYPES=_load_service_types(conn, 'booking'),
+                           WORKSHOP_TYPES=_load_service_types(conn, 'workshop'),
                            suburbs_list=suburbs_list)
 
 
@@ -1022,8 +1102,8 @@ def add_part(job_id):
         # New part — upsert into master parts table
         with get_db() as conn:
             conn.execute("""
-                INSERT INTO parts (name, part_number, unit_cost, unit, active)
-                VALUES (?, ?, ?, 'each', 1)
+                INSERT INTO parts (name, part_number, unit_cost, unit, active, part_type)
+                VALUES (?, ?, ?, 'each', 1, 'ad_hoc')
                 ON CONFLICT(part_number) DO UPDATE SET
                     name=excluded.name,
                     unit_cost=excluded.unit_cost,
@@ -1117,7 +1197,8 @@ def send_trigger_email(job_id):
         body_html = _substitute(tmpl['body'], job, is_html=True)
         subject   = _substitute(tmpl['subject'], job)
 
-        has_invoice = '[Invoice PDF attached]' in tmpl['body']
+        has_invoice = '{{invoice_pdf}}' in tmpl['body'] or \
+                      '[Invoice PDF attached]' in tmpl['body']
         body_clean  = body_html.replace('[Invoice PDF attached]', '').strip()
 
         from email_sender import _html_to_plain_fallback

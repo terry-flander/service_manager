@@ -118,19 +118,19 @@
             </div>
 
             <!-- Service Request Types — workshop only -->
-            {% if SR_PARTS %}
+            {% if WORKSHOP_TYPES %}
             <div class="col-12" id="sr-types-col" style="display:none;">
               <label class="sd-label">Service Request Types</label>
               <div style="display:flex; flex-wrap:wrap; gap:0.4rem 1rem; margin-top:0.25rem;">
-                {% for p in SR_PARTS %}
+                {% for st in WORKSHOP_TYPES %}
                 <label style="display:flex; align-items:center; gap:0.35rem;
                                cursor:pointer; font-size:0.875rem;">
-                  <input type="checkbox" name="service_types" value="{{ p['name'] }}"
+                  <input type="checkbox" name="service_types" value="{{ st['label'] }}"
                          style="accent-color:var(--sd-accent); width:14px; height:14px;">
-                  {{ p['name'] }}
-                  {% if p['unit_cost'] > 0 %}
+                  {{ st['label'] }}
+                  {% if st['unit_cost'] and st['unit_cost'] > 0 %}
                   <span style="font-size:0.75rem; color:var(--sd-muted);">
-                    ${{ '%.2f'|format(p['unit_cost']) }}
+                    ${{ '%.2f'|format(st['unit_cost']) }}
                   </span>
                   {% endif %}
                 </label>
@@ -228,13 +228,13 @@
             <div class="col-12" id="service-types-col">
               <label class="sd-label">Service Types</label>
               <div style="display:flex; flex-wrap:wrap; gap:0.5rem 1.25rem; padding-top:0.25rem;">
-                {% for st in SERVICE_TYPES %}
+                {% for st in BOOKING_TYPES %}
                 <label style="display:flex; align-items:center; gap:0.4rem;
                                font-size:0.875rem; color:var(--sd-text); cursor:pointer;">
-                  <input type="checkbox" name="service_types" value="{{ st }}"
-                         {% if st == 'General Service'  %}checked{% endif %}
+                  <input type="checkbox" name="service_types" value="{{ st['label'] }}"
+                         {% if st['label'] == 'General Service' %}checked{% endif %}
                          style="accent-color:var(--sd-accent); width:14px; height:14px;">
-                  {{ st }}
+                  {{ st['label'] }}
                 </label>
                 {% endfor %}
               </div>

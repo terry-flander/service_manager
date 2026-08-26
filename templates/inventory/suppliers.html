@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Suppliers{% endblock %}
+{% block topbar_title %}Suppliers{% endblock %}
+
+{% block content %}
+<div style="max-width:800px; margin:0 auto; padding:1rem;">
+  <div class="sd-card mb-3">
+    <div class="sd-card-header">
+      Suppliers
+      <a href="{{ url_for('inventory.supplier_new') }}" class="btn-accent"
+         style="padding:0.25rem 0.75rem; font-size:0.78rem;">
+        <i class="bi bi-plus-lg"></i> Add Supplier
+      </a>
+    </div>
+    <div style="padding:0.5rem 1.25rem 1rem;">
+      {% if suppliers %}
+      <table class="sd-table">
+        <thead><tr>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Phone</th>
+          <th style="text-align:center; width:70px;">Active</th>
+          <th style="width:80px;"></th>
+        </tr></thead>
+        <tbody>
+          {% for s in suppliers %}
+          <tr>
+            <td style="font-weight:600;">{{ s['name'] }}</td>
+            <td style="font-size:0.85rem;">{{ s['email'] or '—' }}</td>
+            <td style="font-size:0.85rem;">{{ s['phone'] or '—' }}</td>
+            <td style="text-align:center;">
+              {% if s['active'] %}<i class="bi bi-check-circle" style="color:#34d399;"></i>
+              {% else %}<i class="bi bi-dash-circle" style="color:var(--sd-muted);"></i>{% endif %}
+            </td>
+            <td>
+              <a href="{{ url_for('inventory.supplier_edit', sup_id=s['id']) }}"
+                 class="btn-ghost" style="padding:0.2rem 0.5rem; font-size:0.75rem;">
+                <i class="bi bi-pencil"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color:var(--sd-muted); font-size:0.85rem;">No suppliers yet.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

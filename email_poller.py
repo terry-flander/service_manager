@@ -54,8 +54,6 @@ SERVICE_TYPES = [
 ]
 
 SERVICE_KEYWORDS = {
-    # Matched in priority order — checked top to bottom
-    # eBike must come BEFORE cargo/tribe to catch 'e-cargo bike'
     'eBike Service':            ['ebike', 'e-bike', 'electric bike', 'e-cargo',
                                  'ebike', 'e bike', 'ecargo', 'electric'],
     'Tribe/Cargo Bike Service': ['tribe', 'longtail', 'long tail', 'cargo bike',
@@ -63,13 +61,36 @@ SERVICE_KEYWORDS = {
     '3 or More Bikes':          ['3 or more', '3+ bikes', 'three or more',
                                  '4 bikes', '5 bikes', 'fleet',
                                  '3 bikes', 'three bikes', 'four bikes',
-                                 '36 bikes',  # school/fleet
+                                 '36 bikes',
                                  ],
     'General Service':          ['general service', 'service', 'tune', 'repair',
                                  'overhaul', 'brake', 'gear', 'tyre', 'tube',
                                  'chain', 'derailleur', 'assemble', 'setup',
                                  'check'],
 }
+
+
+def _load_service_config():
+    """Load SERVICE_TYPES list and SERVICE_KEYWORDS dict from DB.
+    Falls back to hardcoded defaults if table doesn't exist yet."""
+    try:
+        from models import get_db
+        with get_db() as conn:
+            rows = conn.execute(
+                "SELECT label, keywords FROM service_types "
+                "WHERE active=1 AND COALESCE(job_group,'booking')='booking' "
+                "ORDER BY sort_order, label").fetchall()
+            if rows:
+                types = [r['label'] for r in rows]
+                keywords = {}
+                for r in rows:
+                    if r['keywords']:
+                        keywords[r['label']] = [
+                            k.strip() for k in r['keywords'].split(',') if k.strip()]
+                return types, keywords
+    except Exception:
+        pass
+    return SERVICE_TYPES, SERVICE_KEYWORDS
 
 
 # ── OAuth2 ────────────────────────────────────────────────────────────────────
@@ -284,6 +305,9 @@ def _detect_service_types(text):
     import re as _re
     text_lower = text.lower()
 
+    # Load current config from DB (or fallback to hardcoded)
+    _, kw_map = _load_service_config()
+
     found = []
 
     # Count "N x " or "N bikes" patterns to detect 3+ bikes
@@ -292,7 +316,7 @@ def _detect_service_types(text):
         found.append('3 or More Bikes')
 
     # Check keyword lists in order
-    for stype, kws in SERVICE_KEYWORDS.items():
+    for stype, kws in kw_map.items():
         if stype == '3 or More Bikes' and stype in found:
             continue  # already detected above
         if any(kw in text_lower for kw in kws):
@@ -324,10 +348,16 @@ def _parse_email(msg):
     body_norm = re.sub(r'\bMobile\s*:', 'Phone:', body_norm, flags=re.IGNORECASE)
     body_norm = _strip_footer(body_norm)
 
+    gmail_user = os.environ.get('GMAIL_USER', '').strip().lower()
     name    = _extract_field(body_norm, 'Name', 'From') or from_name
-    email_  = _extract_field(body_norm, 'Email') or _extract_email(body_norm) or from_email
+    # Never use GMAIL_USER as the customer email — extract from body
+    email_raw = _extract_field(body_norm, 'Email') or _extract_email(body_norm)
+    if not email_raw or email_raw.lower() == gmail_user:
+        email_raw = from_email if from_email.lower() != gmail_user else ''
+    email_  = email_raw
     phone   = _extract_field(body_norm, 'Phone')
     suburb  = _extract_field(body_norm, 'Suburb', 'Location')
+    bike_description = _extract_field(body_norm, 'Bike Description', 'Bike Desc')
     message = _extract_message(body_norm) or body_norm.strip()[:1000]
     svc_raw = _extract_field(body_norm, 'Service Type', 'Service Types', 'Service')
 
@@ -355,17 +385,18 @@ def _parse_email(msg):
         stored_body = f"{body}\n\n{note}" if body else note
 
     return {
-        'name':          name or 'Unknown',
-        'email':         email_.lower(),
-        'phone':         phone,
-        'suburb':        suburb,
-        'message':       message[:1000],
-        'body':          stored_body,     # full plain-text body for email_imports
-        'service_types': service_types,
-        'subject':       subject,
-        'from_name':     from_name,
-        'from_email':    from_email,
-        'received_at':   None,  # filled in by poll loop from msg headers
+        'name':             name or 'Unknown',
+        'email':            email_.lower(),
+        'phone':            phone,
+        'suburb':           suburb,
+        'bike_description': bike_description or '',
+        'message':          message[:1000],
+        'body':             stored_body,
+        'service_types':    service_types,
+        'subject':          subject,
+        'from_name':        from_name,
+        'from_email':       from_email,
+        'received_at':      None,
     }
 
 
@@ -401,26 +432,27 @@ def _find_job_for_thread(conn, in_reply_to, references, from_email):
                 if row:
                     return row['job_id']
 
-    # Fall back: customer email match — return most recent pending job
+    # Fall back: customer email match — most recent non-lost job
     if from_email and 'import.local' not in from_email:
         row = conn.execute("""
             SELECT j.id FROM jobs j
             JOIN customers c ON c.id = j.customer_id
             WHERE LOWER(c.email) = LOWER(?)
-              AND j.status IN ('pending', 'scheduled', 'in_progress')
+              AND j.status NOT IN ('lost')
+              AND j.job_type = 'booking'
             ORDER BY j.id DESC LIMIT 1
         """, (from_email,)).fetchone()
         if row:
             return row['id']
 
-        # Also check customer_contacts — exact match to contacts
-        # of customers who own active jobs
+        # Also check customer_contacts
         row = conn.execute("""
             SELECT j.id FROM jobs j
             JOIN customers c ON c.id = j.customer_id
             JOIN customer_contacts cc ON cc.customer_id = c.id
             WHERE LOWER(cc.email) = LOWER(?)
-              AND j.status IN ('pending', 'scheduled', 'in_progress')
+              AND j.status NOT IN ('lost')
+              AND j.job_type = 'booking'
             ORDER BY j.id DESC LIMIT 1
         """, (from_email,)).fetchone()
         if row:
@@ -492,18 +524,23 @@ def _create_job(conn, parsed, message_id, thread_id=None, in_reply_to=None):
                     reference, job_type, customer_id,
                     customer_name, customer_email, customer_phone,
                     suburb, address, description,
+                    bike_description,
                     service_types, region_id, tax_inclusive,
                     status, notes)
                 VALUES (?, 'booking', ?, ?, ?, ?,
-                        ?, ?, ?, ?, ?, 1, 'pending', ?)
+                        ?, ?, ?, ?, ?, ?, 1, 'pending', ?)
             """, (ref, customer_id,
                   parsed['name'], parsed['email'], parsed['phone'],
                   parsed['suburb'], stored_address or parsed['suburb'],
-                  parsed['message'], parsed['service_types'], region_id,
+                  parsed['message'], parsed.get('bike_description', ''),
+                  parsed['service_types'], region_id,
                   f"Imported from email: {parsed['subject']}"))
 
             job_id = conn.execute(
                 "SELECT id FROM jobs WHERE reference=?", (ref,)).fetchone()['id']
+            # Use customer's email as sender (not GMAIL_USER)
+            _gmail_user = os.environ.get('GMAIL_USER', '').strip().lower()
+            _sender = parsed['email'] if parsed['email'] and parsed['email'].lower() != _gmail_user else parsed['from_email']
             conn.execute("""
                 INSERT INTO email_imports
                     (message_id, thread_id, in_reply_to, subject, sender,
@@ -511,7 +548,7 @@ def _create_job(conn, parsed, message_id, thread_id=None, in_reply_to=None):
                 VALUES (?, ?, ?, ?, ?, ?, coalesce(?,datetime('now')),
                         ?, ?, 'ok', 1)
             """, (message_id, thread_id, in_reply_to,
-                    parsed['subject'], parsed['from_email'],
+                    parsed['subject'], _sender,
                     parsed.get('body', parsed['message'])[:8000],
                     parsed.get('received_at'), parsed.get('received_at'),
                     job_id))
@@ -646,6 +683,44 @@ def _poll_inbox_replies(imap, app):
                             existing_job_id = row['job_id']
                             log.info(f"INBOX: subject match '{base_subj[:40]}' "
                                      f"-> job_id={existing_job_id}")
+
+                # Strategy 3: match In-Reply-To / References against
+                # outbound email_replies — covers replies to manually-sent
+                # thread emails where there is no incoming email_imports row
+                if not existing_job_id:
+                    ids_to_check = []
+                    if in_reply_to:
+                        ids_to_check.append(in_reply_to.strip())
+                    if references:
+                        ids_to_check.extend(references.split())
+                    for ref_id in ids_to_check:
+                        ref_id = ref_id.strip()
+                        if not ref_id:
+                            continue
+                        row = db_conn.execute("""
+                            SELECT job_id FROM email_replies
+                            WHERE message_id=? AND job_id IS NOT NULL
+                            LIMIT 1
+                        """, (ref_id,)).fetchone()
+                        if row:
+                            existing_job_id = row['job_id']
+                            log.info(f"INBOX: matched outbound reply "
+                                     f"message_id -> job_id={existing_job_id}")
+                            break
+
+                # Strategy 4: customer email + subject contains job reference
+                if not existing_job_id and from_email and subject:
+                    import re as _re
+                    ref_match = _re.search(r'\b([A-Z]{2,3}-\d{4,6})\b', subject)
+                    if ref_match:
+                        job_ref = ref_match.group(1)
+                        row = db_conn.execute(
+                            "SELECT id FROM jobs WHERE reference=? LIMIT 1",
+                            (job_ref,)).fetchone()
+                        if row:
+                            existing_job_id = row['id']
+                            log.info(f"INBOX: job reference '{job_ref}' "
+                                     f"in subject -> job_id={existing_job_id}")
 
                 if existing_job_id:
                     _log_thread_email(

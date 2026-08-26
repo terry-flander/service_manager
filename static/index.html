@@ -1245,6 +1245,11 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
           <div class="form-section-title">Additional Information</div>
 
           <div class="form-group">
+            <label for="fbike">Bike Description</label>
+            <textarea id="fbike" name="bike_description" placeholder="e.g. Trek road bike, black — Separate additional bikes with a comma (,)"></textarea>
+          </div>
+
+          <div class="form-group">
             <label for="fmessage">How can we help?</label>
             <textarea id="fmessage" name="message" placeholder="Tell us about your bike, any specific issues, or questions…"></textarea>
           </div>
@@ -1356,6 +1361,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
       phone:   form.phone.value.trim(),
       suburb:  form.suburb.value.trim(),
       services,
+      bike_description: form.bike_description.value.trim(),
       message: form.message.value.trim(),
     };
 

@@ -1,0 +1,465 @@
+{% extends "base.html" %}
+{% block title %}PO #{{ order['id'] }} — {{ order['supplier_name'] }}{% endblock %}
+{% block topbar_title %}Purchase Order #{{ order['id'] }}{% endblock %}
+
+{% block content %}
+<div style="max-width:900px; margin:0 auto; padding:1rem;">
+
+  <!-- Header card -->
+  <div class="sd-card mb-3">
+    <div class="sd-card-header">
+      {{ order['supplier_name'] }}
+      <span class="badge-status status-{% if order['status']=='open' %}scheduled{% elif order['status']=='received' %}paid{% elif order['status']=='cancelled' %}lost{% else %}pending{% endif %}">
+        {{ order['status'] }}
+      </span>
+      <a href="{{ url_for('inventory.purchase_order_import', po_id=order['id']) }}"
+         class="btn-ghost" style="padding:0.25rem 0.75rem; font-size:0.78rem; margin-left:0.5rem;">
+        <i class="bi bi-upload"></i> Import Lines
+      </a>
+      {% if order['status'] in ('open','partial') %}
+      <a href="{{ url_for('inventory.purchase_order_receive', po_id=order['id']) }}"
+         class="btn-accent" style="padding:0.25rem 0.75rem; font-size:0.78rem; margin-left:0.25rem;">
+        <i class="bi bi-box-arrow-in-down"></i> Receive Stock
+      </a>
+      {% endif %}
+    </div>
+    <div style="padding:1rem 1.25rem;">
+      <form method="post" action="{{ url_for('inventory.purchase_order_edit', po_id=order['id']) }}">
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.75rem; margin-bottom:0.75rem;">
+          <div>
+            <label class="sd-label">Order Date</label>
+            <input type="date" name="order_date" class="sd-input"
+                   value="{{ order['order_date'] }}">
+          </div>
+          <div>
+            <label class="sd-label">Reference</label>
+            <input type="text" name="reference" class="sd-input"
+                   value="{{ order['reference'] or '' }}" placeholder="Supplier order #">
+          </div>
+          <div>
+            <label class="sd-label">Status</label>
+            <select name="status" class="sd-input">
+              {% for s in ['open','partial','received','cancelled'] %}
+              <option value="{{ s }}" {% if order['status']==s %}selected{% endif %}>{{ s|title }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="sd-label">Freight (inc GST)</label>
+            <input type="number" name="freight_inc_gst" class="sd-input"
+                   value="{{ '%.2f'|format(order['freight_inc_gst'] or 0) }}" step="0.01" min="0">
+          </div>
+          <div style="grid-column:2/4;">
+            <label class="sd-label">Notes</label>
+            <input type="text" name="notes" class="sd-input"
+                   value="{{ order['notes'] or '' }}">
+          </div>
+        </div>
+        <div style="display:flex; justify-content:flex-end;">
+          <button type="submit" class="btn-accent" style="padding:0.35rem 1rem; font-size:0.82rem;">
+            <i class="bi bi-floppy"></i> Save
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Lines card -->
+  <div class="sd-card mb-3">
+    <div class="sd-card-header">
+      Order Lines
+    </div>
+    <div style="padding:0.5rem 1.25rem 1rem;">
+      {% if lines %}
+      <div style="overflow-x:auto; margin-bottom:1rem;">
+      <table class="sd-table" style="min-width:700px;">
+        <thead><tr>
+          <th>Supplier Description</th>
+          <th>Matched Part</th>
+          <th>Supplier SKU</th>
+          <th class="r" style="text-align:right;">Qty</th>
+          <th class="r" style="text-align:right;">Rcvd</th>
+          <th class="r" style="text-align:right;">Unit Price</th>
+          <th class="r" style="text-align:right;">Extended</th>
+          <th style="width:80px;"></th>
+        </tr></thead>
+        <tbody>
+          {% for line in lines %}
+          {% set extended = (line['qty_ordered'] or 0) * (line['price_inc_gst'] or 0) %}
+          <tr id="line-row-{{ line['id'] }}">
+            <td style="font-size:0.85rem;">{{ line['supplier_desc'] }}</td>
+            <td style="font-size:0.82rem; color:var(--sd-muted);">{{ line['part_name'] or '—' }}</td>
+            <td style="font-size:0.78rem; font-family:monospace; color:var(--sd-muted);">{{ line['supplier_sku'] or '—' }}</td>
+            <td style="text-align:right; font-size:0.85rem;">{{ line['qty_ordered'] }}</td>
+            <td style="text-align:right; font-size:0.85rem;">{{ line['qty_received'] }}</td>
+            <td style="text-align:right; font-size:0.85rem; font-family:monospace;">${{ '%.2f'|format(line['price_inc_gst']) }}</td>
+            <td style="text-align:right; font-size:0.85rem; font-family:monospace;">${{ '%.2f'|format(extended) }}</td>
+            <td style="display:flex; gap:0.3rem;">
+              <button type="button" class="btn-ghost edit-line-btn"
+                      style="padding:0.2rem 0.4rem; font-size:0.75rem;"
+                      data-id="{{ line['id'] }}">
+                <i class="bi bi-pencil"></i>
+              </button>
+              <form method="post"
+                    action="{{ url_for('inventory.purchase_order_line_delete', po_id=order['id'], line_id=line['id']) }}"
+                    onsubmit="return confirm('Remove this line?')">
+                <button type="submit" class="btn-ghost"
+                        style="padding:0.2rem 0.4rem; font-size:0.75rem; color:#f87171;">
+                  <i class="bi bi-trash3"></i>
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          {% set lines_total = namespace(v=0) %}
+          {% for line in lines %}{% set lines_total.v = lines_total.v + (line['qty_ordered'] or 0) * (line['price_inc_gst'] or 0) %}{% endfor %}
+          <tr>
+            <td colspan="6" style="text-align:right; font-weight:600; padding:0.5rem 0; font-size:0.85rem;">Lines total (inc GST):</td>
+            <td style="text-align:right; font-weight:700; font-family:monospace; padding:0.5rem 0;">
+              ${{ '%.2f'|format(lines_total.v) }}
+            </td>
+            <td></td>
+          </tr>
+          {% if order['freight_inc_gst'] and order['freight_inc_gst'] > 0 %}
+          <tr>
+            <td colspan="6" style="text-align:right; color:var(--sd-muted); font-size:0.82rem; padding:0.25rem 0;">Freight (inc GST):</td>
+            <td style="text-align:right; font-family:monospace; font-size:0.85rem; padding:0.25rem 0;">
+              ${{ '%.2f'|format(order['freight_inc_gst']) }}
+            </td>
+            <td></td>
+          </tr>
+          <tr style="border-top:2px solid var(--sd-border);">
+            <td colspan="6" style="text-align:right; font-weight:700; padding:0.25rem 0;">Order Total (inc GST):</td>
+            <td style="text-align:right; font-weight:700; font-family:monospace; padding:0.25rem 0;">
+              ${{ '%.2f'|format(lines_total.v + (order['freight_inc_gst'] or 0)) }}
+            </td>
+            <td></td>
+          </tr>
+          {% endif %}
+        </tfoot>
+      </table>
+      </div>
+      {% endif %}
+
+      <!-- Add line form -->
+      <div style="border-top:1px solid var(--sd-border); padding-top:1rem;">
+        <div style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--sd-muted); margin-bottom:0.5rem;">Add Line</div>
+        <form method="post" action="{{ url_for('inventory.purchase_order_line_add', po_id=order['id']) }}">
+          <div style="display:grid; grid-template-columns:2fr 1.5fr 1fr 1fr 1fr auto; gap:0.5rem; align-items:end;">
+            <div>
+              <label class="sd-label">Supplier Description *</label>
+              <input type="text" name="supplier_desc" class="sd-input" required placeholder="As on invoice">
+            </div>
+            <div>
+              <label class="sd-label">Match to Part</label>
+              <select name="part_id" class="sd-input">
+                <option value="">— Unmatched —</option>
+                {% for p in parts %}
+                <option value="{{ p['id'] }}">{{ p['name'] }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label class="sd-label">Supplier SKU</label>
+              <input type="text" name="supplier_sku" class="sd-input" placeholder="Optional">
+            </div>
+            <div>
+              <label class="sd-label">Qty</label>
+              <input type="number" name="qty_ordered" class="sd-input" value="1" min="0.01" step="any" required>
+            </div>
+            <div>
+              <label class="sd-label">Price (inc GST)</label>
+              <input type="number" name="price_inc_gst" class="sd-input" value="0.00" step="0.01" min="0" required>
+            </div>
+            <div>
+              <label class="sd-label">&nbsp;</label>
+              <button type="submit" class="btn-accent">
+                <i class="bi bi-plus-lg"></i> Add
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <a href="{{ url_for('inventory.purchase_orders') }}" class="btn-ghost">
+      <i class="bi bi-arrow-left"></i> Back to Orders
+    </a>
+    {% set total_received = lines|sum(attribute='qty_received') if lines else 0 %}
+    {% if total_received == 0 %}
+    <form method="post" action="{{ url_for('inventory.purchase_order_delete', po_id=order['id']) }}"
+          onsubmit="return confirm('Delete this purchase order and all its lines?')">
+      <button type="submit" class="btn-ghost" style="color:#f87171;">
+        <i class="bi bi-trash3"></i> Delete Order
+      </button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Line edit modal -->
+<div id="line-edit-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65);
+            z-index:3000; align-items:center; justify-content:center; padding:1rem;"
+     onclick="if(event.target===this)closeLineEdit()">
+  <div style="background:var(--sd-surface); border:1px solid var(--sd-border);
+              border-radius:10px; padding:1.5rem; width:min(540px,97vw);">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+      <span style="font-weight:700; font-size:1rem;">Edit Line</span>
+      <button type="button" onclick="closeLineEdit()"
+              style="background:none;border:none;cursor:pointer;color:var(--sd-muted);font-size:1.1rem;">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    <form id="line-edit-form" method="post">
+      <input type="hidden" name="part_id" id="le-part-id" value="">
+      <div style="margin-bottom:0.75rem;">
+        <label class="sd-label">Supplier Description</label>
+        <input type="text" name="supplier_desc" id="le-desc" class="sd-input">
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; margin-bottom:0.75rem;">
+        <div>
+          <label class="sd-label">Supplier SKU</label>
+          <input type="text" name="supplier_sku" id="le-sku" class="sd-input" style="font-family:monospace;">
+        </div>
+        <div>
+          <label class="sd-label">Match to Part</label>
+          <input type="hidden" name="part_id" id="le-part-id" value="">
+          <div style="position:relative;">
+            <input type="text" id="le-part-search"
+                   class="sd-input"
+                   placeholder="Search parts…"
+                   autocomplete="off" spellcheck="false"
+                   oninput="leSearch(this.value)"
+                   onfocus="leSearch(this.value)"
+                   onkeydown="leKey(event)"
+                   onblur="_leBlurTimer=setTimeout(leCloseDD,200)">
+            <div id="le-dropdown"
+                 style="display:none; position:fixed; z-index:99999;
+                        background:var(--sd-surface); border:1px solid var(--sd-border);
+                        border-radius:6px; box-shadow:0 8px 24px rgba(0,0,0,0.6);
+                        max-height:220px; overflow-y:auto; color:var(--sd-text);
+                        min-width:260px;"></div>
+          </div>
+        </div>
+        <div>
+          <label class="sd-label">Qty Ordered</label>
+          <input type="number" name="qty_ordered" id="le-qty" class="sd-input" step="any" min="0">
+        </div>
+        <div>
+          <label class="sd-label">Price (inc GST)</label>
+          <input type="number" name="price_inc_gst" id="le-price" class="sd-input" step="0.01" min="0">
+        </div>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:0.5rem;">
+        <button type="button" class="btn-ghost" onclick="closeLineEdit()">Cancel</button>
+        <button type="submit" class="btn-accent">Save</button>
+      </div>
+    </form>
+
+    <!-- Inline new part sub-panel -->
+    <div id="le-np-panel" style="display:none; margin-top:1rem; padding:1rem;
+         background:var(--sd-surface2); border:1px solid var(--sd-border); border-radius:8px;">
+      <div style="font-weight:600; font-size:0.9rem; margin-bottom:0.75rem;">
+        <i class="bi bi-plus-circle" style="color:var(--sd-accent);"></i> Add New Part
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.6rem; margin-bottom:0.6rem;">
+        <div style="grid-column:1/-1;">
+          <label class="sd-label">Name *</label>
+          <input type="text" id="le-np-name" class="sd-input">
+        </div>
+        <div>
+          <label class="sd-label">Part Number</label>
+          <input type="text" id="le-np-number" class="sd-input" style="font-family:monospace;">
+        </div>
+        <div>
+          <label class="sd-label">Unit Cost</label>
+          <input type="number" id="le-np-cost" class="sd-input" step="0.01" min="0" value="0.00">
+        </div>
+        <div>
+          <label class="sd-label">Type</label>
+          <select id="le-np-type" class="sd-input">
+            <option value="stock">Stock</option>
+            <option value="service">Service</option>
+            <option value="ad_hoc">Ad-hoc</option>
+          </select>
+        </div>
+      </div>
+      <div id="le-np-err" style="display:none; color:#f87171; font-size:0.82rem; margin-bottom:0.5rem;"></div>
+      <div style="display:flex; justify-content:flex-end; gap:0.5rem;">
+        <button type="button" class="btn-ghost" onclick="leCloseNP()">Cancel</button>
+        <button type="button" class="btn-accent" onclick="leSaveNP()">Save Part</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var LINE_MAP = {};
+{% for line in lines %}LINE_MAP[{{ line['id'] }}] = {{ line|tojson }};{% endfor %}
+
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('.edit-line-btn');
+  if (btn) editLine(LINE_MAP[parseInt(btn.dataset.id)]);
+});
+
+function editLine(line) {
+  document.getElementById('line-edit-form').action =
+    '/inventory/purchase-orders/{{ order["id"] }}/lines/' + line.id + '/edit';
+  document.getElementById('le-desc').value        = line.supplier_desc || '';
+  document.getElementById('le-sku').value         = line.supplier_sku  || '';
+  document.getElementById('le-qty').value         = line.qty_ordered   || 1;
+  document.getElementById('le-price').value       = parseFloat(line.price_inc_gst || 0).toFixed(2);
+  document.getElementById('le-part-id').value     = line.part_id || '';
+  document.getElementById('le-part-search').value = line.part_name || '';
+  leCloseDD();
+  leCloseNP();
+  document.getElementById('line-edit-overlay').style.display = 'flex';
+}
+
+function closeLineEdit() {
+  document.getElementById('line-edit-overlay').style.display = 'none';
+  leCloseDD();
+  leCloseNP();
+}
+
+// ── Part search for edit modal ────────────────────────────────────────────────
+var _leTimer = null, _leBlurTimer = null;
+
+function leSearch(q) {
+  clearTimeout(_leTimer);
+  _leTimer = setTimeout(function() {
+    fetch('/parts/search?q=' + encodeURIComponent(q || ''))
+      .then(function(r) { return r.json(); })
+      .then(function(parts) { leRenderDD(parts, q); })
+      .catch(function() {});
+  }, 180);
+}
+
+function leRenderDD(parts, q) {
+  var inp  = document.getElementById('le-part-search');
+  var dd   = document.getElementById('le-dropdown');
+  var rect = inp.getBoundingClientRect();
+  dd.style.left  = rect.left + 'px';
+  dd.style.top   = (rect.bottom + 2) + 'px';
+  dd.style.width = Math.max(rect.width, 280) + 'px';
+  dd.innerHTML   = '';
+
+  function escH(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  (parts||[]).forEach(function(p) {
+    var d = document.createElement('div');
+    d.style.cssText = 'padding:0.55rem 1rem;cursor:pointer;font-size:0.875rem;' +
+      'border-bottom:1px solid var(--sd-border);display:flex;justify-content:space-between;' +
+      'align-items:center;gap:0.5rem;color:var(--sd-text);background:var(--sd-surface);';
+    d.innerHTML = '<span><span style="font-weight:500;">' + escH(p.name) + '</span>' +
+      (p.part_number ? ' <span style="font-size:0.75rem;color:var(--sd-muted);">(' + escH(p.part_number) + ')</span>' : '') +
+      '</span><span style="font-size:0.82rem;color:var(--sd-accent);flex-shrink:0;">$' +
+      parseFloat(p.unit_cost||0).toFixed(2) + '</span>';
+    d.addEventListener('mouseover', function() { leHL(d); });
+    d.addEventListener('mousedown', function(e) { e.preventDefault(); leSelect(p); });
+    dd.appendChild(d);
+  });
+
+  if (!parts || !parts.length) {
+    var none = document.createElement('div');
+    none.style.cssText = 'padding:0.6rem 1rem;font-size:0.82rem;color:var(--sd-muted);';
+    none.textContent = q ? 'No matches' : 'Type to search…';
+    dd.appendChild(none);
+  }
+
+  var nb = document.createElement('div');
+  nb.className = 'le-dd-new';
+  nb.style.cssText = 'padding:0.55rem 1rem;cursor:pointer;font-size:0.85rem;' +
+    'color:var(--sd-accent);border-top:2px solid var(--sd-border);' +
+    'background:var(--sd-surface);position:sticky;bottom:0;';
+  nb.innerHTML = '<i class="bi bi-plus-circle"></i> Add new part…';
+  nb.addEventListener('mousedown', function(e) { e.preventDefault(); leCloseDD(); leOpenNP(); });
+  dd.appendChild(nb);
+  dd.style.display = 'block';
+}
+
+function leHL(el) {
+  document.getElementById('le-dropdown').querySelectorAll('div').forEach(function(d) {
+    d.style.background = 'var(--sd-surface)';
+  });
+  if (el) { el.style.background = 'var(--sd-surface2)'; el.scrollIntoView({block:'nearest'}); }
+}
+
+function leKey(e) {
+  clearTimeout(_leBlurTimer);
+  var dd    = document.getElementById('le-dropdown');
+  if (dd.style.display === 'none') {
+    if (e.key === 'ArrowDown') { e.preventDefault(); leSearch(document.getElementById('le-part-search').value); }
+    return;
+  }
+  var items = Array.from(dd.querySelectorAll('div')).filter(function(d) {
+    return d.style.cursor === 'pointer' && !d.classList.contains('le-dd-new');
+  });
+  var ai = items.findIndex(function(d) { return d.style.background.includes('surface2'); });
+  if      (e.key==='ArrowDown') { e.preventDefault(); leHL(items[ai<0?0:Math.min(ai+1,items.length-1)]); }
+  else if (e.key==='ArrowUp')   { e.preventDefault(); leHL(items[Math.max(ai-1,0)]); }
+  else if (e.key==='Enter')     { e.preventDefault(); var a=items[ai]; if(a) a.dispatchEvent(new MouseEvent('mousedown')); }
+  else if (e.key==='Escape')    { leCloseDD(); }
+}
+
+function leCloseDD() { document.getElementById('le-dropdown').style.display = 'none'; }
+
+function leSelect(p) {
+  document.getElementById('le-part-id').value     = p.id;
+  document.getElementById('le-part-search').value = p.name;
+  leCloseDD();
+  var pe = document.getElementById('le-price');
+  if (parseFloat(pe.value) === 0 && parseFloat(p.unit_cost) > 0)
+    pe.value = parseFloat(p.unit_cost).toFixed(2);
+}
+
+document.addEventListener('mousedown', function(e) {
+  var dd = document.getElementById('le-dropdown');
+  var inp = document.getElementById('le-part-search');
+  if (dd && inp && !dd.contains(e.target) && e.target !== inp) leCloseDD();
+});
+
+// ── New part sub-panel ────────────────────────────────────────────────────────
+function leOpenNP() {
+  document.getElementById('le-np-name').value   = document.getElementById('le-part-search').value;
+  document.getElementById('le-np-number').value = document.getElementById('le-sku').value;
+  document.getElementById('le-np-cost').value   = document.getElementById('le-price').value || '0.00';
+  document.getElementById('le-np-type').value   = 'stock';
+  document.getElementById('le-np-err').style.display = 'none';
+  document.getElementById('le-np-panel').style.display = '';
+  setTimeout(function() { document.getElementById('le-np-name').focus(); }, 50);
+}
+
+function leCloseNP() {
+  var p = document.getElementById('le-np-panel');
+  if (p) p.style.display = 'none';
+}
+
+function leSaveNP() {
+  var name  = document.getElementById('le-np-name').value.trim();
+  var num   = document.getElementById('le-np-number').value.trim();
+  var cost  = parseFloat(document.getElementById('le-np-cost').value) || 0;
+  var ptype = document.getElementById('le-np-type').value;
+  var errEl = document.getElementById('le-np-err');
+  if (!name) { errEl.textContent='Name is required.'; errEl.style.display=''; return; }
+  errEl.style.display = 'none';
+  var fd = new FormData();
+  fd.append('name',name); fd.append('part_number',num);
+  fd.append('unit_cost',cost); fd.append('part_type',ptype);
+  fetch('/parts/quick-add',{method:'POST',body:fd})
+    .then(function(r){return r.json();})
+    .then(function(res){
+      if(res.ok){leSelect({id:res.id,name:res.name,unit_cost:res.unit_cost});leCloseNP();}
+      else{errEl.textContent=res.error||'Failed.';errEl.style.display='';}
+    })
+    .catch(function(){errEl.textContent='Network error.';errEl.style.display='';});
+}
+</script>
+{% endblock %}

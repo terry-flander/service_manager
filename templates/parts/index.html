@@ -8,158 +8,191 @@
 {% endblock %}
 
 {% block content %}
-
-<!-- Controls bar — all forms are siblings, never nested -->
 <div class="sd-card mb-3">
-  <div style="padding:0.75rem 1.25rem; display:flex; gap:0.75rem;
-              align-items:center; flex-wrap:wrap;">
-
-    <!-- Search form -->
+  <div style="padding:0.75rem 1.25rem; display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap;">
     <form method="get" action="{{ url_for('parts.index') }}"
-          id="parts-search-form"
           style="display:flex; gap:0.5rem; flex:1; min-width:200px;">
-      <!-- Carry inactive toggle into search submission -->
-      {% if show_inactive %}
-      <input type="hidden" name="inactive" value="on">
-      {% endif %}
+      {% if type_filter %}<input type="hidden" name="type" value="{{ type_filter }}">{% endif %}
       <div style="position:relative; flex:1; min-width:0;">
-        <i class="bi bi-search"
-           style="position:absolute; left:0.75rem; top:50%;
-                  transform:translateY(-50%); color:var(--sd-muted);
-                  pointer-events:none; font-size:0.85rem;"></i>
-        <input type="text" name="q" id="parts-q" value="{{ q }}"
-               class="sd-input" style="padding-left:2.25rem;"
-               placeholder="Search name or part number…">
+        <i class="bi bi-search" style="position:absolute; left:0.75rem; top:50%; transform:translateY(-50%); color:var(--sd-muted); pointer-events:none; font-size:0.85rem;"></i>
+        <input type="text" name="q" value="{{ q }}" class="sd-input" style="padding-left:2.25rem;" placeholder="Search name or part number…">
       </div>
-      <button type="submit" class="btn-accent" style="white-space:nowrap;">
-        <i class="bi bi-search"></i>
-      </button>
+      <button type="submit" class="btn-accent"><i class="bi bi-search"></i></button>
     </form>
-
-    <!-- Inactive toggle — standalone form, never nested -->
-    <form method="get" action="{{ url_for('parts.index') }}"
-          id="inactive-toggle-form">
-      <!-- Carry search query into toggle submission -->
-      {% if q %}<input type="hidden" name="q" value="{{ q }}">{% endif %}
-      {% if show_inactive %}
-      <!-- Currently showing inactive — clicking hides them -->
-      <button type="submit" name="inactive" value="off"
-              class="btn-ghost" style="white-space:nowrap;">
-        <i class="bi bi-eye-slash"></i> Hide Inactive
-      </button>
-      {% else %}
-      <!-- Currently hiding inactive — clicking shows them -->
-      <button type="submit" name="inactive" value="on"
-              class="btn-ghost" style="white-space:nowrap;">
-        <i class="bi bi-eye"></i> Show Inactive
-      </button>
-      {% endif %}
-    </form>
-
-    <!-- Clear — standalone POST form -->
-    {% if q or show_inactive %}
-    <form method="post" action="{{ url_for('parts.clear_search') }}"
-          id="parts-clear-form">
-      <button type="submit" class="btn-ghost" title="Clear search and filters">
-        <i class="bi bi-x-lg"></i> Clear
-      </button>
-    </form>
-    {% endif %}
-
-    <span style="font-size:0.8rem; color:var(--sd-muted); margin-left:auto; flex-shrink:0;">
-      {{ parts|length }} part{{ 's' if parts|length != 1 }}
-      {% if q %}
-        <span style="color:var(--sd-accent);"> matching "{{ q }}"</span>
-      {% endif %}
-      {% if show_inactive %}
-        <span style="color:var(--sd-muted);"> (incl. inactive)</span>
-      {% endif %}
-    </span>
-
+    <div style="display:flex; gap:0.25rem; flex-wrap:wrap;">
+      {% for code, label in [('all','All'),('stock','Stock'),('service','Service'),('ad_hoc','Ad-hoc')] %}
+      <a href="{{ url_for('parts.index', q=q or None, type=code) }}"
+         class="btn-ghost"
+         style="padding:0.3rem 0.65rem; font-size:0.78rem; white-space:nowrap;
+                {% if (type_filter == code) or (code == 'all' and not type_filter) %}background:var(--sd-accent); color:#fff; border-color:var(--sd-accent);{% endif %}">
+        {{ label }}
+      </a>
+      {% endfor %}
+    </div>
+    <a href="{{ url_for('parts.clear_search') }}" class="btn-ghost" style="white-space:nowrap;">
+      <i class="bi bi-x-circle"></i> Clear
+    </a>
   </div>
 </div>
 
-<!-- Parts table -->
+<script>
+var SUPPLIERS_MAP = { '0': '— None —' };
+{% for s in suppliers %}SUPPLIERS_MAP['{{ s['id'] }}'] = {{ s['name']|tojson }};{% endfor %}
+var SUPPLIERS_LIST = [{ id: 0, name: '— None —' }{% for s in suppliers %}, { id: {{ s['id'] }}, name: {{ s['name']|tojson }} }{% endfor %}];
+</script>
+
 <div class="sd-card">
-  <div class="table-responsive-sd">
-    <table class="sd-table">
+  <div style="padding:0.5rem 1.25rem; font-size:0.78rem; color:var(--sd-muted);">
+    {{ parts|length }} part{{ 's' if parts|length != 1 else '' }} — click any field to edit inline
+  </div>
+  <div style="overflow-x:auto;">
+    <table class="sd-table" style="font-size:0.85rem; min-width:900px;">
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Part Number</th>
-          <th style="text-align:right;">Unit Cost</th>
-          <th>Unit</th>
-          <th>Status</th>
-          <th></th>
+          <th style="min-width:160px;">Name</th>
+          <th style="min-width:110px;">Part Number</th>
+          <th style="width:85px; text-align:right;">Cost</th>
+          <th style="width:85px; text-align:right;">Avg Cost</th>
+          <th style="width:75px; text-align:right;">Reorder Pt</th>
+          <th style="width:75px; text-align:right;">Reorder Qty</th>
+          <th style="width:85px;">Type</th>
+          <th style="width:70px; text-align:right;">On Hand</th>
+          <th style="min-width:110px;">Supplier</th>
+          <th style="width:60px;"></th>
         </tr>
       </thead>
       <tbody>
         {% for part in parts %}
-        <tr {% if not part.active %}style="opacity:0.6;"{% endif %}>
-          <td style="font-weight:500;">{{ part.name }}</td>
-          <td class="mono" style="font-size:0.8rem; color:var(--sd-muted);">
-            {{ part.part_number or '—' }}
-          </td>
-          <td class="mono" style="text-align:right;">
-            ${{ '%.2f'|format(part.unit_cost) }}
-          </td>
-          <td style="font-size:0.8rem; color:var(--sd-muted);">{{ part.unit }}</td>
+        <tr data-part-id="{{ part['id'] }}" {% if not part['active'] %}style="opacity:0.5;"{% endif %}>
           <td>
-            {% if part.active %}
-            <span class="badge-status status-complete">Active</span>
-            {% else %}
-            <span class="badge-status status-invoiced">Inactive</span>
-            {% endif %}
+            <span class="ie" data-field="name" data-val="{{ part['name']|e }}">{{ part['name'] }}</span>
           </td>
-          <td style="display:flex; gap:0.5rem;">
-            <a href="{{ url_for('parts.edit_part', part_id=part.id) }}"
-               class="btn-ghost"
-               style="padding:0.25rem 0.6rem; font-size:0.8rem;">
-              <i class="bi bi-pencil"></i>
+          <td>
+            <span class="ie mono" data-field="part_number" data-val="{{ part['part_number'] or '' }}">{{ part['part_number'] or '&#x2014;' }}</span>
+          </td>
+          <td style="text-align:right;">
+            <span class="ie mono" data-field="unit_cost" data-val="{{ '%.2f'|format(part['unit_cost']) }}" data-type="number">
+              ${{ '%.2f'|format(part['unit_cost']) }}
+            </span>
+          </td>
+          <td style="text-align:right;">
+            <span class="ie mono" data-field="avg_cost_inc_gst" data-val="{{ '%.2f'|format(part['avg_cost_inc_gst'] or 0) }}" data-type="number">
+              ${{ '%.2f'|format(part['avg_cost_inc_gst'] or 0) }}
+            </span>
+          </td>
+          <td style="text-align:right;">
+            <span class="ie mono" data-field="reorder_point" data-val="{{ part['reorder_point'] or 0 }}" data-type="number">{{ part['reorder_point'] or 0 }}</span>
+          </td>
+          <td style="text-align:right;">
+            <span class="ie mono" data-field="reorder_qty" data-val="{{ part['reorder_qty'] or 0 }}" data-type="number">{{ part['reorder_qty'] or 0 }}</span>
+          </td>
+          <td>
+            {% set pt = part['part_type'] or 'stock' %}
+            <span class="ie" data-field="part_type" data-val="{{ pt }}" data-type="select" data-options='["stock","service","ad_hoc"]'>
+              <span class="badge-status {% if pt=='service' %}status-scheduled{% elif pt=='ad_hoc' %}status-pending{% else %}status-complete{% endif %}" style="font-size:0.65rem;">{{ pt }}</span>
+            </span>
+          </td>
+          <td style="text-align:right; font-family:monospace; font-size:0.82rem; color:var(--sd-muted);">
+            {{ (part['qty_on_hand']|int) if (part['qty_on_hand'] or 0) == ((part['qty_on_hand'] or 0)|int) else '%.1f'|format(part['qty_on_hand'] or 0) }}
+          </td>
+          <td>
+            <span class="ie" data-field="supplier_id" data-val="{{ part['supplier_id'] or 0 }}" data-type="supplier">
+              {{ part['supplier_name'] or '—' }}
+            </span>
+          </td>
+          <td>
+            <a href="{{ url_for('parts.merge_part', part_id=part['id']) }}"
+               class="btn-ghost" style="padding:0.2rem 0.45rem; font-size:0.72rem;" title="Merge">
+              <i class="bi bi-arrow-left-right"></i>
             </a>
-            {% if part.active %}
-            <form method="post"
-                  action="{{ url_for('parts.delete_part', part_id=part.id) }}"
-                  onsubmit="return confirm('Deactivate \'{{ part.name }}\'?')">
-              <button type="submit" class="btn-danger" title="Deactivate">
-                <i class="bi bi-slash-circle"></i>
-              </button>
-            </form>
-            {% else %}
-            <form method="post"
-                  action="{{ url_for('parts.reactivate_part', part_id=part.id) }}">
-              <button type="submit" class="btn-ghost"
-                      style="padding:0.25rem 0.6rem; font-size:0.8rem;"
-                      title="Reactivate">
-                <i class="bi bi-arrow-counterclockwise"></i>
-              </button>
-            </form>
-            {% endif %}
-            <form method="post"
-                  action="{{ url_for('parts.destroy_part', part_id=part.id) }}"
-                  onsubmit="return confirm('Permanently DELETE \'{{ part.name }}\' from the database? This cannot be undone.')">
-              <button type="submit" class="btn-ghost"
-                      style="padding:0.25rem 0.6rem; font-size:0.8rem; color:#f87171; border-color:rgba(248,113,113,0.35);"
-                      title="Delete permanently">
-                <i class="bi bi-trash3"></i>
-              </button>
-            </form>
           </td>
         </tr>
         {% else %}
-        <tr>
-          <td colspan="6"
-              style="text-align:center; color:var(--sd-muted); padding:2rem;">
-            {% if q %}
-            No parts matching "{{ q }}".
-            {% else %}
-            No parts in master list yet.
-            {% endif %}
-          </td>
-        </tr>
+        <tr><td colspan="9" style="text-align:center; color:var(--sd-muted); padding:2rem;">No parts found.</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('.ie').forEach(function(span) {
+  span.style.cursor = 'pointer';
+  span.title = 'Click to edit';
+  span.addEventListener('click', function() {
+    if (span.querySelector('input,select')) return;
+    var field  = span.dataset.field;
+    var val    = span.dataset.val;
+    var type   = span.dataset.type || 'text';
+    var partId = span.closest('tr').dataset.partId;
+    var orig   = span.innerHTML;
+    var input;
+    if (type === 'select') {
+      var opts = JSON.parse(span.dataset.options || '[]');
+      input = document.createElement('select');
+      input.className = 'sd-input';
+      input.style.cssText = 'font-size:0.8rem;padding:0.15rem 0.3rem;min-width:80px;';
+      opts.forEach(function(o) {
+        var opt = document.createElement('option');
+        opt.value = o; opt.textContent = o;
+        if (o === val) opt.selected = true;
+        input.appendChild(opt);
+      });
+    } else if (type === 'supplier') {
+      input = document.createElement('select');
+      input.className = 'sd-input';
+      input.style.cssText = 'font-size:0.8rem;padding:0.15rem 0.3rem;min-width:110px;';
+      SUPPLIERS_LIST.forEach(function(s) {
+        var opt = document.createElement('option');
+        opt.value = s.id; opt.textContent = s.name;
+        if (String(s.id) === String(val)) opt.selected = true;
+        input.appendChild(opt);
+      });
+    } else {
+      input = document.createElement('input');
+      input.type = type === 'number' ? 'number' : 'text';
+      if (type === 'number') input.step = '0.01';
+      input.value = val;
+      input.className = 'sd-input';
+      input.style.cssText = 'font-size:0.8rem;padding:0.15rem 0.3rem;min-width:70px;width:100%;';
+    }
+    span.innerHTML = '';
+    span.appendChild(input);
+    input.focus();
+    if (input.select && input.type !== 'number') input.select();
+
+    function doSave() {
+      var newVal = input.value;
+      if (String(newVal) === String(val)) { span.innerHTML = orig; return; }
+      fetch('/parts/' + partId + '/save-field', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({field: field, value: newVal}),
+      }).then(function(r){return r.json();}).then(function(res){
+        if (res.ok) {
+          span.dataset.val = newVal;
+          if (field === 'part_type') {
+            var c={stock:'status-complete',service:'status-scheduled',ad_hoc:'status-pending'};
+            span.innerHTML = '<span class="badge-status '+(c[newVal]||'status-complete')+'" style="font-size:0.65rem;">'+newVal+'</span>';
+          } else if (field === 'supplier_id') {
+            span.textContent = SUPPLIERS_MAP[String(newVal)] || '—';
+          } else if (field === 'unit_cost' || field === 'avg_cost_inc_gst') {
+            span.textContent = '$' + parseFloat(newVal).toFixed(2);
+          } else {
+            span.textContent = newVal || '—';
+          }
+        } else { span.innerHTML = orig; }
+      }).catch(function(){ span.innerHTML = orig; });
+    }
+    input.addEventListener('blur', doSave);
+    input.addEventListener('keydown', function(e){
+      if (e.key==='Enter') input.blur();
+      if (e.key==='Escape') { span.innerHTML=orig; }
+    });
+    if (input.tagName === 'SELECT') input.addEventListener('change', doSave);
+  });
+});
+</script>
 {% endblock %}

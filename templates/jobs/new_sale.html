@@ -46,11 +46,32 @@
               </div>
             </div>
 
+            <!-- Customer (optional — links to existing customer) -->
+            <div class="col-12">
+              <label class="sd-label">Customer Name
+                <span style="color:var(--sd-muted); font-weight:400;">(optional — leave blank for anonymous counter sale)</span>
+              </label>
+              <input type="hidden" name="customer_id" id="sale-cust-id" value="">
+              <div style="position:relative;">
+                <input type="text" id="sale-cust-name" name="customer_name" class="sd-input"
+                       placeholder="Type to search existing customers…"
+                       autocomplete="off" spellcheck="false">
+                <div id="sale-cust-dd"
+                     style="display:none; position:absolute; left:0; right:0; top:100%; z-index:999;
+                            background:var(--sd-surface); border:1px solid var(--sd-border);
+                            border-radius:6px; box-shadow:0 6px 20px rgba(0,0,0,0.4);
+                            max-height:200px; overflow-y:auto; margin-top:2px;"></div>
+              </div>
+              <div id="sale-cust-matched" style="display:none; font-size:0.78rem; color:#34d399; margin-top:0.3rem;">
+                <i class="bi bi-check-circle"></i> <span id="sale-cust-matched-name"></span>
+              </div>
+            </div>
+
             <!-- Notes -->
             <div class="col-12">
               <label class="sd-label">Notes <span style="color:var(--sd-muted); font-weight:400;">(optional)</span></label>
               <input type="text" name="notes" class="sd-input"
-                     placeholder="e.g. Walk-in, regular customer, event…">
+                     placeholder="e.g. Walk-in, event…">
             </div>
 
           </div>
@@ -66,4 +87,91 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var _custTimer = null;
+var _custInp   = document.getElementById('sale-cust-name');
+var _custDD    = document.getElementById('sale-cust-dd');
+var _custId    = document.getElementById('sale-cust-id');
+var _custMatch = document.getElementById('sale-cust-matched');
+var _custMatchName = document.getElementById('sale-cust-matched-name');
+var _blurTimer = null;
+
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function custItems() { return Array.from(_custDD.querySelectorAll('div[data-cid]')); }
+
+function custSetActive(el) {
+  custItems().forEach(function(d) { d.style.background = ''; });
+  if (el) { el.style.background = 'var(--sd-surface2)'; el.scrollIntoView({block:'nearest'}); }
+}
+
+function custSelect(c) {
+  _custInp.value = c.name;
+  _custId.value  = c.id;
+  _custMatchName.textContent = c.name + (c.phone ? ' · ' + c.phone : '');
+  _custMatch.style.display = '';
+  _custDD.style.display = 'none';
+}
+
+_custInp.addEventListener('input', function() {
+  clearTimeout(_custTimer);
+  _custId.value = '';
+  _custMatch.style.display = 'none';
+  var q = this.value.trim();
+  if (q.length < 2) { _custDD.style.display = 'none'; return; }
+  _custTimer = setTimeout(function() {
+    fetch('/customers/search?q=' + encodeURIComponent(q))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        _custDD.innerHTML = '';
+        if (!data.length) { _custDD.style.display = 'none'; return; }
+        data.forEach(function(c) {
+          var d = document.createElement('div');
+          d.setAttribute('data-cid', c.id);
+          d.style.cssText = 'padding:0.5rem 0.85rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid var(--sd-border);';
+          d.innerHTML = '<span style="font-weight:500;">' + esc(c.name) + '</span>' +
+            (c.phone  ? ' <span style="color:var(--sd-muted);font-size:0.78rem;">' + esc(c.phone) + '</span>' : '') +
+            (c.suburb ? ' <span style="color:var(--sd-muted);font-size:0.78rem;">· ' + esc(c.suburb) + '</span>' : '');
+          d.addEventListener('mouseover', function() { custSetActive(this); });
+          d.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            custSelect(c);
+          });
+          _custDD.appendChild(d);
+        });
+        _custDD.style.display = '';
+      });
+  }, 200);
+});
+
+_custInp.addEventListener('keydown', function(e) {
+  clearTimeout(_blurTimer);
+  if (_custDD.style.display === 'none') {
+    if (e.key === 'ArrowDown') { e.preventDefault(); _custInp.dispatchEvent(new Event('input')); }
+    return;
+  }
+  var items = custItems();
+  var ai = items.findIndex(function(d) { return d.style.background !== ''; });
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    custSetActive(items[ai < 0 ? 0 : Math.min(ai + 1, items.length - 1)]);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    custSetActive(items[Math.max(ai - 1, 0)]);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    var active = items[ai];
+    if (active) active.dispatchEvent(new MouseEvent('mousedown'));
+  } else if (e.key === 'Escape') {
+    _custDD.style.display = 'none';
+  }
+});
+
+_custInp.addEventListener('blur', function() {
+  _blurTimer = setTimeout(function() { _custDD.style.display = 'none'; }, 200);
+});
+</script>
 {% endblock %}

@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if action=='edit' else 'New' }} Supplier{% endblock %}
+{% block topbar_title %}{{ 'Edit' if action=='edit' else 'New' }} Supplier{% endblock %}
+
+{% block content %}
+<div style="max-width:760px; margin:0 auto; padding:1rem;">
+
+  <!-- Supplier details card -->
+  <div class="sd-card mb-3">
+    <div class="sd-card-header">{{ 'Edit' if action=='edit' else 'New' }} Supplier</div>
+    <div style="padding:1.25rem;">
+      <form method="post">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; margin-bottom:0.75rem;">
+          <div style="grid-column:1/-1;">
+            <label class="sd-label">Name *</label>
+            <input type="text" name="name" class="sd-input" required
+                   value="{{ supplier['name'] if supplier else '' }}">
+          </div>
+          <div>
+            <label class="sd-label">Email</label>
+            <input type="email" name="email" class="sd-input"
+                   value="{{ supplier['email'] if supplier else '' }}">
+          </div>
+          <div>
+            <label class="sd-label">Phone</label>
+            <input type="tel" name="phone" class="sd-input phone-input" inputmode="tel"
+                   value="{{ supplier['phone'] if supplier else '' }}">
+          </div>
+          <div style="grid-column:1/-1;">
+            <label class="sd-label">Website</label>
+            <input type="url" name="website" class="sd-input"
+                   value="{{ supplier['website'] if supplier else '' }}">
+          </div>
+          <div style="grid-column:1/-1;">
+            <label class="sd-label">Notes</label>
+            <textarea name="notes" class="sd-input" rows="2">{{ supplier['notes'] if supplier else '' }}</textarea>
+          </div>
+          {% if action == 'edit' %}
+          <div>
+            <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-size:0.85rem;">
+              <input type="checkbox" name="active" value="1"
+                     {% if supplier['active'] %}checked{% endif %}
+                     style="width:1rem; height:1rem;">
+              Active
+            </label>
+          </div>
+          {% endif %}
+        </div>
+        <div style="display:flex; justify-content:space-between;">
+          {% if action == 'edit' %}
+          <form method="post" action="{{ url_for('inventory.supplier_delete', sup_id=supplier['id']) }}"
+                onsubmit="return confirm('Delete this supplier?')" style="display:inline;">
+            <button type="submit" class="btn-ghost" style="color:#f87171;">
+              <i class="bi bi-trash3"></i> Delete
+            </button>
+          </form>
+          {% else %}
+          <span></span>
+          {% endif %}
+          <div style="display:flex; gap:0.5rem;">
+            <a href="{{ url_for('inventory.suppliers') }}" class="btn-ghost">Cancel</a>
+            <button type="submit" class="btn-accent">Save</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Orders section — edit mode only -->
+  {% if action == 'edit' %}
+  <div class="sd-card mb-3">
+    <div class="sd-card-header">
+      Purchase Orders
+      <a href="{{ url_for('inventory.purchase_order_new') }}?supplier_id={{ supplier['id'] }}"
+         class="btn-accent" style="padding:0.25rem 0.75rem; font-size:0.78rem;">
+        <i class="bi bi-plus-lg"></i> New Order
+      </a>
+    </div>
+    <div style="padding:0.5rem 1.25rem 1rem;">
+      {% if orders %}
+      <table class="sd-table" style="font-size:0.85rem;">
+        <thead><tr>
+          <th>Date</th>
+          <th>Reference</th>
+          <th style="text-align:right;">Lines</th>
+          <th style="text-align:right;">Total</th>
+          <th>Status</th>
+          <th style="width:120px;"></th>
+        </tr></thead>
+        <tbody>
+          {% for o in orders %}
+          <tr>
+            <td class="mono" style="font-size:0.82rem;">{{ o['order_date'] }}</td>
+            <td style="color:var(--sd-muted); font-size:0.82rem;">{{ o['reference'] or '—' }}</td>
+            <td style="text-align:right; font-size:0.82rem;">{{ o['line_count'] }}</td>
+            <td style="text-align:right; font-family:monospace; font-size:0.82rem;">
+              ${{ '%.2f'|format((o['lines_total'] or 0) + (o['freight_inc_gst'] or 0)) }}
+            </td>
+            <td>
+              <span class="badge-status
+                status-{% if o['status']=='open' %}scheduled
+                {% elif o['status']=='received' %}paid
+                {% elif o['status']=='cancelled' %}lost
+                {% else %}pending{% endif %}"
+                style="font-size:0.65rem;">{{ o['status'] }}</span>
+            </td>
+            <td style="display:flex; gap:0.4rem;">
+              <a href="{{ url_for('inventory.purchase_order_detail', po_id=o['id']) }}"
+                 class="btn-ghost" style="padding:0.2rem 0.5rem; font-size:0.75rem;">
+                <i class="bi bi-box-arrow-up-right"></i> Open
+              </a>
+              <a href="{{ url_for('inventory.purchase_order_import', po_id=o['id']) }}"
+                 class="btn-ghost" style="padding:0.2rem 0.5rem; font-size:0.75rem;">
+                <i class="bi bi-upload"></i> Import
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color:var(--sd-muted); font-size:0.85rem;">No orders yet for this supplier.</p>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

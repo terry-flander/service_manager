@@ -68,12 +68,125 @@ def init_db():
             );
 
             CREATE TABLE IF NOT EXISTS parts (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                name              TEXT NOT NULL,
+                part_number       TEXT UNIQUE,
+                unit_cost         REAL NOT NULL DEFAULT 0.0,
+                unit              TEXT DEFAULT 'each',
+                active            INTEGER DEFAULT 1,
+                part_type         TEXT DEFAULT 'stock',
+                avg_cost_inc_gst  REAL DEFAULT 0,
+                reorder_point     REAL DEFAULT 0,
+                reorder_qty       REAL DEFAULT 0,
+                supplier_id       INTEGER
+            );
+
+            CREATE TABLE IF NOT EXISTS service_types (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                code        TEXT NOT NULL UNIQUE,
+                label       TEXT NOT NULL,
+                description TEXT,
+                keywords    TEXT,
+                part_id     INTEGER REFERENCES parts(id) ON DELETE SET NULL,
+                active      INTEGER DEFAULT 1,
+                sort_order  INTEGER DEFAULT 0,
+                job_group   TEXT DEFAULT 'booking'
+            );
+
+            CREATE TABLE IF NOT EXISTS locations (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                name        TEXT NOT NULL UNIQUE,
+                job_type    TEXT,
+                active      INTEGER DEFAULT 1
+            );
+
+            CREATE TABLE IF NOT EXISTS suppliers (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 name        TEXT NOT NULL,
-                part_number TEXT UNIQUE,
-                unit_cost   REAL NOT NULL DEFAULT 0.0,
-                unit        TEXT DEFAULT 'each',
-                active      INTEGER DEFAULT 1
+                email       TEXT,
+                phone       TEXT,
+                website     TEXT,
+                notes       TEXT,
+                active      INTEGER DEFAULT 1,
+                created_at  TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS supplier_parts (
+                id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                supplier_id          INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+                part_id              INTEGER NOT NULL REFERENCES parts(id) ON DELETE CASCADE,
+                supplier_sku         TEXT,
+                supplier_description TEXT,
+                last_price_inc_gst   REAL,
+                last_ordered_at      TEXT,
+                UNIQUE(supplier_id, supplier_sku)
+            );
+
+            CREATE TABLE IF NOT EXISTS purchase_orders (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                supplier_id     INTEGER NOT NULL REFERENCES suppliers(id),
+                order_date      TEXT NOT NULL,
+                reference       TEXT,
+                status          TEXT DEFAULT 'open',
+                freight_inc_gst REAL DEFAULT 0,
+                notes           TEXT,
+                created_by      INTEGER REFERENCES users(id),
+                created_at      TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS purchase_order_lines (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                order_id        INTEGER NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+                part_id         INTEGER REFERENCES parts(id),
+                supplier_sku    TEXT,
+                supplier_desc   TEXT NOT NULL,
+                qty_ordered     REAL NOT NULL,
+                qty_received    REAL DEFAULT 0,
+                price_inc_gst   REAL NOT NULL,
+                location_id     INTEGER REFERENCES locations(id)
+            );
+
+            CREATE TABLE IF NOT EXISTS part_location_stock (
+                part_id     INTEGER NOT NULL REFERENCES parts(id) ON DELETE CASCADE,
+                location_id INTEGER NOT NULL REFERENCES locations(id),
+                qty_on_hand REAL NOT NULL DEFAULT 0,
+                PRIMARY KEY (part_id, location_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS inventory_counts (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                count_date  TEXT NOT NULL,
+                location_id INTEGER REFERENCES locations(id),
+                status      TEXT DEFAULT 'open',
+                notes       TEXT,
+                created_by  INTEGER REFERENCES users(id),
+                created_at  TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS inventory_count_lines (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                count_id    INTEGER NOT NULL REFERENCES inventory_counts(id) ON DELETE CASCADE,
+                part_id     INTEGER NOT NULL REFERENCES parts(id),
+                location_id INTEGER REFERENCES locations(id),
+                qty_system  REAL NOT NULL,
+                qty_counted REAL,
+                adjustment  REAL,
+                notes       TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS inventory_transactions (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                part_id             INTEGER NOT NULL REFERENCES parts(id),
+                transaction_date    TEXT NOT NULL,
+                type                TEXT NOT NULL,
+                quantity            REAL NOT NULL,
+                unit_price_inc_gst  REAL,
+                location_id         INTEGER REFERENCES locations(id),
+                source_type         TEXT,
+                source_id           INTEGER,
+                notes               TEXT,
+                created_by          INTEGER REFERENCES users(id),
+                created_at          TEXT DEFAULT (datetime('now'))
             );
 
             CREATE TABLE IF NOT EXISTS customers (

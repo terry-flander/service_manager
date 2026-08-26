@@ -33,7 +33,15 @@
                 {% endfor %}
               </select>
             </div>
-            <div class="col-12">
+            <div class="col-md-4">
+              <label class="sd-label">Part Type</label>
+              <select name="part_type" class="sd-input">
+                {% for pt in ['stock', 'service', 'ad_hoc'] %}
+                <option value="{{ pt }}" {% if (part.part_type or 'stock') == pt %}selected{% endif %}>{{ pt|title }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-8" style="display:flex; align-items:flex-end; padding-bottom:0.4rem;">
               <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
                 <input type="checkbox" name="active" {% if part.active %}checked{% endif %} style="width:16px; height:16px; accent-color:var(--sd-accent);">
                 <span class="sd-label" style="margin:0;">Active</span>

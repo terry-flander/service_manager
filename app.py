@@ -37,6 +37,7 @@ def create_app():
     from routes.job_queries import job_queries_bp
     from routes.column_visibility import column_visibility_bp
     from routes.portal import portal_bp
+    from routes.inventory import inventory_bp
     from routes.api import api_bp
     from routes.mechanic import mechanic_bp
 
@@ -54,6 +55,7 @@ def create_app():
     app.register_blueprint(job_queries_bp)
     app.register_blueprint(column_visibility_bp)
     app.register_blueprint(portal_bp)
+    app.register_blueprint(inventory_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(mechanic_bp)
 
@@ -159,6 +161,7 @@ def create_app():
             'theme': session.get('theme', 'dark'),
             'status_colors': status_colors,
             'unread_email_count': unread_email_count,
+            'app_version': __import__('version').VERSION,
         }
 
     # ── DB init + seed ────────────────────────────────────────────────────────

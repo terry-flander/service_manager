@@ -16,6 +16,7 @@
       </div>
       <div style="padding:1.5rem;">
         <form method="post">
+          <input type="hidden" name="next" value="{{ next_url }}">
           <div class="row g-3">
             <div class="col-12">
               <label class="sd-label">Suburb Name *</label>
@@ -62,7 +63,7 @@
             <div></div>
             {% endif %}
             <div style="display:flex; gap:0.75rem;">
-              <a href="{{ url_for('regions.suburbs_index') }}" class="btn-ghost">Cancel</a>
+              <a href="{{ next_url or url_for('regions.suburbs_index') }}" class="btn-ghost">Cancel</a>
               <button type="submit" class="btn-accent">
                 <i class="bi bi-check-lg"></i>
                 {{ 'Create Suburb' if not suburb else 'Save Changes' }}

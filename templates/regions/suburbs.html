@@ -22,6 +22,10 @@
       <option value="{{ r['name']|lower }}">{{ r['name'] }}</option>
       {% endfor %}
     </select>
+    <a href="{{ url_for('regions.new_region') }}" class="btn-ghost"
+       style="white-space:nowrap;">
+      <i class="bi bi-plus-lg"></i> Add Region
+    </a>
     <span id="suburb-count" style="margin-left:auto; font-size:0.8rem; color:var(--sd-muted);">
       {{ suburbs|length }} suburb{{ 's' if suburbs|length != 1 }}
     </span>

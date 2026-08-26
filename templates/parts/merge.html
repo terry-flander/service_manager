@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Merge Part — {{ source['name'] }}{% endblock %}
+{% block topbar_title %}Merge Part{% endblock %}
+
+{% block content %}
+<div style="max-width:760px; margin:0 auto; padding:1rem;">
+
+  <!-- Source card -->
+  <div class="sd-card mb-3">
+    <div class="sd-card-header">Source Part — will be deactivated after merge</div>
+    <div style="padding:1rem 1.25rem; display:grid; grid-template-columns:1fr 1fr 1fr; gap:0.5rem;">
+      <div><div class="sd-label">Name</div><strong>{{ source['name'] }}</strong></div>
+      <div><div class="sd-label">Part Number</div>{{ source['part_number'] or '—' }}</div>
+      <div><div class="sd-label">Unit Cost</div>${{ '%.2f'|format(source['unit_cost']) }}</div>
+      <div><div class="sd-label">Type</div>{{ source['part_type'] or 'stock' }}</div>
+      <div><div class="sd-label">Avg Cost</div>${{ '%.2f'|format(source['avg_cost_inc_gst'] or 0) }}</div>
+    </div>
+  </div>
+
+  <form method="post">
+    <!-- Target search -->
+    <div class="sd-card mb-3">
+      <div class="sd-card-header">Target Part — source will be merged into this</div>
+      <div style="padding:1rem 1.25rem;">
+        <div style="margin-bottom:0.75rem;">
+          <label class="sd-label">Search for target part</label>
+          <input type="text" id="target-search" class="sd-input"
+                 placeholder="Type to search…" autocomplete="off">
+        </div>
+        <div id="target-results" style="max-height:260px; overflow-y:auto; border:1px solid var(--sd-border); border-radius:6px; display:none;"></div>
+        <div id="target-selected" style="display:none; margin-top:0.75rem; padding:0.75rem; background:var(--sd-surface2); border-radius:6px; border:1px solid var(--sd-border);">
+          <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--sd-muted); margin-bottom:0.3rem;">Selected target</div>
+          <strong id="target-name"></strong>
+          <span id="target-num" style="font-size:0.8rem; color:var(--sd-muted); margin-left:0.5rem;"></span>
+          <div id="target-meta" style="font-size:0.78rem; color:var(--sd-muted); margin-top:0.2rem;"></div>
+          <button type="button" onclick="clearTarget()" class="btn-ghost"
+                  style="margin-top:0.5rem; padding:0.2rem 0.6rem; font-size:0.75rem;">
+            <i class="bi bi-x"></i> Change
+          </button>
+        </div>
+        <input type="hidden" name="target_id" id="target-id" required>
+      </div>
+    </div>
+
+    <!-- Field choices -->
+    <div class="sd-card mb-3" id="field-choices" style="display:none;">
+      <div class="sd-card-header">Choose which values to keep</div>
+      <div style="padding:1rem 1.25rem;">
+        <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+          <thead>
+            <tr>
+              <th style="text-align:left; padding:0.4rem 0; width:30%; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--sd-muted);">Field</th>
+              <th style="text-align:left; padding:0.4rem 0.75rem; width:30%;">
+                <label style="cursor:pointer; display:flex; align-items:center; gap:0.4rem;">
+                  <input type="radio" name="_hdr_name" onclick="setAllSource()" style="accent-color:var(--sd-accent);">
+                  Source (this part)
+                </label>
+              </th>
+              <th style="text-align:left; padding:0.4rem 0.75rem; width:30%;">
+                <label style="cursor:pointer; display:flex; align-items:center; gap:0.4rem;">
+                  <input type="radio" name="_hdr_name" onclick="setAllTarget()" style="accent-color:var(--sd-accent);" checked>
+                  Target
+                </label>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row_field, row_label, src_val in [
+              ('keep_name',   'Name',       source['name']),
+              ('keep_number', 'Part Number', source['part_number'] or '—'),
+              ('keep_cost',   'Unit Cost',   '$' ~ '%.2f'|format(source['unit_cost'])),
+            ] %}
+            <tr style="border-top:1px solid var(--sd-border);">
+              <td style="padding:0.5rem 0; color:var(--sd-muted);">{{ row_label }}</td>
+              <td style="padding:0.5rem 0.75rem;">
+                <label style="cursor:pointer; display:flex; align-items:center; gap:0.4rem;">
+                  <input type="radio" name="{{ row_field }}" value="source" class="src-radio" style="accent-color:var(--sd-accent);">
+                  <span style="font-size:0.82rem;">{{ src_val }}</span>
+                </label>
+              </td>
+              <td style="padding:0.5rem 0.75rem;" id="tgt-{{ row_field }}">
+                <label style="cursor:pointer; display:flex; align-items:center; gap:0.4rem;">
+                  <input type="radio" name="{{ row_field }}" value="target" class="tgt-radio" style="accent-color:var(--sd-accent);" checked>
+                  <span class="tgt-val" style="font-size:0.82rem; color:var(--sd-muted);">—</span>
+                </label>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Confirm -->
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <a href="{{ url_for('parts.index') }}" class="btn-ghost">
+        <i class="bi bi-arrow-left"></i> Cancel
+      </a>
+      <button type="submit" class="btn-accent" id="merge-btn" disabled>
+        <i class="bi bi-arrow-left-right"></i> Merge Parts
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var CANDIDATES = {{ candidates|tojson }};
+var selected   = null;
+
+var searchInput   = document.getElementById('target-search');
+var resultsDiv    = document.getElementById('target-results');
+var selectedDiv   = document.getElementById('target-selected');
+var targetIdInput = document.getElementById('target-id');
+var fieldChoices  = document.getElementById('field-choices');
+var mergeBtn      = document.getElementById('merge-btn');
+
+searchInput.addEventListener('input', function() {
+  var q = this.value.toLowerCase().trim();
+  if (!q) { resultsDiv.style.display = 'none'; return; }
+  var matches = CANDIDATES.filter(function(c) {
+    return c.name.toLowerCase().includes(q) ||
+           (c.part_number || '').toLowerCase().includes(q);
+  }).slice(0, 15);
+  resultsDiv.innerHTML = '';
+  if (!matches.length) {
+    resultsDiv.innerHTML = '<div style="padding:0.75rem 1rem; color:var(--sd-muted); font-size:0.85rem;">No matches</div>';
+  } else {
+    matches.forEach(function(c) {
+      var div = document.createElement('div');
+      div.style.cssText = 'padding:0.6rem 1rem; cursor:pointer; border-bottom:1px solid var(--sd-border);';
+      div.innerHTML = '<strong>' + esc(c.name) + '</strong>' +
+        (c.part_number ? ' <span style="font-size:0.78rem; color:var(--sd-muted); font-family:monospace;">' + esc(c.part_number) + '</span>' : '') +
+        '<span style="font-size:0.75rem; color:var(--sd-muted); margin-left:0.5rem;">$' + parseFloat(c.unit_cost).toFixed(2) + '</span>';
+      div.addEventListener('mouseover', function() { this.style.background = 'var(--sd-surface2)'; });
+      div.addEventListener('mouseout',  function() { this.style.background = ''; });
+      div.addEventListener('click', function() { selectTarget(c); });
+      resultsDiv.appendChild(div);
+    });
+  }
+  resultsDiv.style.display = '';
+});
+
+function selectTarget(c) {
+  selected = c;
+  targetIdInput.value = c.id;
+  document.getElementById('target-name').textContent = c.name;
+  document.getElementById('target-num').textContent  = c.part_number || '';
+  document.getElementById('target-meta').textContent =
+    '$' + parseFloat(c.unit_cost).toFixed(2) + ' · ' + (c.part_type || 'stock');
+  // Update target column values
+  var vals = [c.name, c.part_number || '—', '$' + parseFloat(c.unit_cost).toFixed(2)];
+  document.querySelectorAll('.tgt-val').forEach(function(el, i) {
+    el.textContent = vals[i] || '—';
+    el.style.color = '';
+  });
+  resultsDiv.style.display  = 'none';
+  searchInput.style.display = 'none';
+  selectedDiv.style.display = '';
+  fieldChoices.style.display = '';
+  mergeBtn.disabled = false;
+}
+
+function clearTarget() {
+  selected = null;
+  targetIdInput.value = '';
+  searchInput.value = '';
+  searchInput.style.display = '';
+  selectedDiv.style.display = 'none';
+  fieldChoices.style.display = 'none';
+  mergeBtn.disabled = true;
+}
+
+function setAllSource() {
+  document.querySelectorAll('.src-radio').forEach(function(r) { r.checked = true; });
+}
+function setAllTarget() {
+  document.querySelectorAll('.tgt-radio').forEach(function(r) { r.checked = true; });
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+{% endblock %}

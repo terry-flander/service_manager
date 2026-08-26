@@ -403,19 +403,22 @@ def get_report_sort_by(query):
 # Single canonical catalog of every column Jobs List can show. Each
 # entry: label (header text), align ('left'/'right').
 COLUMN_CATALOG = {
-    'scheduled':  {'label': 'Scheduled',     'align': 'left'},
-    'paid':       {'label': 'Date Paid',     'align': 'left'},
-    'ref':        {'label': 'Reference',     'align': 'left'},
-    'invoice':    {'label': 'Invoice #',     'align': 'left'},
-    'type':       {'label': 'Type',          'align': 'left'},
-    'customer':   {'label': 'Customer',      'align': 'left'},
-    'phone':      {'label': 'Phone',         'align': 'left'},
+    'scheduled':  {'label': 'Scheduled',        'align': 'left'},
+    'paid':       {'label': 'Date Paid',        'align': 'left'},
+    'ref':        {'label': 'Reference',        'align': 'left'},
+    'invoice':    {'label': 'Invoice #',        'align': 'left'},
+    'type':       {'label': 'Type',             'align': 'left'},
+    'customer':   {'label': 'Customer',         'align': 'left'},
+    'phone':      {'label': 'Phone',            'align': 'left'},
+    'address':    {'label': 'Address',          'align': 'left'},
+    'suburb':     {'label': 'Suburb',           'align': 'left'},
+    'region':     {'label': 'Region',           'align': 'left'},
     'bike_desc':  {'label': 'Bike Description', 'align': 'left'},
-    'gross':      {'label': 'Gross',         'align': 'right'},
-    'payment':    {'label': 'Payment',       'align': 'left'},
-    'amount':     {'label': 'Amount Paid',   'align': 'right'},
-    'reconciled': {'label': 'Reconciled',    'align': 'center'},
-    'status':     {'label': 'Status',        'align': 'left'},
+    'gross':      {'label': 'Gross',            'align': 'right'},
+    'payment':    {'label': 'Payment',          'align': 'left'},
+    'amount':     {'label': 'Amount Paid',      'align': 'right'},
+    'reconciled': {'label': 'Reconciled',       'align': 'center'},
+    'status':     {'label': 'Status',           'align': 'left'},
 }
 
 # Defaults — exactly match what's hardcoded in the template, so a query

@@ -143,9 +143,136 @@
     #main {
       margin-left: 260px;
       min-height: 100vh;
-      transition: margin-left 0.25s;
+      transition: margin-left 0.25s cubic-bezier(0.4,0,0.2,1);
     }
     body.is-mobile #main { margin-left: 0; }
+
+    /* Desktop collapsed sidebar */
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) #sidebar {
+      width: 52px; overflow: visible;  /* visible so flyouts can extend beyond */
+    }
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) #main {
+      margin-left: 52px;
+    }
+    /* Clip the scrollable nav area itself, not the sidebar */
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) .sidebar-nav {
+      overflow: hidden;
+    }
+    /* Hide text content when collapsed */
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) #sidebar .nav-section-label,
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) #sidebar .brand-name,
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) #sidebar .brand-sub,
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) #sidebar #admin-submenu,
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) #sidebar #inv-submenu { display: none !important; }
+    /* Icon-only links: font-size:0 hides text nodes, icon restores its size */
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) #sidebar .sidebar-link {
+      justify-content: center !important;
+      padding-left: 0 !important; padding-right: 0 !important;
+      font-size: 0 !important; gap: 0; width: 52px;
+    }
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) #sidebar .sidebar-link i {
+      font-size: 1.15rem !important; width: auto !important; flex-shrink: 0;
+    }
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) #sidebar .sidebar-link[data-label]:hover::after {
+      content: attr(data-label); position: fixed; left: 56px;
+      background: var(--sd-surface); border: 1px solid var(--sd-border);
+      border-radius: 6px; padding: 0.3rem 0.75rem; font-size: 0.82rem;
+      color: var(--sd-text); white-space: nowrap; z-index: 9999;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3); pointer-events: none;
+    }
+
+
+    /* Collapse button */
+    #sidebar-collapse-btn {
+      position: sticky; bottom: 0; width: 100%;
+      background: var(--sd-slate); border: none; border-top: 1px solid var(--sd-border);
+      cursor: pointer; color: var(--sd-muted); padding: 0.5rem;
+      font-size: 0.9rem; transition: color 0.15s; z-index: 10;
+      display: flex; align-items: center; justify-content: flex-end; gap: 0.4rem;
+    }
+    #sidebar-collapse-btn:hover { color: var(--sd-text); background: rgba(255,255,255,0.04); }
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) #sidebar-collapse-btn { justify-content: center; }
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) #sidebar-collapse-btn .collapse-label { display: none; }
+    body.is-mobile #sidebar-collapse-btn,
+    body.is-mobile-landscape #sidebar-collapse-btn { display: none !important; }
+
+    /* ── Flyout panels ──────────────────────────────────────────────────── */
+    .sb-flyout {
+      display: none; position: fixed;
+      left: 52px;          /* always right of the 52px collapsed rail */
+      z-index: 9999;
+      background: var(--sd-surface);
+      border: 1px solid var(--sd-border);
+      border-radius: 0 8px 8px 0;
+      box-shadow: 6px 0 20px rgba(0,0,0,0.4);
+      min-width: 190px;
+      padding: 0.4rem 0;
+    }
+    .sb-flyout.open { display: block; }
+    .sb-flyout-title {
+      font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.08em; color: var(--sd-muted);
+      padding: 0.3rem 0.85rem 0.4rem;
+      border-bottom: 1px solid var(--sd-border); margin-bottom: 0.2rem;
+    }
+    /* Links inside flyout */
+    .sb-flyout a.sidebar-link, .sb-flyout a.flyout-link {
+      display: flex !important; align-items: center !important;
+      gap: 0.55rem !important;
+      padding: 0.45rem 0.85rem !important;
+      font-size: 0.84rem !important;
+      color: var(--sd-text) !important;
+      text-decoration: none;
+      white-space: nowrap;
+      width: 100%; box-sizing: border-box;
+      justify-content: flex-start !important;
+    }
+    .sb-flyout .flyout-label { display: inline !important; font-size: 0.84rem !important; color: var(--sd-text) !important; }
+    .sb-flyout a.sidebar-link:hover, .sb-flyout a.flyout-link:hover {
+      background: var(--sd-surface2) !important; color: var(--sd-accent) !important;
+    }
+    .sb-flyout a.sidebar-link i, .sb-flyout a.flyout-link i {
+      font-size: 0.9rem !important; flex-shrink: 0; width: 16px; text-align: center;
+    }
+    .sb-flyout a.flyout-link.danger { color: #f87171 !important; }
+    .sb-flyout a.flyout-link.danger:hover { color: #f87171 !important; background: rgba(248,113,113,0.08) !important; }
+    .sb-flyout .flyout-user-name {
+      padding: 0.5rem 0.85rem 0.3rem; font-size: 0.85rem;
+      font-weight: 600; color: var(--sd-text);
+    }
+    .sb-flyout-sep { border: none; border-top: 1px solid var(--sd-border); margin: 0.25rem 0; }
+
+    /* Toggle buttons collapsed: hide text/chevron, show icon centred */
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) .inv-toggle-btn,
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) .admin-toggle-btn {
+      padding-left: 0 !important; padding-right: 0 !important;
+      justify-content: center !important; gap: 0 !important;
+    }
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) .inv-toggle-btn .toggle-label,
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) .admin-toggle-btn .toggle-label,
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) .inv-toggle-btn .toggle-chevron,
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) .admin-toggle-btn .toggle-chevron,
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) .inv-toggle-btn span[style*='flex:1'],
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) .admin-toggle-btn span[style*='flex:1'] {
+      display: none !important;
+    }
+    /* Tooltip */
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) .inv-toggle-btn:hover::after,
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) .admin-toggle-btn:hover::after {
+      content: attr(data-label); position: fixed; left: 56px;
+      background: var(--sd-surface); border: 1px solid var(--sd-border);
+      border-radius: 6px; padding: 0.3rem 0.75rem; font-size: 0.82rem;
+      color: var(--sd-text); white-space: nowrap; z-index: 9999;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3); pointer-events: none;
+    }
+
+    /* User strip — collapsed shows just person icon */
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) #sidebar-user-strip {
+      display: flex !important; align-items: center; justify-content: center;
+      padding: 0.65rem 0; position: relative;
+    }
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) .user-strip-content { display: none !important; }
+    body.sidebar-collapsed:not(.is-mobile):not(.is-mobile-landscape) #sidebar-user-icon { display: flex !important; }
 
     /* ── Topbar ── */
     .topbar {
@@ -510,19 +637,19 @@
   </div>
   <div class="sidebar-nav">
     <div class="nav-section-label">Jobs</div>
-    <a href="{{ url_for('jobs.index') }}" class="sidebar-link {% if request.endpoint in ['jobs.index','jobs.job_detail','jobs.new_job','jobs.edit_job'] %}active{% endif %}" onclick="closeSidebar()">
+    <a href="{{ url_for('jobs.index') }}" data-label="All Jobs" class="sidebar-link {% if request.endpoint in ['jobs.index','jobs.job_detail','jobs.new_job','jobs.edit_job'] %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-briefcase"></i> All Jobs
     </a>
-    <a href="{{ url_for('jobs.new_job') }}" class="sidebar-link {% if request.endpoint == 'jobs.new_job' %}active{% endif %}" onclick="closeSidebar()">
+    <a href="{{ url_for('jobs.new_job') }}" data-label="New Job" class="sidebar-link {% if request.endpoint == 'jobs.new_job' %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-plus-circle"></i> New Job
     </a>
-    <a href="{{ url_for('jobs.new_sale') }}" class="sidebar-link {% if request.endpoint == 'jobs.new_sale' %}active{% endif %}" onclick="closeSidebar()">
+    <a href="{{ url_for('jobs.new_sale') }}" data-label="Counter Sale" class="sidebar-link {% if request.endpoint == 'jobs.new_sale' %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-cash-coin"></i> Counter Sale
     </a>
-    <a href="{{ url_for('calendar.index') }}" class="sidebar-link {% if request.endpoint == 'calendar.index' %}active{% endif %}" onclick="closeSidebar()">
+    <a href="{{ url_for('calendar.index') }}" data-label="Calendar" class="sidebar-link {% if request.endpoint == 'calendar.index' %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-calendar3"></i> Calendar
     </a>
-    <a href="{{ url_for('jobs.email_imports') }}" class="sidebar-link {% if request.endpoint == 'jobs.email_imports' %}active{% endif %}" onclick="closeSidebar()">
+    <a href="{{ url_for('jobs.email_imports') }}" data-label="Email" class="sidebar-link {% if request.endpoint == 'jobs.email_imports' %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-envelope-arrow-down"></i> Email
       {% if unread_email_count %}
       <span id="nav-unread-badge" style="margin-left:auto; background:var(--sd-accent); color:#fff;
@@ -534,121 +661,182 @@
                    padding:0.1rem 0.4rem; line-height:1.4;"></span>
       {% endif %}
     </a>
-    <div class="nav-section-label" style="margin-top:0.5rem;">Customers</div>
-    <a href="{{ url_for('customers.index') }}" class="sidebar-link {% if request.endpoint in ['customers.index','customers.edit_customer'] %}active{% endif %}" onclick="closeSidebar()">
+    <a href="{{ url_for('customers.index') }}" data-label="Customers" class="sidebar-link {% if request.endpoint in ['customers.index','customers.edit_customer','customers.new_customer'] %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-people"></i> Customers
     </a>
-    <a href="{{ url_for('customers.new_customer') }}" class="sidebar-link {% if request.endpoint == 'customers.new_customer' %}active{% endif %}" onclick="closeSidebar()">
-      <i class="bi bi-person-plus"></i> New Customer
-    </a>
-    <div class="nav-section-label" style="margin-top:0.5rem;">Regions</div>
-    <a href="{{ url_for('regions.index') }}" class="sidebar-link {% if request.endpoint in ['regions.index','regions.detail','regions.edit_region'] %}active{% endif %}" onclick="closeSidebar()">
-      <i class="bi bi-geo-alt"></i> Regions
-    </a>
-    <a href="{{ url_for('regions.suburbs_index') }}" class="sidebar-link {% if request.endpoint and 'suburb' in request.endpoint %}active{% endif %}" onclick="closeSidebar()">
+    <a href="{{ url_for('regions.suburbs_index') }}" data-label="Suburbs" class="sidebar-link {% if request.endpoint and 'suburb' in request.endpoint and request.endpoint != 'regions.suburb_map' %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-pin-map"></i> Suburbs
     </a>
+    <a href="{{ url_for('regions.suburb_map') }}" data-label="Suburb Map" class="sidebar-link {% if request.endpoint == 'regions.suburb_map' %}active{% endif %}" onclick="closeSidebar()">
+      <i class="bi bi-map"></i> Suburb Map
+    </a>
     <div class="nav-section-label" style="margin-top:0.5rem;">Reports</div>
-    <a href="{{ url_for('reports.sales') }}" class="sidebar-link {% if request.endpoint == 'reports.sales' %}active{% endif %}" onclick="closeSidebar()">
+    <a href="{{ url_for('reports.sales') }}" data-label="Sales Report" class="sidebar-link {% if request.endpoint == 'reports.sales' %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-bar-chart-line"></i> Sales Report
     </a>
-    <a href="{{ url_for('reports.parts_usage') }}" class="sidebar-link {% if request.endpoint == 'reports.parts_usage' %}active{% endif %}" onclick="closeSidebar()">
-      <i class="bi bi-tools"></i> Parts Usage
-    </a>
-    <a href="{{ url_for('eftpos.reconcile') }}" class="sidebar-link {% if request.endpoint and request.endpoint.startswith('eftpos.') %}active{% endif %}" onclick="closeSidebar()">
+    <a href="{{ url_for('eftpos.reconcile') }}" data-label="EFTPOS Reconcile" class="sidebar-link {% if request.endpoint and request.endpoint.startswith('eftpos.') %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-credit-card-2-front"></i> EFTPOS Reconcile
     </a>
-    <a href="{{ url_for('reports.unreconciled_eftpos') }}" class="sidebar-link {% if request.endpoint == 'reports.unreconciled_eftpos' %}active{% endif %}" onclick="closeSidebar()">
+    <a href="{{ url_for('reports.unreconciled_eftpos') }}" data-label="Unreconciled Jobs" class="sidebar-link {% if request.endpoint == 'reports.unreconciled_eftpos' %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-exclamation-circle"></i> Unreconciled Jobs
     </a>
-    <div class="nav-section-label" style="margin-top:0.5rem;">Inventory</div>
-    <a href="{{ url_for('parts.index') }}" class="sidebar-link {% if request.endpoint in ['parts.index','parts.new_part','parts.edit_part'] %}active{% endif %}" onclick="closeSidebar()">
+    <a href="{{ url_for('parts.index') }}" data-label="Parts List" class="sidebar-link {% if request.endpoint in ['parts.index','parts.new_part','parts.edit_part'] %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-box-seam"></i> Parts List
     </a>
+    <a href="{{ url_for('reports.parts_usage') }}" data-label="Parts Usage" class="sidebar-link {% if request.endpoint == 'reports.parts_usage' %}active{% endif %}" onclick="closeSidebar()">
+      <i class="bi bi-tools"></i> Parts Usage
+    </a>
+    <a href="{{ url_for('reports.parts_by_supplier') }}" data-label="Parts by Supplier" class="sidebar-link {% if request.endpoint == 'reports.parts_by_supplier' %}active{% endif %}" onclick="closeSidebar()">
+      <i class="bi bi-truck"></i> Parts by Supplier
+    </a>
+
+    <!-- Inventory collapsing submenu -->
+    {% set inv_active = request.endpoint and (
+        request.endpoint.startswith('inventory.')
+    ) %}
+    <div style="margin-top:0.5rem;">
+      <button onclick="toggleInventory()" id="inv-toggle"
+              class="inv-toggle-btn"
+              data-label="Inventory"
+              style="width:100%; display:flex; align-items:center; justify-content:flex-start;
+                     gap:0.5rem;
+                     background:none; border:none; cursor:pointer; padding:0.35rem 1.25rem;
+                     color:{% if inv_active %}var(--sd-text){% else %}var(--sd-muted){% endif %};
+                     font-size:0.72rem; font-weight:600; text-transform:uppercase;
+                     letter-spacing:0.08em;">
+        <i class="bi bi-box-seam toggle-icon" style="font-size:1.1rem; flex-shrink:0;"></i>
+        <span class="toggle-label">Inventory</span>
+        <span style="flex:1;"></span>
+        <i class="bi bi-chevron-right toggle-chevron" id="inv-chevron"
+           style="font-size:0.7rem; transition:transform 0.2s;
+                  {% if inv_active %}transform:rotate(90deg);{% endif %}"></i>
+      </button>
+      <div id="inv-submenu" style="{% if not inv_active %}display:none;{% endif %}">
+        <a href="{{ url_for('inventory.service_types') }}" data-label="Service Types" class="sidebar-link {% if request.endpoint == 'inventory.service_types' %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
+          <i class="bi bi-gear"></i> Service Types
+        </a>
+        <a href="{{ url_for('inventory.locations') }}" data-label="Locations" class="sidebar-link {% if request.endpoint == 'inventory.locations' %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
+          <i class="bi bi-geo"></i> Locations
+        </a>
+        <a href="{{ url_for('inventory.suppliers') }}" data-label="Suppliers" class="sidebar-link {% if request.endpoint in ['inventory.suppliers','inventory.supplier_new','inventory.supplier_edit'] %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
+          <i class="bi bi-truck"></i> Suppliers
+        </a>
+        <a href="{{ url_for('inventory.purchase_orders') }}" data-label="Purchase Orders" class="sidebar-link {% if request.endpoint in ['inventory.purchase_orders','inventory.purchase_order_new','inventory.purchase_order_detail','inventory.purchase_order_receive'] %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
+          <i class="bi bi-receipt"></i> Purchase Orders
+        </a>
+        <a href="{{ url_for('inventory.stock_takes') }}" data-label="Stock Takes" class="sidebar-link {% if request.endpoint in ['inventory.stock_takes','inventory.stock_take_detail'] %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
+          <i class="bi bi-clipboard-check"></i> Stock Takes
+        </a>
+      </div>
+    </div>
     {% if current_user and current_user['role'] == 'admin' %}
     <div style="margin-top:0.5rem;">
       <button onclick="toggleAdmin()" id="admin-toggle"
-              style="width:100%; display:flex; align-items:center; justify-content:space-between;
+              class="admin-toggle-btn"
+              data-label="Admin"
+              style="width:100%; display:flex; align-items:center; justify-content:flex-start;
+                     gap:0.5rem;
                      background:none; border:none; cursor:pointer; padding:0.35rem 1.25rem;
                      color:var(--sd-muted);
                      font-size:0.72rem; font-weight:600; text-transform:uppercase;
                      letter-spacing:0.08em;">
-        <span><i class="bi bi-shield-lock" style="margin-right:0.4rem;"></i>Admin</span>
-        <i class="bi bi-chevron-right" id="admin-chevron"
+        <i class="bi bi-shield-lock toggle-icon" style="font-size:1.1rem; flex-shrink:0;"></i>
+        <span class="toggle-label">Admin</span>
+        <span style="flex:1;"></span>
+        <i class="bi bi-chevron-right toggle-chevron" id="admin-chevron"
            style="font-size:0.7rem; transition:transform 0.2s;"></i>
       </button>
       <div id="admin-submenu" style="display:none;">
-        <a href="{{ url_for('auth.users') }}" class="sidebar-link {% if request.endpoint and request.endpoint.startswith('auth.') and request.endpoint != 'auth.change_password' %}active{% endif %}" onclick="closeSidebar()" style="padding-left:2rem;">
+        <a href="{{ url_for('auth.users') }}" data-label="Users" class="sidebar-link {% if request.endpoint and request.endpoint.startswith('auth.') and request.endpoint != 'auth.change_password' %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
           <i class="bi bi-people"></i> Users
         </a>
-        <a href="{{ url_for('email_replies.templates_index') }}" class="sidebar-link {% if request.endpoint and request.endpoint.startswith('email_replies.') %}active{% endif %}" onclick="closeSidebar()" style="padding-left:2rem;">
+        <a href="{{ url_for('email_replies.templates_index') }}" data-label="Email Templates" class="sidebar-link {% if request.endpoint and request.endpoint.startswith('email_replies.') %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
           <i class="bi bi-envelope-paper"></i> Email Templates
         </a>
-        <a href="{{ url_for('jobs.status_colors') }}" class="sidebar-link {% if request.endpoint == 'jobs.status_colors' %}active{% endif %}" onclick="closeSidebar()" style="padding-left:2rem;">
+        <a href="{{ url_for('jobs.status_colors') }}" data-label="Status Colours" class="sidebar-link {% if request.endpoint == 'jobs.status_colors' %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
           <i class="bi bi-palette"></i> Status Colours
         </a>
-        <a href="{{ url_for('jobs.calendar_settings') }}" class="sidebar-link {% if request.endpoint == 'jobs.calendar_settings' %}active{% endif %}" onclick="closeSidebar()" style="padding-left:2rem;">
+        <a href="{{ url_for('jobs.calendar_settings') }}" data-label="Calendar Sync" class="sidebar-link {% if request.endpoint == 'jobs.calendar_settings' %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
           <i class="bi bi-calendar-check"></i> Calendar Sync
         </a>
-        <a href="{{ url_for('jobs.feedback_settings') }}" class="sidebar-link {% if request.endpoint == 'jobs.feedback_settings' %}active{% endif %}" onclick="closeSidebar()" style="padding-left:2rem;">
+        <a href="{{ url_for('jobs.feedback_settings') }}" data-label="Feedback Settings" class="sidebar-link {% if request.endpoint == 'jobs.feedback_settings' %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
           <i class="bi bi-star"></i> Feedback Settings
         </a>
-        <a href="{{ url_for('jobs.status_triggers') }}" class="sidebar-link {% if request.endpoint == 'jobs.status_triggers' %}active{% endif %}" onclick="closeSidebar()" style="padding-left:2rem;">
+        <a href="{{ url_for('jobs.status_triggers') }}" data-label="Status Triggers" class="sidebar-link {% if request.endpoint == 'jobs.status_triggers' %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
           <i class="bi bi-envelope-check"></i> Status Triggers
         </a>
-        <a href="{{ url_for('jobs.xero_settings') }}" class="sidebar-link {% if request.endpoint == 'jobs.xero_settings' %}active{% endif %}" onclick="closeSidebar()" style="padding-left:2rem;">
+        <a href="{{ url_for('jobs.xero_settings') }}" data-label="Xero Settings" class="sidebar-link {% if request.endpoint == 'jobs.xero_settings' %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
           <i class="bi bi-receipt"></i> Xero Settings
         </a>
-        <a href="{{ url_for('jobs.backup_db') }}" class="sidebar-link" onclick="closeSidebar()" style="padding-left:2rem;">
+        <a href="{{ url_for('jobs.backup_db') }}" data-label="Backup DB" class="sidebar-link" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
           <i class="bi bi-download"></i> Backup DB
         </a>
-        <a href="{{ url_for('import_customers.import_customers') }}" class="sidebar-link {% if request.endpoint == 'import_customers.import_customers' %}active{% endif %}" onclick="closeSidebar()" style="padding-left:2rem;">
+        <a href="{{ url_for('import_customers.import_customers') }}" data-label="Import Customers" class="sidebar-link {% if request.endpoint == 'import_customers.import_customers' %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
           <i class="bi bi-people"></i> Import Customers
         </a>
-        <a href="{{ url_for('import_jobs.import_jobs') }}" class="sidebar-link {% if request.endpoint == 'import_jobs.import_jobs' %}active{% endif %}" onclick="closeSidebar()" style="padding-left:2rem;">
+        <a href="{{ url_for('import_jobs.import_jobs') }}" data-label="Import Jobs" class="sidebar-link {% if request.endpoint == 'import_jobs.import_jobs' %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
           <i class="bi bi-upload"></i> Import Jobs
         </a>
-        <a href="{{ url_for('regions.import_csv') }}" class="sidebar-link {% if request.endpoint == 'regions.import_csv' %}active{% endif %}" onclick="closeSidebar()" style="padding-left:2rem;">
+        <a href="{{ url_for('regions.import_csv') }}" data-label="Import Regions" class="sidebar-link {% if request.endpoint == 'regions.import_csv' %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
           <i class="bi bi-upload"></i> Import Regions
         </a>
       </div>
     </div>
     {% endif %}
   </div>
-  <div style="padding:1rem 1.25rem; border-top:1px solid var(--sd-border); margin-top:auto; flex-shrink:0;">
+  <!-- User strip -->
+  <div id="sidebar-user-strip"
+       style="padding:0.75rem 1.25rem; border-top:1px solid var(--sd-border); flex-shrink:0; position:relative; cursor:default;">
     {% if current_user %}
-    <div style="font-size:0.78rem; color:var(--sd-text); margin-bottom:0.35rem;">
-      <i class="bi bi-person-circle"></i> {{ current_user['name'] }}
-      <span class="badge-status {{ 'status-scheduled' if current_user['role']=='admin' else 'status-invoiced' }}"
-            style="font-size:0.62rem; margin-left:0.35rem;">{{ current_user['role']|title }}</span>
+    <!-- Icon shown only when collapsed, clickable for flyout -->
+    <div id="sidebar-user-icon"
+         onclick="toggleUserFlyout(event)"
+         title="{{ current_user['name'] }}"
+         style="display:none; justify-content:center; align-items:center; cursor:pointer;">
+      <i class="bi bi-person-circle" style="font-size:1.3rem; color:var(--sd-muted);"></i>
     </div>
-    <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
-      <a href="{{ url_for('auth.change_password') }}" style="font-size:0.72rem; color:var(--sd-muted); text-decoration:none;" onclick="closeSidebar()">
-        <i class="bi bi-key"></i> Password
-      </a>
-      <span style="color:var(--sd-border);">|</span>
-      <a href="{{ url_for('auth.setup_2fa') }}" style="font-size:0.72rem; color:var(--sd-muted); text-decoration:none;" onclick="closeSidebar()">
-        <i class="bi bi-shield"></i> 2FA
-      </a>
-      <span style="color:var(--sd-border);">|</span>
-      <a href="{{ url_for('auth.logout') }}" style="font-size:0.72rem; color:#f87171; text-decoration:none;">
-        <i class="bi bi-box-arrow-right"></i> Logout
-      </a>
-    </div>
-    <div style="margin-top:0.5rem;">
-      {% if theme == 'dark' %}
-      <a href="{{ url_for('auth.set_theme', theme='light') }}" style="font-size:0.72rem; color:var(--sd-muted); text-decoration:none;">
-        <i class="bi bi-sun"></i> Light mode
-      </a>
-      {% else %}
-      <a href="{{ url_for('auth.set_theme', theme='dark') }}" style="font-size:0.72rem; color:var(--sd-muted); text-decoration:none;">
-        <i class="bi bi-moon-stars"></i> Dark mode
-      </a>
-      {% endif %}
+    <div class="user-strip-content">
+      <div style="font-size:0.78rem; color:var(--sd-text); margin-bottom:0.35rem;">
+        <i class="bi bi-person-circle"></i> {{ current_user['name'] }}
+        <span class="badge-status {{ 'status-scheduled' if current_user['role']=='admin' else 'status-invoiced' }}"
+              style="font-size:0.62rem; margin-left:0.35rem;">{{ current_user['role']|title }}</span>
+      </div>
+      <div style="display:flex; gap:0.5rem; flex-wrap:wrap; align-items:center;">
+        <a href="{{ url_for('auth.change_password') }}" onclick="closeSidebar();"
+           style="font-size:0.72rem; color:var(--sd-muted); text-decoration:none; display:flex; align-items:center; gap:0.25rem;">
+          <i class="bi bi-key"></i> Password
+        </a>
+        <a href="{{ url_for('auth.setup_2fa') }}" onclick="closeSidebar();"
+           style="font-size:0.72rem; color:var(--sd-muted); text-decoration:none; display:flex; align-items:center; gap:0.25rem;">
+          <i class="bi bi-shield"></i> 2FA
+        </a>
+        {% if theme == 'dark' %}
+        <a href="{{ url_for('auth.set_theme', theme='light') }}"
+           style="font-size:0.72rem; color:var(--sd-muted); text-decoration:none; display:flex; align-items:center; gap:0.25rem;">
+          <i class="bi bi-sun"></i> Light
+        </a>
+        {% else %}
+        <a href="{{ url_for('auth.set_theme', theme='dark') }}"
+           style="font-size:0.72rem; color:var(--sd-muted); text-decoration:none; display:flex; align-items:center; gap:0.25rem;">
+          <i class="bi bi-moon-stars"></i> Dark
+        </a>
+        {% endif %}
+        <a href="{{ url_for('auth.logout') }}"
+           style="font-size:0.72rem; color:#f87171; text-decoration:none; display:flex; align-items:center; gap:0.25rem;">
+          <i class="bi bi-box-arrow-right"></i> Logout
+        </a>
+      </div>
+      <div style="font-size:0.65rem; color:var(--sd-muted); margin-top:0.4rem;">
+        ServiceDesk v{{ app_version }}
+      </div>
     </div>
     {% endif %}
-    <div style="font-size:0.65rem; color:var(--sd-muted); margin-top:0.5rem;">ServiceDesk v1.0</div>
   </div>
+  <button id="sidebar-collapse-btn" onclick="toggleSidebarCollapse()"
+          title="Collapse sidebar">
+    <i class="bi bi-layout-sidebar-reverse" id="sidebar-collapse-icon"></i>
+    <span style="font-size:0.75rem;">Collapse</span>
+  </button>
 </nav>
 
 <!-- Main -->
@@ -694,25 +882,134 @@ function toggleSidebar() {
   }
 }
 
+function toggleSidebarCollapse() {
+  var collapsed = document.body.classList.toggle('sidebar-collapsed');
+  localStorage.setItem('sd_sidebar_collapsed', collapsed ? '1' : '0');
+  var icon = document.getElementById('sidebar-collapse-icon');
+  if (icon) {
+    icon.className = collapsed
+      ? 'bi bi-layout-sidebar'
+      : 'bi bi-layout-sidebar-reverse';
+  }
+  if (!collapsed) closeFlyouts();
+}
+
+// ── Flyout panels ─────────────────────────────────────────────────────────────
+function closeFlyouts() {
+  document.querySelectorAll('.sb-flyout').forEach(function(f) {
+    f.classList.remove('open');
+  });
+}
+
+function toggleFlyout(id, triggerEl, event) {
+  if (!document.body.classList.contains('sidebar-collapsed')) return;
+  event && event.stopPropagation();
+  var flyout = document.getElementById(id);
+  if (!flyout) return;
+  var wasOpen = flyout.classList.contains('open');
+  closeFlyouts();
+  if (!wasOpen) {
+    // Position flyout vertically aligned with trigger button
+    var rect = triggerEl.getBoundingClientRect();
+    flyout.style.top = rect.top + 'px';
+    flyout.style.bottom = 'auto';
+    // Make sure it doesn't go off the bottom of the screen
+    flyout.classList.add('open');
+    var fRect = flyout.getBoundingClientRect();
+    if (fRect.bottom > window.innerHeight - 8) {
+      flyout.style.top = 'auto';
+      flyout.style.bottom = (window.innerHeight - rect.bottom) + 'px';
+    }
+  }
+}
+
+function toggleUserFlyout(event) {
+  event && event.stopPropagation();
+  var flyout = document.getElementById('user-flyout');
+  if (!flyout) return;
+  var wasOpen = flyout.classList.contains('open');
+  closeFlyouts();
+  if (!wasOpen) flyout.classList.add('open');
+}
+
+// Close flyouts on outside click
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.sb-flyout') &&
+      !e.target.closest('.inv-toggle-btn') &&
+      !e.target.closest('.admin-toggle-btn') &&
+      !e.target.closest('#sidebar-user-strip')) {
+    closeFlyouts();
+  }
+});
+
+// Restore sidebar collapsed state on load
+(function() {
+  if (localStorage.getItem('sd_sidebar_collapsed') === '1') {
+    document.body.classList.add('sidebar-collapsed');
+    var icon = document.getElementById('sidebar-collapse-icon');
+    if (icon) icon.className = 'bi bi-layout-sidebar';
+  }
+})();
+
 function toggleAdmin() {
+  if (document.body.classList.contains('sidebar-collapsed')) {
+    toggleFlyout('admin-flyout', document.getElementById('admin-toggle'), null);
+    return;
+  }
   const menu    = document.getElementById('admin-submenu');
   const chevron = document.getElementById('admin-chevron');
   if (!menu) return;
   const isOpen = menu.style.display !== 'none';
   menu.style.display      = isOpen ? 'none' : 'block';
   chevron.style.transform = isOpen ? '' : 'rotate(90deg)';
+  localStorage.setItem('sd_admin_open', isOpen ? 'closed' : 'open');
 }
 
-// Auto-open admin submenu if current page is an admin page
-(function() {
-  const adminLinks = document.querySelectorAll('#admin-submenu .sidebar-link');
-  const isAdminPage = Array.from(adminLinks).some(el => el.classList.contains('active'));
-  if (isAdminPage) {
-    const menu    = document.getElementById('admin-submenu');
-    const chevron = document.getElementById('admin-chevron');
-    if (menu)    menu.style.display      = 'block';
-    if (chevron) chevron.style.transform = 'rotate(90deg)';
+function toggleInventory() {
+  if (document.body.classList.contains('sidebar-collapsed')) {
+    toggleFlyout('inv-flyout', document.getElementById('inv-toggle'), null);
+    return;
   }
+  const menu    = document.getElementById('inv-submenu');
+  const chevron = document.getElementById('inv-chevron');
+  if (!menu) return;
+  const isOpen = menu.style.display !== 'none';
+  menu.style.display      = isOpen ? 'none' : 'block';
+  chevron.style.transform = isOpen ? '' : 'rotate(90deg)';
+  localStorage.setItem('sd_inv_open', isOpen ? 'closed' : 'open');
+}
+
+// ── Submenu persistence via localStorage ─────────────────────────────────────
+(function() {
+  function initSubmenu(menuId, chevronId, storageKey, activeCheck) {
+    var menu    = document.getElementById(menuId);
+    var chevron = document.getElementById(chevronId);
+    if (!menu) return;
+
+    // Open if current page is in this submenu OR user had it open
+    var hasActive = activeCheck();
+    var wasOpen   = localStorage.getItem(storageKey) === 'open';
+    var shouldOpen = hasActive || wasOpen;
+
+    menu.style.display      = shouldOpen ? 'block' : 'none';
+    if (chevron) chevron.style.transform = shouldOpen ? 'rotate(90deg)' : '';
+
+    // Save state when toggled
+    menu._saveState = function() {
+      var open = menu.style.display !== 'none';
+      localStorage.setItem(storageKey, open ? 'open' : 'closed');
+    };
+  }
+
+  initSubmenu('admin-submenu', 'admin-chevron', 'sd_admin_open', function() {
+    return Array.from(document.querySelectorAll('#admin-submenu .sidebar-link'))
+                .some(function(el) { return el.classList.contains('active'); });
+  });
+
+  initSubmenu('inv-submenu', 'inv-chevron', 'sd_inv_open', function() {
+    return Array.from(document.querySelectorAll('#inv-submenu .sidebar-link'))
+                .some(function(el) { return el.classList.contains('active'); });
+  });
 })();
 
 
@@ -2208,5 +2505,55 @@ function saveColumnSet() {
   });
 })();
 </script>
+<!-- Sidebar flyouts — rendered at body level to avoid sidebar CSS cascade -->
+<!-- Sidebar flyouts — at body level, outside #sidebar, to avoid CSS cascade -->
+<div id="inv-flyout" class="sb-flyout">
+  <div class="sb-flyout-title">Inventory</div>
+  <a href="{{ url_for('inventory.service_types') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-gear"></i> Service Types</a>
+  <a href="{{ url_for('inventory.locations') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-geo"></i> Locations</a>
+  <a href="{{ url_for('inventory.suppliers') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-truck"></i> Suppliers</a>
+  <a href="{{ url_for('inventory.purchase_orders') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-receipt"></i> Purchase Orders</a>
+  <a href="{{ url_for('inventory.stock_takes') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-clipboard-check"></i> Stock Takes</a>
+</div>
+
+{% if current_user and current_user['role'] == 'admin' %}
+<div id="admin-flyout" class="sb-flyout">
+  <div class="sb-flyout-title">Admin</div>
+  <a href="{{ url_for('auth.users') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-people"></i> Users</a>
+  <a href="{{ url_for('email_replies.templates_index') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-envelope-paper"></i> Email Templates</a>
+  <a href="{{ url_for('jobs.status_colors') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-palette"></i> Status Colours</a>
+  <a href="{{ url_for('jobs.calendar_settings') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-calendar-check"></i> Calendar Sync</a>
+  <a href="{{ url_for('jobs.feedback_settings') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-star"></i> Feedback Settings</a>
+  <a href="{{ url_for('jobs.status_triggers') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-envelope-check"></i> Status Triggers</a>
+  <a href="{{ url_for('jobs.xero_settings') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-receipt"></i> Xero Settings</a>
+  <a href="{{ url_for('jobs.backup_db') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-download"></i> Backup DB</a>
+  <a href="{{ url_for('import_customers.import_customers') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-people"></i> Import Customers</a>
+  <a href="{{ url_for('import_jobs.import_jobs') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-upload"></i> Import Jobs</a>
+  <a href="{{ url_for('regions.import_csv') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-upload"></i> Import Regions</a>
+</div>
+{% endif %}
+
+{% if current_user %}
+<div id="user-flyout" class="sb-flyout">
+  <div class="flyout-user-name">
+    <i class="bi bi-person-circle"></i> {{ current_user['name'] }}
+    <span class="badge-status {{ 'status-scheduled' if current_user['role']=='admin' else 'status-invoiced' }}"
+          style="font-size:0.62rem; margin-left:0.3rem;">{{ current_user['role']|title }}</span>
+  </div>
+  <hr class="sb-flyout-sep">
+  <a href="{{ url_for('auth.change_password') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-key"></i> Password</a>
+  <a href="{{ url_for('auth.setup_2fa') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-shield"></i> 2FA</a>
+  {% if theme == 'dark' %}
+  <a href="{{ url_for('auth.set_theme', theme='light') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-sun"></i> Light mode</a>
+  {% else %}
+  <a href="{{ url_for('auth.set_theme', theme='dark') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-moon-stars"></i> Dark mode</a>
+  {% endif %}
+  <hr class="sb-flyout-sep">
+  <a href="{{ url_for('auth.logout') }}" class="flyout-link danger" onclick="closeFlyouts();"><i class="bi bi-box-arrow-right"></i> Logout</a>
+  <hr class="sb-flyout-sep">
+  <div style="font-size:0.68rem; color:var(--sd-muted); padding:0.3rem 0.85rem 0.5rem;">ServiceDesk v{{ app_version }}</div>
+</div>
+{% endif %}
+
 </body>
 </html>

@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Receive — PO #{{ order['id'] }}{% endblock %}
+{% block topbar_title %}Receive Stock — {{ order['supplier_name'] }}{% endblock %}
+
+{% block content %}
+<div style="padding:1rem;">
+
+  <div class="sd-card mb-3">
+    <div class="sd-card-header">
+      PO #{{ order['id'] }}
+      {% if order['reference'] %}— {{ order['reference'] }}{% endif %}
+      <span class="badge-status status-{% if order['status']=='open' %}scheduled{% elif order['status']=='received' %}paid{% elif order['status']=='partial' %}pending{% else %}invoiced{% endif %}"
+            style="font-size:0.7rem;">{{ order['status'] }}</span>
+    </div>
+
+    <div style="padding:1.25rem;">
+      <form method="post">
+
+        <div style="display:flex; gap:1rem; align-items:flex-end; margin-bottom:1rem; flex-wrap:wrap;">
+          <div>
+            <label class="sd-label">Receive Date</label>
+            <input type="date" name="receive_date" class="sd-input"
+                   value="{{ today }}" style="width:170px;">
+          </div>
+          <div style="flex:1; min-width:200px;">
+            <label class="sd-label">Notes (applied to all lines)</label>
+            <input type="text" name="notes" class="sd-input" placeholder="Optional">
+          </div>
+        </div>
+
+        <div style="overflow-x:auto;">
+        <table class="sd-table" style="font-size:0.85rem; width:100%;">
+          <thead><tr>
+            <th style="min-width:200px;">Description</th>
+            <th style="min-width:100px;">Part</th>
+            <th style="width:90px;">SKU</th>
+            <th style="width:65px; text-align:right;">Ordered</th>
+            <th style="width:65px; text-align:right;">Prev Rcvd</th>
+            <th style="width:65px; text-align:right;">Outstanding</th>
+            <th style="width:85px; text-align:right;">Unit Price</th>
+            <th style="width:90px; text-align:right;">Receive Qty</th>
+            <th style="width:120px;">Location</th>
+          </tr></thead>
+          <tbody>
+            {% for line in lines %}
+            {% set outstanding = (line['qty_ordered'] or 0) - (line['qty_received'] or 0) %}
+            <tr {% if outstanding <= 0 %}style="opacity:0.5;"{% endif %}>
+              <td>{{ line['supplier_desc'] }}</td>
+              <td style="font-size:0.8rem; color:var(--sd-muted);">{{ line['part_name'] or '—' }}</td>
+              <td style="font-size:0.75rem; font-family:monospace; color:var(--sd-muted);">{{ line['supplier_sku'] or '—' }}</td>
+              <td style="text-align:right;">{{ line['qty_ordered'] }}</td>
+              <td style="text-align:right;">{{ line['qty_received'] or 0 }}</td>
+              <td style="text-align:right; font-weight:600;
+                {% if outstanding > 0 %}color:var(--sd-accent);{% endif %}">
+                {{ '%.0f'|format(outstanding) if outstanding == outstanding|int else outstanding }}
+              </td>
+              <td style="text-align:right; font-family:monospace;">
+                ${{ '%.2f'|format(line['price_inc_gst']) }}
+              </td>
+              <td>
+                {% if outstanding > 0 %}
+                <input type="number" name="qty_{{ line['id'] }}"
+                       class="sd-input" style="text-align:right; font-size:0.85rem;"
+                       value="{{ outstanding|int if outstanding == outstanding|int else outstanding }}"
+                       min="0" max="{{ outstanding }}" step="any">
+                {% else %}
+                <span style="color:var(--sd-muted); font-size:0.8rem;">Complete</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if outstanding > 0 %}
+                <select name="loc_{{ line['id'] }}" class="sd-input"
+                        style="font-size:0.78rem; padding:0.2rem 0.3rem;">
+                  {% for loc in locations %}
+                  <option value="{{ loc['id'] }}"
+                    {% if loc['id'] == default_loc_id %}selected{% endif %}>
+                    {{ loc['name'] }}
+                  </option>
+                  {% endfor %}
+                </select>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="9" style="text-align:center; color:var(--sd-muted); padding:2rem;">
+              No lines on this order.
+            </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        </div>
+
+        {% if lines %}
+        <div style="display:flex; justify-content:space-between; margin-top:1rem;">
+          <a href="{{ url_for('inventory.purchase_order_detail', po_id=order['id']) }}"
+             class="btn-ghost">Cancel</a>
+          <button type="submit" class="btn-accent">
+            <i class="bi bi-box-arrow-in-down"></i> Receive Stock
+          </button>
+        </div>
+        {% else %}
+        <div style="margin-top:1rem;">
+          <a href="{{ url_for('inventory.purchase_order_detail', po_id=order['id']) }}"
+             class="btn-ghost">← Back</a>
+        </div>
+        {% endif %}
+
+      </form>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

@@ -68,12 +68,13 @@ function tfb_handle_booking() {
     }
 
     /* 3. Sanitise */
-    $name     = sanitize_text_field(     $data['name']     ?? '' );
-    $email    = sanitize_email(          $data['email']    ?? '' );
-    $phone    = sanitize_text_field(     $data['phone']    ?? '' );
-    $suburb   = sanitize_text_field(     $data['suburb']   ?? '' );
-    $services = sanitize_text_field(     $data['services'] ?? '' );
-    $message  = sanitize_textarea_field( $data['message']  ?? '' );
+    $name             = sanitize_text_field(     $data['name']             ?? '' );
+    $email            = sanitize_email(          $data['email']            ?? '' );
+    $phone            = sanitize_text_field(     $data['phone']            ?? '' );
+    $suburb           = sanitize_text_field(     $data['suburb']           ?? '' );
+    $services         = sanitize_text_field(     $data['services']         ?? '' );
+    $bike_description = sanitize_textarea_field( $data['bike_description'] ?? '' );
+    $message          = sanitize_textarea_field( $data['message']          ?? '' );
 
     /* 4. Validate */
     if ( empty( $name ) || empty( $email ) || empty( $suburb ) ) {
@@ -87,7 +88,7 @@ function tfb_handle_booking() {
     $sent = wp_mail(
         'info@theflyingbike.com.au',
         "{$name} - {$suburb}",
-        tfb_booking_notification_text( $name, $email, $phone, $suburb, $services, $message ),
+        tfb_booking_notification_text( $name, $email, $phone, $suburb, $services, $bike_description, $message ),
         [ 'Content-Type: text/plain; charset=UTF-8', "Reply-To: {$name} <{$email}>" ]
     );
 
@@ -126,10 +127,11 @@ function tfb_log( $msg ) {
  * EMAIL TEMPLATES
  * ══════════════════════════════════════════════════════════════════════════ */
 
-function tfb_booking_notification_text( $name, $email, $phone, $suburb, $services, $message ) {
-    $phone_display   = $phone   ? $phone   : 'Not provided';
-    $message_display = $message ? $message : 'None';
-    $date            = wp_date( 'l j F Y, g:i a' );
+function tfb_booking_notification_text( $name, $email, $phone, $suburb, $services, $bike_description, $message ) {
+    $phone_display = $phone            ? $phone            : 'Not provided';
+    $bike_display  = $bike_description ? $bike_description : 'Not provided';
+    $msg_display   = $message          ? $message          : 'None';
+    $date          = wp_date( 'l j F Y, g:i a' );
 
     return "New booking request received on {$date}
 
@@ -141,11 +143,13 @@ Suburb: {$suburb}
 Service Type:
 {$services}
 
+Bike Description:
+{$bike_display}
+
 Message:
-{$message_display}
+{$msg_display}
 ";
 }
-
 function tfb_acknowledgement_html( $name, $services ) {
     $parts  = explode( ' ', trim( $name ) );
     $first  = esc_html( $parts[0] );

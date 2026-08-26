@@ -263,12 +263,6 @@ function silentSave(callback) {
             </tr>
             {% endfor %}
           </table>
-          {% if job['bike_description'] and not is_workshop %}
-          <div style="margin-top:0.75rem;">
-            <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--sd-muted); margin-bottom:0.4rem;">Bike</div>
-            <div style="font-size:0.875rem; color:var(--sd-text);">{{ job['bike_description'] }}</div>
-          </div>
-          {% endif %}
           {% if customer_contacts %}
           <div style="margin-top:0.75rem; border-top:1px solid var(--sd-border); padding-top:0.75rem;">
             <div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--sd-muted); margin-bottom:0.5rem;">Contacts</div>
@@ -357,13 +351,13 @@ function silentSave(callback) {
                         style="resize:vertical;">{{ job['description'] or '' }}</textarea>
             </div>
 
-            <!-- Bike Description — workshop only -->
-            {% if is_workshop %}
+            <!-- Bike Description — workshop and booking -->
+            {% if is_workshop or job['job_type'] == 'booking' %}
             <div class="col-12">
               <label class="sd-label">Bike Description</label>
               <input type="text" name="bike_description" class="sd-input"
                      value="{{ job['bike_description'] or '' }}"
-                     placeholder="e.g. 2022 Trek Domane…">
+                     placeholder="e.g. 2022 Trek Domane, black — Separate additional bikes with a comma (,)">
             </div>
             {% endif %}
 
@@ -388,21 +382,21 @@ function silentSave(callback) {
             {% endif %}
 
             <!-- Service Request Types — workshop, editable checkboxes -->
-            {% if is_workshop and SR_PARTS %}
+            {% if is_workshop and WORKSHOP_TYPES %}
             {% set current_svc = job['service_types'].split(',') | map('trim') | list if job['service_types'] else [] %}
             <div class="col-12">
               <label class="sd-label">Service Request Types</label>
               <div style="display:flex; flex-wrap:wrap; gap:0.4rem 1rem; margin-top:0.25rem;">
-                {% for p in SR_PARTS %}
+                {% for st in WORKSHOP_TYPES %}
                 <label style="display:flex; align-items:center; gap:0.35rem;
                                cursor:pointer; font-size:0.875rem;">
-                  <input type="checkbox" name="service_types" value="{{ p['name'] }}"
-                         {% if p['name'] in current_svc %}checked{% endif %}
+                  <input type="checkbox" name="service_types" value="{{ st['label'] }}"
+                         {% if st['label'] in current_svc %}checked{% endif %}
                          style="accent-color:var(--sd-accent); width:14px; height:14px;">
-                  {{ p['name'] }}
-                  {% if p['unit_cost'] > 0 %}
+                  {{ st['label'] }}
+                  {% if st['unit_cost'] and st['unit_cost'] > 0 %}
                   <span style="font-size:0.75rem; color:var(--sd-muted);">
-                    ${{ '%.2f'|format(p['unit_cost']) }}
+                    ${{ '%.2f'|format(st['unit_cost']) }}
                   </span>
                   {% endif %}
                 </label>

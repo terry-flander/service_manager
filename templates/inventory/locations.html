@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Locations{% endblock %}
+{% block topbar_title %}Locations{% endblock %}
+
+{% block content %}
+<div style="max-width:680px; margin:0 auto; padding:1rem;">
+  <div class="sd-card mb-3">
+    <div class="sd-card-header">Stock Locations</div>
+    <div style="padding:0.5rem 1.25rem 1rem;">
+      <p style="font-size:0.82rem; color:var(--sd-muted); margin-bottom:1rem;">
+        Locations define where stock is held. Job type mapping sets the default location when issuing parts for a job.
+      </p>
+      {% if locations %}
+      <table class="sd-table">
+        <thead><tr>
+          <th>Name</th>
+          <th>Default for Job Type</th>
+          <th style="text-align:center; width:80px;">Active</th>
+          <th style="width:100px;"></th>
+        </tr></thead>
+        <tbody>
+          {% for loc in locations %}
+          <tr>
+            <td style="font-weight:600;">{{ loc['name'] }}</td>
+            <td style="font-size:0.85rem; color:var(--sd-muted);">{{ loc['job_type']|title if loc['job_type'] else '—' }}</td>
+            <td style="text-align:center;">
+              {% if loc['active'] %}<i class="bi bi-check-circle" style="color:#34d399;"></i>
+              {% else %}<i class="bi bi-dash-circle" style="color:var(--sd-muted);"></i>{% endif %}
+            </td>
+            <td>
+              <form method="post" action="{{ url_for('inventory.location_edit', loc_id=loc['id']) }}"
+                    style="display:inline;" id="loc-form-{{ loc['id'] }}">
+                <input type="hidden" name="name" value="{{ loc['name'] }}">
+                <input type="hidden" name="job_type" value="{{ loc['job_type'] or '' }}">
+                <input type="hidden" name="active" value="{{ '1' if not loc['active'] else '' }}">
+              </form>
+              <button type="button" class="btn-ghost edit-loc-btn"
+                      style="padding:0.2rem 0.5rem; font-size:0.75rem;"
+                      data-id="{{ loc['id'] }}">
+                <i class="bi bi-pencil"></i>
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color:var(--sd-muted); font-size:0.85rem;">No locations configured.</p>
+      {% endif %}
+      <button type="button" class="btn-accent" style="margin-top:1rem;"
+              onclick="openNewLoc()">
+        <i class="bi bi-plus-lg"></i> Add Location
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="loc-modal-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65);
+            z-index:3000; align-items:center; justify-content:center; padding:1rem;"
+     onclick="if(event.target===this) closeLocModal()">
+  <div style="background:var(--sd-surface); border:1px solid var(--sd-border);
+              border-radius:10px; padding:1.5rem; width:min(420px,97vw);">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+      <span id="loc-modal-title" style="font-weight:600;">Add Location</span>
+      <button onclick="closeLocModal()" style="background:none;border:none;cursor:pointer;color:var(--sd-muted);"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <form id="loc-form" method="post">
+      <div style="margin-bottom:0.75rem;">
+        <label class="sd-label">Name *</label>
+        <input type="text" name="name" id="loc-name" class="sd-input" required>
+      </div>
+      <div style="margin-bottom:0.75rem;">
+        <label class="sd-label">Default for Job Type</label>
+        <select name="job_type" id="loc-job-type" class="sd-input">
+          <option value="">— None —</option>
+          <option value="booking">Booking</option>
+          <option value="workshop">Workshop</option>
+          <option value="rental">Rental</option>
+          <option value="sale">Sale</option>
+        </select>
+      </div>
+      <div style="margin-bottom:1rem;">
+        <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-size:0.85rem;">
+          <input type="checkbox" name="active" value="1" id="loc-active" checked style="width:1rem; height:1rem;">
+          Active
+        </label>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:0.5rem;">
+        <button type="button" class="btn-ghost" onclick="closeLocModal()">Cancel</button>
+        <button type="submit" class="btn-accent">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var LOC_MAP = {};
+{% for loc in locations %}LOC_MAP[{{ loc['id'] }}] = {{ loc|tojson }};
+{% endfor %}
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('.edit-loc-btn');
+  if (btn) openEditLoc(LOC_MAP[parseInt(btn.dataset.id)]);
+});
+
+function openNewLoc() {
+  document.getElementById('loc-modal-title').textContent = 'Add Location';
+  document.getElementById('loc-form').action = '{{ url_for("inventory.location_new") }}';
+  document.getElementById('loc-name').value = '';
+  document.getElementById('loc-job-type').value = '';
+  document.getElementById('loc-active').checked = true;
+  document.getElementById('loc-modal-overlay').style.display = 'flex';
+}
+function openEditLoc(loc) {
+  document.getElementById('loc-modal-title').textContent = 'Edit Location';
+  document.getElementById('loc-form').action = '/inventory/locations/' + loc.id + '/edit';
+  document.getElementById('loc-name').value = loc.name;
+  document.getElementById('loc-job-type').value = loc.job_type || '';
+  document.getElementById('loc-active').checked = !!loc.active;
+  document.getElementById('loc-modal-overlay').style.display = 'flex';
+}
+function closeLocModal() {
+  document.getElementById('loc-modal-overlay').style.display = 'none';
+}
+</script>
+{% endblock %}

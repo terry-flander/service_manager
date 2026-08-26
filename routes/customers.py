@@ -9,6 +9,13 @@ def get_suburbs(conn):
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from models import get_db
 
+def _is_gmail_user(email):
+    """Return True if email matches GMAIL_USER env var."""
+    import os
+    gmail = os.environ.get('GMAIL_USER', '').strip().lower()
+    return bool(gmail and email and email.strip().lower() == gmail)
+
+
 customers_bp = Blueprint('customers', __name__)
 
 
@@ -89,6 +96,9 @@ def search():
 def new_customer():
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
+        if _is_gmail_user(email):
+            flash('That email address cannot be used for a customer record.', 'danger')
+            return redirect(url_for('customers.new_customer'))
         name  = request.form.get('name', '').strip()
         if not email or not name:
             flash('Name and email are required.', 'danger')
@@ -213,11 +223,18 @@ def edit_customer(customer_id):
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
         name  = request.form.get('name', '').strip()
+        with get_db() as _jc_conn:
+            _jc = _jc_conn.execute('SELECT COUNT(*) FROM jobs WHERE customer_id=?',(customer_id,)).fetchone()[0]
+        if _is_gmail_user(email):
+            flash('That email address cannot be used for a customer record.', 'danger')
+            return render_template('customers/form.html',
+                                   customer=customer, action='edit', jobs=jobs,
+                                   thread_emails=thread_emails, job_count=_jc)
         if not email or not name:
             flash('Name and email are required.', 'danger')
             return render_template('customers/form.html',
                                    customer=customer, action='edit', jobs=jobs,
-                                   thread_emails=thread_emails)
+                                   thread_emails=thread_emails, job_count=_jc)
         with get_db() as conn:
             clash = conn.execute(
                 "SELECT id FROM customers WHERE email=? AND id!=?",
@@ -256,10 +273,13 @@ def edit_customer(customer_id):
         contacts = conn.execute(
             "SELECT * FROM customer_contacts WHERE customer_id=? ORDER BY name",
             (customer_id,)).fetchall()
+        job_count = conn.execute(
+            "SELECT COUNT(*) FROM jobs WHERE customer_id=?", (customer_id,)
+        ).fetchone()[0]
     return render_template('customers/form.html',
                            customer=customer, action='edit', jobs=jobs,
                            thread_emails=thread_emails, suburbs=suburbs,
-                           contacts=contacts)
+                           contacts=contacts, job_count=job_count)
 
 
 @customers_bp.route('/customers/clear-search', methods=['POST'])
@@ -287,6 +307,8 @@ def add_contact(customer_id):
     notes = (data.get('notes') or '').strip() or None
     if not name:
         return jsonify({'ok': False, 'error': 'Name is required'}), 400
+    if email and _is_gmail_user(email):
+        return jsonify({'ok': False, 'error': 'That email address cannot be used for a contact'}), 400
     with get_db() as conn:
         row = conn.execute('SELECT id FROM customers WHERE id=?', (customer_id,)).fetchone()
         if not row:
@@ -298,7 +320,6 @@ def add_contact(customer_id):
         new_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]
     return jsonify({'ok': True, 'id': new_id})
 
-
 @customers_bp.route('/customers/<int:customer_id>/contacts/<int:contact_id>', methods=['PUT'])
 def update_contact(customer_id, contact_id):
     from flask import jsonify
@@ -309,18 +330,14 @@ def update_contact(customer_id, contact_id):
     notes = (data.get('notes') or '').strip() or None
     if not name:
         return jsonify({'ok': False, 'error': 'Name is required'}), 400
+    if email and _is_gmail_user(email):
+        return jsonify({'ok': False, 'error': 'That email address cannot be used for a contact'}), 400
     with get_db() as conn:
-        row = conn.execute(
-            'SELECT id FROM customer_contacts WHERE id=? AND customer_id=?',
-            (contact_id, customer_id)).fetchone()
-        if not row:
-            return jsonify({'ok': False, 'error': 'Not found'}), 404
         conn.execute(
-            'UPDATE customer_contacts SET name=?, phone=?, email=?, notes=? WHERE id=?',
-            (name, phone, email, notes, contact_id))
+            'UPDATE customer_contacts SET name=?, phone=?, email=?, notes=? WHERE id=? AND customer_id=?',
+            (name, phone, email, notes, contact_id, customer_id))
         conn.commit()
     return jsonify({'ok': True})
-
 
 @customers_bp.route('/customers/<int:customer_id>/contacts/<int:contact_id>', methods=['DELETE'])
 def delete_contact(customer_id, contact_id):
@@ -334,3 +351,35 @@ def delete_contact(customer_id, contact_id):
         conn.execute('DELETE FROM customer_contacts WHERE id=?', (contact_id,))
         conn.commit()
     return jsonify({'ok': True})
+
+
+@customers_bp.route('/customers/<int:customer_id>/delete', methods=['POST'])
+def delete_customer(customer_id):
+    with get_db() as conn:
+        customer = conn.execute(
+            "SELECT name, email FROM customers WHERE id=?", (customer_id,)).fetchone()
+        if not customer:
+            flash('Customer not found.', 'danger')
+            return redirect(url_for('customers.index'))
+
+        # Block deletion of internal pseudo-customers
+        if customer['email'] and 'flyingbike.internal' in customer['email']:
+            flash('Internal customers cannot be deleted.', 'danger')
+            return redirect(url_for('customers.edit_customer', customer_id=customer_id))
+
+        # Check for any linked jobs
+        job_count = conn.execute(
+            "SELECT COUNT(*) FROM jobs WHERE customer_id=?", (customer_id,)
+        ).fetchone()[0]
+        if job_count > 0:
+            flash(f'Cannot delete — {job_count} job(s) are linked to this customer. '
+                  f'Delete all their jobs first.', 'danger')
+            return redirect(url_for('customers.edit_customer', customer_id=customer_id))
+
+        # Safe to delete — also remove contacts
+        conn.execute("DELETE FROM customer_contacts WHERE customer_id=?", (customer_id,))
+        conn.execute("DELETE FROM customers WHERE id=?", (customer_id,))
+        conn.commit()
+
+    flash(f'Customer "{customer["name"]}" deleted.', 'success')
+    return redirect(url_for('customers.index'))

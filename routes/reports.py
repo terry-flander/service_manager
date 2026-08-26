@@ -774,3 +774,59 @@ def unreconciled_eftpos_transactions():
         """, (paid_date, amount, paid_date, amount, paid_date or 'now')
         ).fetchall()
     return jsonify([dict(r) for r in rows])
+
+
+@reports_bp.route('/reports/parts-by-supplier')
+def parts_by_supplier():
+    """Parts with suppliers — grouped by our part, showing all supplier mappings."""
+    from flask import request as _req
+    q = _req.args.get('q', '').strip()
+
+    with get_db() as conn:
+        # All parts that have at least one supplier_parts record
+        # or have a supplier_id set directly on the part
+        where = ''
+        params = []
+        if q:
+            where = "WHERE (LOWER(p.name) LIKE LOWER(?) OR LOWER(COALESCE(p.part_number,'')) LIKE LOWER(?))"
+            params = [f'%{q}%', f'%{q}%']
+
+        parts = conn.execute(f"""
+            SELECT
+                p.id, p.name, p.part_number, p.part_type,
+                p.unit_cost, p.avg_cost_inc_gst,
+                COALESCE((
+                    SELECT SUM(it.quantity)
+                    FROM inventory_transactions it
+                    WHERE it.part_id = p.id
+                ), 0) as qty_on_hand
+            FROM parts p
+            WHERE p.active = 1
+              AND EXISTS (
+                  SELECT 1 FROM supplier_parts sp WHERE sp.part_id = p.id
+              )
+            {"AND " + where[6:] if where else ""}
+            ORDER BY p.name
+        """, params).fetchall()
+
+        # For each part, fetch all supplier mappings
+        part_ids = [p['id'] for p in parts]
+        supplier_map = {}
+        if part_ids:
+            ph = ','.join('?' * len(part_ids))
+            sups = conn.execute(f"""
+                SELECT sp.part_id, sp.supplier_sku, sp.supplier_description,
+                       sp.last_price_inc_gst, sp.last_ordered_at,
+                       s.name as supplier_name, s.id as supplier_id
+                FROM supplier_parts sp
+                JOIN suppliers s ON s.id = sp.supplier_id
+                WHERE sp.part_id IN ({ph})
+                ORDER BY sp.part_id, s.name
+            """, part_ids).fetchall()
+            for sp in sups:
+                supplier_map.setdefault(sp['part_id'], []).append(dict(sp))
+
+    return render_template('reports/parts_by_supplier.html',
+                           parts=[dict(p) for p in parts],
+                           supplier_map=supplier_map,
+                           q=q)

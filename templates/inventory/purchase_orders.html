@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Purchase Orders{% endblock %}
+{% block topbar_title %}Purchase Orders{% endblock %}
+
+{% block content %}
+<div style="max-width:900px; margin:0 auto; padding:1rem;">
+  <div class="sd-card mb-3">
+    <div class="sd-card-header">
+      Purchase Orders
+      <a href="{{ url_for('inventory.purchase_order_new') }}" class="btn-accent"
+         style="padding:0.25rem 0.75rem; font-size:0.78rem;">
+        <i class="bi bi-plus-lg"></i> New Order
+      </a>
+    </div>
+    <div style="padding:0.5rem 1.25rem 1rem;">
+      {% if orders %}
+      <table class="sd-table">
+        <thead><tr>
+          <th>Date</th>
+          <th>Supplier</th>
+          <th>Reference</th>
+          <th style="text-align:right;">Lines</th>
+          <th style="text-align:right;">Total (inc GST)</th>
+          <th>Status</th>
+          <th style="width:80px;"></th>
+        </tr></thead>
+        <tbody>
+          {% for o in orders %}
+          <tr class="row-link" onclick="window.location='{{ url_for('inventory.purchase_order_detail', po_id=o['id']) }}'">
+            <td style="font-size:0.85rem; font-family:monospace;">{{ o['order_date'] }}</td>
+            <td style="font-weight:600;">{{ o['supplier_name'] }}</td>
+            <td style="font-size:0.85rem; color:var(--sd-muted);">{{ o['reference'] or '—' }}</td>
+            <td style="text-align:right; font-size:0.85rem;">{{ o['line_count'] }}</td>
+            <td style="text-align:right; font-family:monospace; font-size:0.85rem;">
+              ${{ '%.2f'|format((o['lines_total'] or 0) + (o['freight_inc_gst'] or 0)) }}
+            </td>
+            <td>
+              <span class="badge-status status-{% if o['status']=='open' %}scheduled{% elif o['status']=='received' %}paid{% elif o['status']=='cancelled' %}lost{% else %}pending{% endif %}">
+                {{ o['status'] }}
+              </span>
+            </td>
+            <td onclick="event.stopPropagation();">
+              <a href="{{ url_for('inventory.purchase_order_detail', po_id=o['id']) }}"
+                 class="btn-ghost" style="padding:0.2rem 0.5rem; font-size:0.75rem;">
+                Open
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color:var(--sd-muted); font-size:0.85rem;">No purchase orders yet.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -129,6 +129,18 @@
         <td class="mono{{ hide_classes }}" style="font-size:0.82rem; white-space:nowrap;">
           {{ job['customer_phone']|fmt_phone if job['customer_phone'] else '—' }}
         </td>
+        {% elif col_key == 'address' %}
+        <td class="{{ hide_classes }}" style="font-size:0.82rem; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+          {{ job['address'] or '—' }}
+        </td>
+        {% elif col_key == 'suburb' %}
+        <td class="{{ hide_classes }}" style="font-size:0.82rem;">
+          {{ job['suburb'] or '—' }}
+        </td>
+        {% elif col_key == 'region' %}
+        <td class="{{ hide_classes }}" style="font-size:0.82rem; color:var(--sd-muted);">
+          {{ job['region_name'] or '—' }}
+        </td>
         {% elif col_key == 'bike_desc' %}
         <td class="{{ hide_classes }}" style="font-size:0.82rem; color:var(--sd-muted); max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
           {{ job['bike_description'] or '—' }}

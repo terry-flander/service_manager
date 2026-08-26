@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}New Purchase Order{% endblock %}
+{% block topbar_title %}New Purchase Order{% endblock %}
+
+{% block content %}
+<div style="max-width:800px; margin:0 auto; padding:1rem;">
+  <div class="sd-card">
+    <div class="sd-card-header">New Purchase Order</div>
+    <div style="padding:1.25rem;">
+      <form method="post" id="po-form">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; margin-bottom:0.75rem;">
+          <div>
+            <label class="sd-label">Supplier *</label>
+            <select name="supplier_id" id="po-supplier" class="sd-input" required
+                    onchange="loadSupplierParts(this.value)">
+              <option value="">— Select supplier —</option>
+              {% for s in suppliers %}
+              <option value="{{ s['id'] }}"
+                {% if preselect_supplier and preselect_supplier|string == s['id']|string %}selected{% endif %}>
+                {{ s['name'] }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="sd-label">Order Date *</label>
+            <input type="date" name="order_date" class="sd-input" required value="{{ today }}">
+          </div>
+          <div>
+            <label class="sd-label">Supplier Reference / Order Number</label>
+            <input type="text" name="reference" class="sd-input" placeholder="Optional">
+          </div>
+          <div>
+            <label class="sd-label">Freight (inc GST)</label>
+            <input type="number" name="freight_inc_gst" class="sd-input"
+                   value="0" step="0.01" min="0">
+          </div>
+          <div style="grid-column:1/-1;">
+            <label class="sd-label">Notes</label>
+            <textarea name="notes" class="sd-input" rows="2"></textarea>
+          </div>
+        </div>
+
+        <!-- Supplier parts checklist — shown when supplier selected, collapsed by default -->
+        <div id="sup-parts-section" style="display:none; margin-top:0.5rem;">
+          <button type="button" onclick="toggleSupParts()"
+                  style="display:flex; align-items:center; gap:0.5rem; background:none;
+                         border:1px solid var(--sd-border); border-radius:6px;
+                         cursor:pointer; padding:0.4rem 0.85rem; font-size:0.82rem;
+                         color:var(--sd-muted); margin-bottom:0.5rem; width:100%;
+                         justify-content:space-between;">
+            <span><i class="bi bi-list-ul"></i> Previously Ordered / Linked Parts</span>
+            <i class="bi bi-chevron-right" id="sup-parts-chevron"
+               style="font-size:0.75rem; transition:transform 0.2s;"></i>
+          </button>
+          <div id="sup-parts-body" style="display:none; overflow-x:auto;">
+            <div id="sup-parts-loading" style="color:var(--sd-muted); font-size:0.85rem; display:none; padding:0.5rem 0;">
+              Loading…
+            </div>
+            <div id="sup-parts-list"></div>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:0.5rem; margin-top:1rem;">
+          <a href="{{ url_for('inventory.purchase_orders') }}" class="btn-ghost">Cancel</a>
+          <button type="submit" class="btn-accent">Create Order</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var _supPartsCache = {};
+
+function toggleSupParts() {
+  var body    = document.getElementById('sup-parts-body');
+  var chevron = document.getElementById('sup-parts-chevron');
+  var open = body.style.display !== 'none';
+  body.style.display      = open ? 'none' : '';
+  chevron.style.transform = open ? '' : 'rotate(90deg)';
+}
+
+function loadSupplierParts(supId) {
+  var section = document.getElementById('sup-parts-section');
+  var loading = document.getElementById('sup-parts-loading');
+  var list    = document.getElementById('sup-parts-list');
+
+  if (!supId) { section.style.display = 'none'; return; }
+
+  // Show section header but keep body collapsed
+  section.style.display = '';
+
+  if (_supPartsCache[supId]) {
+    renderSupParts(_supPartsCache[supId]);
+    return;
+  }
+
+  // Load data silently in background
+  var loading = document.getElementById('sup-parts-loading');
+  var list    = document.getElementById('sup-parts-list');
+  loading.style.display = 'none';
+  list.innerHTML = '';
+
+  fetch('/inventory/suppliers/' + supId + '/parts-for-order')
+    .then(function(r) { return r.json(); })
+    .then(function(parts) {
+      _supPartsCache[supId] = parts;
+      loading.style.display = 'none';
+      renderSupParts(parts);
+    })
+    .catch(function() {
+      loading.style.display = 'none';
+      list.innerHTML = '<p style="color:var(--sd-muted);font-size:0.85rem;">Could not load parts.</p>';
+    });
+}
+
+function renderSupParts(parts) {
+  var list = document.getElementById('sup-parts-list');
+  if (!parts || !parts.length) {
+    list.innerHTML = '<p style="color:var(--sd-muted);font-size:0.85rem;padding:0.5rem 0;">' +
+      'No previously ordered parts for this supplier. ' +
+      'Lines can be added after creating the order.</p>';
+    return;
+  }
+
+  var html = '<table class="sd-table" style="font-size:0.85rem; margin-bottom:0.5rem;">' +
+    '<thead><tr>' +
+    '<th style="width:30px;"><input type="checkbox" id="sp-all" onchange="' +
+      'document.querySelectorAll(\'.sp-chk\').forEach(function(c){c.checked=this.checked;})' +
+      '.bind(this)"></th>' +
+    '<th>Part Name</th>' +
+    '<th style="width:110px;">Part Number</th>' +
+    '<th style="width:110px;">Supplier SKU</th>' +
+    '<th style="width:90px;text-align:right;">Last Price</th>' +
+    '<th style="width:90px;text-align:right;">Qty</th>' +
+    '</tr></thead><tbody>';
+
+  parts.forEach(function(p, i) {
+    var price = p.last_price_inc_gst || p.unit_cost || 0;
+    html += '<tr>' +
+      '<td><input type="checkbox" class="sp-chk" name="sp_id_' + i + '" value="' + p.id + '"></td>' +
+      '<td>' + esc(p.name) + '</td>' +
+      '<td style="font-family:monospace;font-size:0.8rem;color:var(--sd-muted);">' +
+        (p.part_number || '—') + '</td>' +
+      '<td style="font-family:monospace;font-size:0.8rem;color:var(--sd-muted);">' +
+        (p.supplier_sku || '—') + '</td>' +
+      '<td style="text-align:right;font-family:monospace;">$' + parseFloat(price).toFixed(2) + '</td>' +
+      '<td><input type="number" name="sp_qty_' + i + '" class="sd-input" ' +
+        'style="text-align:right;font-size:0.82rem;padding:0.2rem 0.4rem;" ' +
+        'value="1" min="0" step="any"></td>' +
+      '</tr>';
+  });
+
+  html += '</tbody></table>' +
+    '<p style="font-size:0.78rem;color:var(--sd-muted);">' +
+    'Checked items will be added as order lines when the order is created.</p>';
+
+  document.getElementById('sup-parts-list').innerHTML = html;
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Auto-load if supplier pre-selected
+window.addEventListener('DOMContentLoaded', function() {
+  var sel = document.getElementById('po-supplier');
+  if (sel.value) loadSupplierParts(sel.value);
+});
+</script>
+{% endblock %}

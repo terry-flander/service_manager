@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block title %}Service Types{% endblock %}
+{% block topbar_title %}Service Types{% endblock %}
+
+{% block content %}
+<div style="max-width:860px; margin:0 auto; padding:1rem;">
+
+  <div class="sd-card mb-3">
+    <div class="sd-card-header">Service Types</div>
+    <div style="padding:0.5rem 1.25rem 1rem;">
+      <p style="font-size:0.82rem; color:var(--sd-muted); margin-bottom:1rem;">
+        Service types appear on booking forms and job creation.
+        <strong>Keywords</strong> (comma-separated) are matched against booking email text to auto-detect the service type.
+        <strong>Linked Part</strong> is automatically added to the job when this service type is selected.
+      </p>
+      {% if types %}
+      <div style="overflow-x:auto;">
+      <table class="sd-table" style="min-width:700px;">
+        <thead><tr>
+          <th style="width:40px;">Order</th>
+          <th style="width:80px;">Group</th>
+          <th style="width:130px;">Code</th>
+          <th style="min-width:110px;">Label</th>
+          <th style="min-width:160px;">Keywords</th>
+          <th style="min-width:120px;">Linked Part</th>
+          <th style="width:60px; text-align:center;">Active</th>
+          <th style="width:48px;"></th>
+        </tr></thead>
+        <tbody>
+          {% for st in types %}
+          <tr>
+            <td style="font-size:0.82rem; color:var(--sd-muted);">{{ st['sort_order'] }}</td>
+            <td>
+              <span class="badge-status {% if st['job_group']=='workshop' %}status-pending{% else %}status-scheduled{% endif %}"
+                    style="font-size:0.65rem;">{{ st['job_group'] or 'booking' }}</span>
+            </td>
+            <td style="font-family:monospace; font-size:0.78rem;">{{ st['code'] }}</td>
+            <td style="font-weight:600; font-size:0.85rem;">{{ st['label'] }}</td>
+            <td style="font-size:0.75rem; color:var(--sd-muted); max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"
+                title="{{ st['keywords'] or '' }}">
+              {{ st['keywords'] or '—' }}
+            </td>
+            <td style="font-size:0.82rem;">{{ st['part_name'] or '—' }}</td>
+            <td style="text-align:center;">
+              {% if st['active'] %}<i class="bi bi-check-circle" style="color:#34d399;"></i>
+              {% else %}<i class="bi bi-dash-circle" style="color:var(--sd-muted);"></i>{% endif %}
+            </td>
+            <td>
+              <button type="button" class="btn-ghost edit-st-btn"
+                      style="padding:0.2rem 0.5rem; font-size:0.75rem;"
+                      data-id="{{ st['id'] }}">
+                <i class="bi bi-pencil"></i>
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}
+      <p style="color:var(--sd-muted); font-size:0.85rem;">No service types configured.</p>
+      {% endif %}
+      <button type="button" class="btn-accent" style="margin-top:1rem;"
+              onclick="openNewModal()">
+        <i class="bi bi-plus-lg"></i> Add Service Type
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit/New modal -->
+<div id="st-modal-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.65);
+            z-index:3000; align-items:center; justify-content:center; padding:1rem;"
+     onclick="if(event.target===this) closeModal()">
+  <div style="background:var(--sd-surface); border:1px solid var(--sd-border);
+              border-radius:10px; padding:1.5rem; width:min(560px,97vw); max-height:90vh; overflow-y:auto;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+      <span id="st-modal-title" style="font-weight:600; font-size:1rem;">Add Service Type</span>
+      <button onclick="closeModal()" style="background:none;border:none;cursor:pointer;color:var(--sd-muted);font-size:1.1rem;"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <form id="st-form" method="post">
+      <div style="margin-bottom:0.75rem;">
+        <label class="sd-label">Job Group *</label>
+        <select name="job_group" id="st-job-group" class="sd-input">
+          <option value="booking">Booking — shown on new booking/email jobs</option>
+          <option value="workshop">Workshop — checklist on workshop job add</option>
+        </select>
+      </div>
+      <div style="margin-bottom:0.75rem;">
+        <label class="sd-label">Code * <span style="font-weight:400; color:var(--sd-muted); font-size:0.72rem;">(unique identifier, lowercase_underscore)</span></label>
+        <input type="text" name="code" id="st-code" class="sd-input" required
+               placeholder="e.g. general_service">
+      </div>
+      <div style="margin-bottom:0.75rem;">
+        <label class="sd-label">Label *</label>
+        <input type="text" name="label" id="st-label" class="sd-input" required
+               placeholder="e.g. General Service">
+      </div>
+      <div style="margin-bottom:0.75rem;">
+        <label class="sd-label">Description</label>
+        <input type="text" name="description" id="st-desc" class="sd-input"
+               placeholder="Shown on booking form">
+      </div>
+      <div style="margin-bottom:0.75rem;">
+        <label class="sd-label">Keywords <span style="font-weight:400; color:var(--sd-muted); font-size:0.72rem;">(comma-separated, matched against booking emails)</span></label>
+        <textarea name="keywords" id="st-keywords" class="sd-input"
+                  rows="3" placeholder="e.g. service,tune,repair,brake,gear"></textarea>
+      </div>
+      <div style="margin-bottom:0.75rem;">
+        <label class="sd-label">Linked Part <span style="font-weight:400; color:var(--sd-muted); font-size:0.72rem;">(auto-added to job on creation)</span></label>
+        <select name="part_id" id="st-part-id" class="sd-input">
+          <option value="">— None —</option>
+          {% for p in parts %}
+          <option value="{{ p['id'] }}">{{ p['name'] }}{% if p['part_number'] %} ({{ p['part_number'] }}){% endif %}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; margin-bottom:1rem;">
+        <div>
+          <label class="sd-label">Sort Order</label>
+          <input type="number" name="sort_order" id="st-sort" class="sd-input" value="0" min="0">
+        </div>
+        <div style="padding-top:1.5rem;">
+          <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer; font-size:0.85rem;">
+            <input type="checkbox" name="active" value="1" id="st-active" checked
+                   style="width:1rem; height:1rem;">
+            Active
+          </label>
+        </div>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <button type="button" id="st-delete-btn" class="btn-ghost"
+                style="color:#f87171; display:none;"
+                onclick="deleteType()">
+          <i class="bi bi-trash3"></i> Delete
+        </button>
+        <div style="display:flex; gap:0.5rem; margin-left:auto;">
+          <button type="button" class="btn-ghost" onclick="closeModal()">Cancel</button>
+          <button type="submit" class="btn-accent">Save</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<form id="delete-form" method="post" style="display:none;"></form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var PARTS = {{ parts|tojson }};
+
+var ST_MAP = {};
+{% for st in types %}ST_MAP[{{ st['id'] }}] = {{ st|tojson }};
+{% endfor %}
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('.edit-st-btn');
+  if (btn) openEditModal(ST_MAP[parseInt(btn.dataset.id)]);
+});
+
+function openNewModal() {
+  document.getElementById('st-modal-title').textContent = 'Add Service Type';
+  document.getElementById('st-form').action = '{{ url_for("inventory.service_type_new") }}';
+  document.getElementById('st-job-group').value = 'booking';
+  document.getElementById('st-code').value     = '';
+  document.getElementById('st-code').readOnly  = false;
+  document.getElementById('st-label').value    = '';
+  document.getElementById('st-desc').value     = '';
+  document.getElementById('st-keywords').value = '';
+  document.getElementById('st-part-id').value  = '';
+  document.getElementById('st-sort').value     = '0';
+  document.getElementById('st-active').checked = true;
+  document.getElementById('st-delete-btn').style.display = 'none';
+  document.getElementById('st-modal-overlay').style.display = 'flex';
+}
+
+function openEditModal(st) {
+  document.getElementById('st-modal-title').textContent = 'Edit Service Type';
+  document.getElementById('st-form').action = '/inventory/service-types/' + st.id + '/edit';
+  document.getElementById('st-job-group').value = st.job_group || 'booking';
+  document.getElementById('st-code').value     = st.code;
+  document.getElementById('st-code').readOnly  = true;
+  document.getElementById('st-label').value    = st.label;
+  document.getElementById('st-desc').value     = st.description || '';
+  document.getElementById('st-keywords').value = st.keywords || '';
+  document.getElementById('st-part-id').value  = st.part_id || '';
+  document.getElementById('st-sort').value     = st.sort_order || 0;
+  document.getElementById('st-active').checked = !!st.active;
+  var delBtn = document.getElementById('st-delete-btn');
+  delBtn.style.display = '';
+  delBtn.dataset.id = st.id;
+  document.getElementById('st-modal-overlay').style.display = 'flex';
+}
+
+function closeModal() {
+  document.getElementById('st-modal-overlay').style.display = 'none';
+}
+
+function deleteType() {
+  if (!confirm('Delete this service type?')) return;
+  var id = document.getElementById('st-delete-btn').dataset.id;
+  var f  = document.getElementById('delete-form');
+  f.action = '/inventory/service-types/' + id + '/delete';
+  f.submit();
+}
+</script>
+{% endblock %}

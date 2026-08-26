@@ -4,6 +4,101 @@ import csv, io
 
 regions_bp = Blueprint('regions', __name__)
 
+def _fetch_suburb_polygon(suburb_name):
+    """
+    Try to fetch a suburb boundary polygon from the ABS Victoria GeoJSON
+    and append it to suburbs_map.geojson if not already present.
+    Returns True if added, False if not found or already exists.
+    """
+    import json as _json
+    import urllib.request as _req
+    import os, logging
+    log = logging.getLogger('app')
+
+    region_colours = {
+        'Inner City':       '#e63946', 'Inner East':       '#f4a261',
+        'Inner North':      '#2a9d8f', 'Inner South':      '#e9c46a',
+        'Inner South East': '#457b9d', 'Inner West':       '#a8dadc',
+        'Outer East':       '#6a4c93', 'Outer North':      '#1982c4',
+        'Outer North East': '#8ac926', 'Outer South East': '#ff595e',
+        'Outer West':       '#6a994e', 'Events':           '#adb5bd',
+    }
+
+    from flask import current_app
+    geojson_path = os.path.join(current_app.root_path, 'static', 'suburbs_map.geojson')
+
+    try:
+        with open(geojson_path) as f:
+            geojson = _json.load(f)
+    except Exception as e:
+        log.warning(f"_fetch_suburb_polygon: could not read geojson: {e}")
+        return False
+
+    # Check if already present
+    existing = {feat['properties']['name'].lower()
+                for feat in geojson['features']}
+    if suburb_name.lower() in existing:
+        log.debug(f"_fetch_suburb_polygon: {suburb_name} already in GeoJSON")
+        return False
+
+    # Fetch ABS Victoria GeoJSON
+    try:
+        url = "https://raw.githubusercontent.com/tonywr71/GeoJson-Data/master/suburb-10-vic.geojson"
+        with _req.urlopen(url, timeout=15) as r:
+            vic_data = _json.loads(r.read())
+    except Exception as e:
+        log.warning(f"_fetch_suburb_polygon: could not fetch ABS data: {e}")
+        return False
+
+    # Find matching feature (case-insensitive)
+    matched = None
+    for feat in vic_data['features']:
+        geo_name = (feat['properties'].get('vic_loca_2') or '').title()
+        if geo_name.lower() == suburb_name.lower():
+            matched = feat
+            break
+
+    if not matched:
+        log.info(f"_fetch_suburb_polygon: {suburb_name} not found in ABS GeoJSON")
+        return False
+
+    # Get region from DB
+    try:
+        from models import get_db as _get_db
+        with _get_db() as conn:
+            row = conn.execute("""
+                SELECT r.name as region_name FROM suburbs s
+                JOIN regions r ON r.id = s.region_id
+                WHERE LOWER(s.name)=LOWER(?)
+            """, (suburb_name,)).fetchone()
+            region_name = row['region_name'] if row else 'Unknown'
+    except Exception:
+        region_name = 'Unknown'
+
+    # Build new feature
+    new_feature = {
+        'type': 'Feature',
+        'geometry': matched['geometry'],
+        'properties': {
+            'name':    suburb_name,
+            'geo_name': (matched['properties'].get('vic_loca_2') or '').title(),
+            'region':  region_name,
+            'color':   region_colours.get(region_name, '#999'),
+        }
+    }
+
+    geojson['features'].append(new_feature)
+
+    try:
+        with open(geojson_path, 'w') as f:
+            _json.dump(geojson, f, separators=(',', ':'))
+        log.info(f"_fetch_suburb_polygon: added {suburb_name} ({region_name}) to GeoJSON")
+        return True
+    except Exception as e:
+        log.warning(f"_fetch_suburb_polygon: could not write geojson: {e}")
+        return False
+
+
 DATE_STATUSES = ['open', 'pending', 'closed']
 
 
@@ -250,7 +345,15 @@ def new_suburb():
                 (name, region_id))
             conn.commit()
 
-        flash(f'Suburb "{name}" created.', 'success')
+        # Try to fetch boundary polygon for map
+        try:
+            added = _fetch_suburb_polygon(name)
+            if added:
+                flash(f'Suburb "{name}" created and added to map.', 'success')
+            else:
+                flash(f'Suburb "{name}" created. No map boundary found — it will appear in the list only.', 'success')
+        except Exception:
+            flash(f'Suburb "{name}" created.', 'success')
         return redirect(url_for('regions.suburbs_index'))
 
     return render_template('regions/suburb_edit.html',
@@ -328,10 +431,20 @@ def edit_suburb(suburb_id):
                 (r['name'] for r in regions if r['id'] == new_region_id), '')
             msg += f' {updated_jobs} job(s) moved to {new_region_name}.'
         flash(msg, 'success')
-        return redirect(url_for('regions.suburbs_index'))
+
+        # If name changed, try to fetch polygon for new name
+        if name_changed:
+            try:
+                _fetch_suburb_polygon(new_name)
+            except Exception:
+                pass
+
+        next_url = request.form.get('next') or request.args.get('next', '')
+        return redirect(next_url if next_url else url_for('regions.suburbs_index'))
 
     return render_template('regions/suburb_edit.html',
-                           suburb=suburb, regions=regions)
+                           suburb=suburb, regions=regions,
+                           next_url=request.args.get('next', ''))
 
 # ── CSV Import ───────────────────────────────────────────────────────────────
 
@@ -537,3 +650,104 @@ def delete_region_date(date_id):
         conn.execute("DELETE FROM region_dates WHERE id=?", (date_id,))
         conn.commit()
     return jsonify({'ok': True})
+
+
+@regions_bp.route('/regions/suburbs-geojson')
+def suburbs_geojson():
+    """Serve suburb boundaries as GeoJSON with live region data from DB."""
+    import json as _json
+    from flask import Response, current_app
+    import os
+
+    region_colours = {
+        'Inner City':       '#e63946',
+        'Inner East':       '#f4a261',
+        'Inner North':      '#2a9d8f',
+        'Inner South':      '#e9c46a',
+        'Inner South East': '#457b9d',
+        'Inner West':       '#a8dadc',
+        'Outer East':       '#6a4c93',
+        'Outer North':      '#1982c4',
+        'Outer North East': '#8ac926',
+        'Outer South East': '#ff595e',
+        'Outer West':       '#6a994e',
+        'Events':           '#adb5bd',
+    }
+
+    # Load static GeoJSON base
+    geojson_path = os.path.join(current_app.root_path, 'static', 'suburbs_map.geojson')
+    with open(geojson_path) as f:
+        geojson = _json.load(f)
+
+    # Get live region data from DB
+    with get_db() as conn:
+        db_suburbs = {row['name'].lower(): dict(row) for row in conn.execute("""
+            SELECT s.id, s.name, r.name as region_name
+            FROM suburbs s JOIN regions r ON r.id = s.region_id
+        """).fetchall()}
+
+    # Overlay live region onto each feature
+    for feature in geojson['features']:
+        name = feature['properties'].get('name', '')
+        db  = db_suburbs.get(name.lower())
+        if db:
+            feature['properties']['region']   = db['region_name']
+            feature['properties']['color']    = region_colours.get(db['region_name'], '#999')
+            feature['properties']['suburb_id'] = db['id']
+        else:
+            feature['properties']['suburb_id'] = None
+
+    resp = Response(_json.dumps(geojson, separators=(',', ':')),
+                    mimetype='application/json')
+    resp.headers['Cache-Control'] = 'no-cache'
+    return resp
+
+
+@regions_bp.route('/regions/map')
+def suburb_map():
+    """Interactive Leaflet map of suburbs by region."""
+    region_colours = {
+        'Inner City':       '#e63946',
+        'Inner East':       '#f4a261',
+        'Inner North':      '#2a9d8f',
+        'Inner South':      '#e9c46a',
+        'Inner South East': '#457b9d',
+        'Inner West':       '#a8dadc',
+        'Outer East':       '#6a4c93',
+        'Outer North':      '#1982c4',
+        'Outer North East': '#8ac926',
+        'Outer South East': '#ff595e',
+        'Outer West':       '#6a994e',
+        'Events':           '#adb5bd',
+    }
+
+    with get_db() as conn:
+        suburbs = conn.execute("""
+            SELECT s.id, s.name, r.name as region_name
+            FROM suburbs s
+            JOIN regions r ON r.id = s.region_id
+            ORDER BY s.name
+        """).fetchall()
+        regions = conn.execute(
+            "SELECT id, name FROM regions ORDER BY name").fetchall()
+
+    # Build suburb_data dict keyed by suburb name for JS lookup
+    suburb_data = {}
+    db_names = set()
+    for s in suburbs:
+        suburb_data[s['name']] = {
+            'region': s['region_name'],
+            'edit_url': f"/suburbs/{s['id']}/edit",
+        }
+        db_names.add(s['name'].lower())
+
+    # Which CSV suburbs are missing from the GeoJSON (pre-computed)
+    unmatched = ['Warribee (→ Werribee)', 'Falls Creek', 'Pasco Vale South (→ Pascoe Vale South)',
+                 'Bentleight (→ Bentleigh)', 'Darrimut']
+
+    return render_template('regions/suburb_map.html',
+                           suburb_data=suburb_data,
+                           region_colours=region_colours,
+                           unmatched=unmatched,
+                           regions=[dict(r) for r in regions])
+

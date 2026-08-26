@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Stock Takes{% endblock %}
+{% block topbar_title %}Stock Takes{% endblock %}
+
+{% block content %}
+<div style="padding:1rem;">
+  <div class="sd-card mb-3">
+    <div class="sd-card-header">Stock Takes</div>
+    <div style="padding:1.25rem;">
+
+      <!-- New stock take form -->
+      <form method="post" action="{{ url_for('inventory.stock_take_new') }}"
+            style="display:flex; gap:0.75rem; align-items:flex-end; flex-wrap:wrap; margin-bottom:1.5rem;
+                   padding-bottom:1.25rem; border-bottom:1px solid var(--sd-border);">
+        <div>
+          <label class="sd-label">Date</label>
+          <input type="date" name="count_date" class="sd-input"
+                 value="{{ today }}" style="width:160px;">
+        </div>
+        <div>
+          <label class="sd-label">Location</label>
+          <select name="location_id" class="sd-input" style="width:160px;">
+            <option value="">All locations</option>
+            {% for loc in locations %}
+            <option value="{{ loc['id'] }}">{{ loc['name'] }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div style="flex:1; min-width:180px;">
+          <label class="sd-label">Notes</label>
+          <input type="text" name="notes" class="sd-input" placeholder="Optional">
+        </div>
+        <button type="submit" class="btn-accent">
+          <i class="bi bi-plus-lg"></i> New Stock Take
+        </button>
+      </form>
+
+      {% if counts %}
+      <table class="sd-table">
+        <thead><tr>
+          <th>Date</th>
+          <th>Location</th>
+          <th style="text-align:right;">Parts</th>
+          <th style="text-align:right;">Counted</th>
+          <th>Status</th>
+          <th>Notes</th>
+          <th style="width:80px;"></th>
+        </tr></thead>
+        <tbody>
+          {% for c in counts %}
+          <tr class="row-link" onclick="window.location='{{ url_for('inventory.stock_take_detail', count_id=c['id']) }}'">
+            <td class="mono" style="font-size:0.82rem;">{{ c['count_date'] }}</td>
+            <td>{{ c['location_name'] or 'All' }}</td>
+            <td style="text-align:right; font-size:0.85rem;">{{ c['line_count'] }}</td>
+            <td style="text-align:right; font-size:0.85rem; color:var(--sd-muted);">{{ c['counted'] }}</td>
+            <td>
+              <span class="badge-status
+                {% if c['status']=='finalised' %}status-paid{% else %}status-scheduled{% endif %}"
+                style="font-size:0.65rem;">{{ c['status'] }}</span>
+            </td>
+            <td style="font-size:0.82rem; color:var(--sd-muted);">{{ c['notes'] or '' }}</td>
+            <td onclick="event.stopPropagation();">
+              <a href="{{ url_for('inventory.stock_take_detail', count_id=c['id']) }}"
+                 class="btn-ghost" style="padding:0.2rem 0.5rem; font-size:0.75rem;">Open</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color:var(--sd-muted); font-size:0.85rem;">No stock takes yet.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var today = new Date().toISOString().slice(0,10);
+document.querySelector('[name="count_date"]').value = today;
+</script>
+{% endblock %}

@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+{% block title %}Suburb Map{% endblock %}
+{% block topbar_title %}Suburb Map{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+#map { height: calc(100vh - 56px); width: 100%; }
+.legend {
+  background: var(--sd-surface);
+  border: 1px solid var(--sd-border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: 0.82rem;
+  line-height: 1.8;
+  max-height: 60vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.legend-item { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+.legend-item:hover { opacity: 0.8; }
+.legend-swatch {
+  width: 14px; height: 14px; border-radius: 2px;
+  border: 1px solid rgba(0,0,0,0.2); flex-shrink: 0;
+}
+.legend-count { color: var(--sd-muted); font-size: 0.72rem; }
+.leaflet-popup-content-wrapper {
+  background: var(--sd-surface) !important;
+  color: var(--sd-text) !important;
+  border: 1px solid var(--sd-border) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4) !important;
+}
+.leaflet-popup-tip { background: var(--sd-surface) !important; }
+.suburb-popup h4 { margin: 0 0 0.35rem; font-size: 1rem; }
+.suburb-popup .region-tag {
+  display: inline-block; padding: 0.15rem 0.5rem;
+  border-radius: 4px; font-size: 0.75rem; font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+.suburb-popup a {
+  display: inline-block; margin-top: 0.4rem;
+  font-size: 0.8rem; color: var(--sd-accent);
+  text-decoration: none;
+}
+.suburb-popup a:hover { text-decoration: underline; }
+.map-filter {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+  z-index: 1000; background: var(--sd-surface);
+  border: 1px solid var(--sd-border); border-radius: 8px;
+  padding: 0.4rem 0.75rem; display: flex; align-items: center; gap: 0.5rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.map-filter input {
+  background: transparent; border: none; outline: none;
+  color: var(--sd-text); font-size: 0.85rem; width: 180px;
+}
+.map-filter input::placeholder { color: var(--sd-muted); }
+
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="position:relative;">
+  <!-- Search filter -->
+  <div class="map-filter">
+    <i class="bi bi-search" style="color:var(--sd-muted); font-size:0.85rem;"></i>
+    <input type="text" id="suburb-search" placeholder="Search suburb…"
+           oninput="highlightSearch(this.value)">
+    <button onclick="document.getElementById('suburb-search').value='';highlightSearch('');"
+            style="background:none;border:none;cursor:pointer;color:var(--sd-muted);font-size:0.9rem;">
+      <i class="bi bi-x"></i>
+    </button>
+  </div>
+
+  <div id="map"></div>
+
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+var SUBURB_DATA = {{ suburb_data | tojson }};
+var REGION_COLOURS = {{ region_colours | tojson }};
+
+// Initialise map centred on Melbourne
+var map = L.map('map', {
+  center: [-37.82, 145.0],
+  zoom: 11,
+  zoomControl: true
+});
+
+// Tile layer — CartoDB light (clean, no API key)
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/">CARTO</a>',
+  maxZoom: 19
+}).addTo(map);
+
+// Load GeoJSON
+var suburbLayers = {};
+var regionLayers = {};
+
+fetch('/regions/suburbs-geojson')
+  .then(function(r) { return r.json(); })
+  .then(function(geojson) {
+    var geoLayer = L.geoJSON(geojson, {
+      style: function(feature) {
+        var colour = feature.properties.color || '#999';
+        return {
+          fillColor:   colour,
+          fillOpacity: 0.35,
+          color:       colour,
+          weight:      1.5,
+          opacity:     0.8
+        };
+      },
+      onEachFeature: function(feature, layer) {
+        var p = feature.properties;
+        suburbLayers[p.name.toLowerCase()] = layer;
+
+        // Track region layers for legend toggle
+        if (!regionLayers[p.region]) regionLayers[p.region] = [];
+        regionLayers[p.region].push(layer);
+
+        layer.on('mouseover', function() {
+          if (!layer._highlighted) {
+            layer.setStyle({ fillOpacity: 0.6, weight: 2.5 });
+          }
+        });
+        layer.on('mouseout', function() {
+          if (!layer._highlighted) {
+            layer.setStyle({ fillOpacity: 0.35, weight: 1.5 });
+          }
+        });
+
+        // Build popup
+        var editUrl = '/suburbs/' + encodeURIComponent(p.name) + '/map-edit';
+        // Find suburb_id from our data
+        var suburbId = p.suburb_id;
+        var editLink = suburbId
+          ? '<a href="/suburbs/' + suburbId + '/edit?next=' + encodeURIComponent('/regions/map') + '"><i class="bi bi-pencil"></i> Edit Suburb / Change Region</a>'
+          : '<span style="color:var(--sd-muted);font-size:0.78rem;">Not in DB yet</span>';
+
+        var popup = '<div class="suburb-popup">' +
+          '<h4>' + p.name + '</h4>' +
+          '<span class="region-tag" style="background:' + (p.color || '#999') + '33;' +
+          'color:' + (p.color || '#999') + ';border:1px solid ' + (p.color || '#999') + '55;">' +
+          p.region + '</span>' +
+          '<br>' + editLink + '</div>';
+
+        layer.bindPopup(popup, { maxWidth: 240 });
+      }
+    }).addTo(map);
+
+    buildLegend();
+  });
+
+// ── Legend ────────────────────────────────────────────────────────────────────
+var hiddenRegions = {};
+
+function buildLegend() {
+  var legend = L.control({ position: 'bottomright' });
+  legend.onAdd = function() {
+    var div = L.DomUtil.create('div', 'legend');
+    div.innerHTML = '<div style="font-weight:700;margin-bottom:0.4rem;font-size:0.78rem;' +
+      'text-transform:uppercase;letter-spacing:0.06em;color:var(--sd-muted);">Regions</div>';
+
+    Object.entries(REGION_COLOURS).forEach(function(entry) {
+      var region = entry[0], colour = entry[1];
+      var count = (regionLayers[region] || []).length;
+      if (!count) return;
+      var item = document.createElement('div');
+      item.className = 'legend-item';
+      item.innerHTML =
+        '<div class="legend-swatch" style="background:' + colour + ';"></div>' +
+        '<span>' + region + '</span>' +
+        '<span class="legend-count">(' + count + ')</span>';
+      item.addEventListener('click', function() {
+        toggleRegion(region, colour, item);
+      });
+      div.appendChild(item);
+    });
+    return div;
+  };
+  legend.addTo(map);
+}
+
+function toggleRegion(region, colour, item) {
+  var layers = regionLayers[region] || [];
+  if (hiddenRegions[region]) {
+    layers.forEach(function(l) { l.setStyle({ opacity: 0.8, fillOpacity: 0.35 }); });
+    delete hiddenRegions[region];
+    item.style.opacity = '1';
+  } else {
+    layers.forEach(function(l) { l.setStyle({ opacity: 0, fillOpacity: 0 }); });
+    hiddenRegions[region] = true;
+    item.style.opacity = '0.35';
+  }
+}
+
+// ── Search highlight ──────────────────────────────────────────────────────────
+var _lastHighlighted = null;
+
+function highlightSearch(q) {
+  if (_lastHighlighted) {
+    _lastHighlighted._highlighted = false;
+    _lastHighlighted.setStyle({ fillOpacity: 0.35, weight: 1.5 });
+    _lastHighlighted = null;
+  }
+  if (!q) return;
+  var key = q.toLowerCase().trim();
+  var layer = suburbLayers[key];
+  if (!layer) {
+    // Partial match
+    for (var k in suburbLayers) {
+      if (k.startsWith(key)) { layer = suburbLayers[k]; break; }
+    }
+  }
+  if (layer) {
+    layer._highlighted = true;
+    layer.setStyle({ fillOpacity: 0.8, weight: 3, color: '#fff' });
+    map.fitBounds(layer.getBounds(), { maxZoom: 14 });
+    layer.openPopup();
+    _lastHighlighted = layer;
+  }
+}
+</script>
+{% endblock %}
