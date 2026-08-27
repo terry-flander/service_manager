@@ -887,6 +887,19 @@ def job_detail(job_id):
             FROM email_replies WHERE job_id=?
             ORDER BY sent_at ASC
         """, (job_id, job_id)).fetchall()
+
+        # Load attachments for inbound emails
+        thread_attachments = {}
+        for te in thread_emails:
+            if te['direction'] == 'inbound':
+                atts = conn.execute("""
+                    SELECT id, filename, mime_type, size_bytes
+                    FROM email_import_attachments
+                    WHERE email_import_id=?
+                    ORDER BY id
+                """, (te['id'],)).fetchall()
+                if atts:
+                    thread_attachments[te['id']] = [dict(a) for a in atts]
         unread_emails = conn.execute(
             "SELECT COUNT(*) FROM email_imports WHERE job_id=? AND (read=1 OR read IS NULL)",
             (job_id,)).fetchone()[0]
@@ -924,6 +937,7 @@ def job_detail(job_id):
     return render_template('jobs/detail.html', job=job, job_parts=job_parts,
                            parts=parts, total=total, regions=regions,
                            thread_emails=thread_emails,
+                           thread_attachments=thread_attachments,
                            unread_emails=unread_emails,
                            region_dates_list=region_dates_list,
                            WORKSHOP_TYPES=workshop_types,
@@ -2145,9 +2159,21 @@ def email_thread_job_view(job_id):
             FROM email_replies WHERE job_id=?
             ORDER BY ts ASC
         """, (job_id, job_id)).fetchall()
+        # Attachments for inbound emails
+        thread_atts = {}
+        for r in rows:
+            if r['direction'] == 'inbound':
+                atts = conn.execute("""
+                    SELECT id, filename, mime_type, size_bytes
+                    FROM email_import_attachments
+                    WHERE email_import_id=? ORDER BY id
+                """, (r['email_id'],)).fetchall()
+                if atts:
+                    thread_atts[r['email_id']] = [dict(a) for a in atts]
     return render_template('jobs/email_thread_view.html',
                            job=dict(job),
-                           messages=[dict(r) for r in rows])
+                           messages=[dict(r) for r in rows],
+                           thread_atts=thread_atts)
 
 
 @jobs_bp.route('/email/thread/customer/<int:customer_id>')

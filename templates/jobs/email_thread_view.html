@@ -118,6 +118,22 @@
         </div>
         <div class="subject">{{ m['subject'] or '' }}</div>
         <div class="body">{{ m['body'] or '' }}</div>
+        {% if not is_out and thread_atts and m['email_id'] in thread_atts %}
+        <div style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-top:0.6rem; padding-top:0.5rem; border-top:1px solid rgba(255,255,255,0.08);">
+          {% for att in thread_atts[m['email_id']] %}
+          <a href="/attachments/{{ att['id'] }}" target="_blank" title="{{ att['filename'] }}"
+             style="display:block; flex-shrink:0;">
+            <img src="/attachments/{{ att['id'] }}"
+                 style="height:80px; width:auto; max-width:120px; object-fit:cover;
+                        border-radius:6px; border:1px solid rgba(255,255,255,0.1);
+                        cursor:pointer; transition:opacity 0.15s;"
+                 onmouseover="this.style.opacity=0.8" onmouseout="this.style.opacity=1"
+                 onerror="this.closest('a').style.display='none'"
+                 alt="{{ att['filename'] }}">
+          </a>
+          {% endfor %}
+        </div>
+        {% endif %}
       </div>
     </div>
     {% endfor %}

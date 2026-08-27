@@ -442,3 +442,21 @@ try:
         print(f"inventory_count_lines has {count} rows — skipping recreate.")
 except Exception as e:
     print(f"inventory_count_lines fix skipped: {e}")
+
+# ── email_import_attachments table ────────────────────────────────────────────
+try:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS email_import_attachments (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            email_import_id INTEGER NOT NULL REFERENCES email_imports(id) ON DELETE CASCADE,
+            filename        TEXT NOT NULL,
+            filepath        TEXT NOT NULL,
+            mime_type       TEXT,
+            size_bytes      INTEGER,
+            created_at      TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.commit()
+    print("email_import_attachments table ready.")
+except Exception as e:
+    print(f"email_import_attachments migration skipped: {e}")

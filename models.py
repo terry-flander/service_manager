@@ -334,6 +334,16 @@ def init_db():
                 read        INTEGER DEFAULT 1
             );
 
+            CREATE TABLE IF NOT EXISTS email_import_attachments (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                email_import_id INTEGER NOT NULL REFERENCES email_imports(id) ON DELETE CASCADE,
+                filename        TEXT NOT NULL,
+                filepath        TEXT NOT NULL,
+                mime_type       TEXT,
+                size_bytes      INTEGER,
+                created_at      TEXT DEFAULT (datetime('now'))
+            );
+
             CREATE TABLE IF NOT EXISTS calendar_events (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 date        TEXT NOT NULL,

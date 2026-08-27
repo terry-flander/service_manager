@@ -250,6 +250,63 @@ def _attachment_note(attachment_names):
     return f"[{count} {label}: {', '.join(attachment_names)}]"
 
 
+ATTACHMENT_BASE = '/data/attachments'
+ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
+MAX_IMAGE_SIZE     = 5 * 1024 * 1024   # 5 MB
+MAX_IMAGES_PER_EMAIL = 10
+
+
+def _save_image_attachments(msg, email_import_id, conn):
+    """Extract image attachments from a parsed email.message.Message,
+    save to /data/attachments/<email_import_id>/, insert DB rows.
+    Returns the number of images saved."""
+    import os, hashlib
+
+    saved = 0
+    dir_path = os.path.join(ATTACHMENT_BASE, str(email_import_id))
+
+    for part in msg.walk():
+        if saved >= MAX_IMAGES_PER_EMAIL:
+            break
+        mime_type = part.get_content_type().lower()
+        if mime_type not in ALLOWED_IMAGE_TYPES:
+            continue
+        disp = part.get('Content-Disposition', '')
+        # Accept both inline and attached images
+        payload = part.get_payload(decode=True)
+        if not payload:
+            continue
+        if len(payload) > MAX_IMAGE_SIZE:
+            log.info(f"Skipping image > 5MB in email_import {email_import_id}")
+            continue
+
+        # Build a safe filename
+        filename = part.get_filename() or ''
+        filename = re.sub(r'[^\w.\-]', '_', filename) or \
+                   f"image_{saved+1}.{mime_type.split('/')[-1]}"
+        # Deduplicate by hashing content
+        content_hash = hashlib.md5(payload).hexdigest()[:8]
+        base, ext = os.path.splitext(filename)
+        filename = f"{base}_{content_hash}{ext}"
+
+        os.makedirs(dir_path, exist_ok=True)
+        filepath = os.path.join(dir_path, filename)
+        with open(filepath, 'wb') as f:
+            f.write(payload)
+
+        conn.execute("""
+            INSERT INTO email_import_attachments
+                (email_import_id, filename, filepath, mime_type, size_bytes)
+            VALUES (?, ?, ?, ?, ?)
+        """, (email_import_id, filename, filepath, mime_type, len(payload)))
+
+        log.info(f"Saved attachment {filename} ({len(payload)//1024}KB) "
+                 f"for email_import {email_import_id}")
+        saved += 1
+
+    return saved
+
+
 def _strip_footer(text):
     """Remove contact-form footer and standard email signature separator."""
     text = re.sub(r'\n--\s*\n.*', '', text, flags=re.DOTALL)
@@ -462,7 +519,8 @@ def _find_job_for_thread(conn, in_reply_to, references, from_email):
 
 
 def _log_thread_email(conn, message_id, thread_id, in_reply_to,
-                      subject, sender, body, job_id, received_at=None):
+                      subject, sender, body, job_id, received_at=None,
+                      raw_msg=None):
     """Record a follow-up email against an existing job — no new job created."""
     conn.execute("""
         INSERT OR IGNORE INTO email_imports
@@ -474,6 +532,19 @@ def _log_thread_email(conn, message_id, thread_id, in_reply_to,
             received_at, received_at, job_id))
     conn.commit()
     log.info(f"Logged thread email {message_id[:40]} against job_id={job_id}")
+
+    # Save any image attachments
+    if raw_msg:
+        try:
+            row = conn.execute(
+                "SELECT id FROM email_imports WHERE message_id=?",
+                (message_id,)).fetchone()
+            if row:
+                n = _save_image_attachments(raw_msg, row['id'], conn)
+                if n:
+                    conn.commit()
+        except Exception as _e:
+            log.warning(f"Attachment save error in thread email: {_e}")
 
 
 def _already_imported(conn, message_id):
@@ -553,6 +624,15 @@ def _create_job(conn, parsed, message_id, thread_id=None, in_reply_to=None):
                     parsed.get('received_at'), parsed.get('received_at'),
                     job_id))
             conn.commit()
+            email_import_id = conn.execute(
+                "SELECT id FROM email_imports WHERE message_id=?",
+                (message_id,)).fetchone()['id']
+            if parsed.get('_raw_msg'):
+                try:
+                    _save_image_attachments(parsed['_raw_msg'], email_import_id, conn)
+                    conn.commit()
+                except Exception as _e:
+                    log.warning(f"Attachment save error: {_e}")
 
             # Auto-add a job_part for each service type, same as new_job form
             if parsed['service_types']:
@@ -725,7 +805,8 @@ def _poll_inbox_replies(imap, app):
                 if existing_job_id:
                     _log_thread_email(
                         db_conn, message_id, thread_id, in_reply_to,
-                        subject, from_email, body, existing_job_id, received_at)
+                        subject, from_email, body, existing_job_id, received_at,
+                        raw_msg=msg)
                     processed += 1
                     log.info(f"INBOX reply logged for job {existing_job_id} "
                              f"from {from_email}")
@@ -809,6 +890,7 @@ def poll_once(app, force=False):
 
                         parsed = _parse_email(msg)
                         parsed['received_at'] = received_at
+                        parsed['_raw_msg']    = msg   # for image attachment extraction
                         body   = parsed['body']  # already includes attachment note, if any
 
                         # Is this a reply in an existing thread?
@@ -820,7 +902,8 @@ def poll_once(app, force=False):
                             _log_thread_email(
                                 db_conn, message_id, thread_id, in_reply_to,
                                 parsed['subject'], parsed['from_email'],
-                                body, existing_job_id, received_at)
+                                body, existing_job_id, received_at,
+                                raw_msg=msg)
                             log.info(f"Thread follow-up logged for job {existing_job_id}")
                             # Don't mark Seen in Gmail — labels share read state
                             pass

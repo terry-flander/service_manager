@@ -653,3 +653,23 @@ def send_feedback_email(job_id):
         conn.commit()
 
     return jsonify({'ok': True})
+
+
+@email_replies_bp.route('/attachments/<int:attachment_id>')
+def serve_attachment(attachment_id):
+    """Serve an email image attachment — login required."""
+    from flask import send_file, abort
+    import os
+    if not session.get('user_id'):
+        abort(403)
+    with get_db() as conn:
+        att = conn.execute(
+            "SELECT * FROM email_import_attachments WHERE id=?",
+            (attachment_id,)).fetchone()
+    if not att:
+        abort(404)
+    filepath = att['filepath']
+    if not os.path.exists(filepath):
+        abort(404)
+    return send_file(filepath, mimetype=att['mime_type'],
+                     download_name=att['filename'])
