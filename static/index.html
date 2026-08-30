@@ -1326,7 +1326,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
    * All mail routes through WP Mail SMTP / SendLayer via wp_mail().
    * ─────────────────────────────────────────────────────────────────────── */
 
-  const WP_AJAX_URL = 'https://theflyingbike.com.au/wp-admin/admin-ajax.php';
+  const BOOKING_URL = 'https://app.theflyingbike.com.au/booking/submit';
 
   const form       = document.getElementById('bookingForm');
   const successMsg = document.getElementById('formSuccess');
@@ -1373,9 +1373,7 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
     try {
       /* action in URL so WordPress routes correctly without needing $_POST */
-      const url = WP_AJAX_URL + '?action=tfb_booking';
-
-      const res = await fetch(url, {
+      const res = await fetch(BOOKING_URL, {
         method:  'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1386,12 +1384,12 @@ height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
 
       const json = await res.json();
 
-      if (res.ok && json.success) {
+      if (res.ok && json.ok) {
         successMsg.style.display = 'block';
         form.reset();
         successMsg.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       } else {
-        const msg = json?.data?.message || 'Submission failed. Please try again.';
+        const msg = json?.message || 'Submission failed. Please try again.';
         errorMsg.textContent = '⚠️ ' + msg;
         errorMsg.style.display = 'block';
         console.error('TFB server error:', json);

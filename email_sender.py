@@ -91,7 +91,8 @@ def _html_to_plain_fallback(html_body):
 
 def send_reply(to_address, subject, body_text,
                in_reply_to=None, references=None,
-               message_id_out=None, body_html=None):
+               message_id_out=None, body_html=None,
+               extra_headers=None):
     """Send a reply. If body_html is provided, sends as
     multipart/alternative (plain text + HTML) so email clients that
     prefer HTML render the rich version, while plain-text-only clients
@@ -122,6 +123,10 @@ def send_reply(to_address, subject, body_text,
         if in_reply_to not in refs:
             refs = refs + ' ' + in_reply_to
         msg['References'] = refs.strip()
+
+    if extra_headers:
+        for k, v in extra_headers.items():
+            msg[k] = v
 
     smtp, from_addr = _smtp_connect()
     with smtp:

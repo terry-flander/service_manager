@@ -893,6 +893,13 @@ def poll_once(app, force=False):
                         parsed['_raw_msg']    = msg   # for image attachment extraction
                         body   = parsed['body']  # already includes attachment note, if any
 
+                        # Skip notification emails we sent to ourselves
+                        # (booking.py sends info@ → info@, poller must not reprocess)
+                        if parsed['from_email'].lower() == user.lower():
+                            log.info(f"Skipping self-sent notification: {message_id[:40]}")
+                            imap.store(num, '+FLAGS', '\\Seen')
+                            continue
+
                         # Is this a reply in an existing thread?
                         existing_job_id = _find_job_for_thread(
                             db_conn, in_reply_to, references, parsed['from_email'])

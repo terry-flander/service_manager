@@ -40,6 +40,7 @@ def create_app():
     from routes.inventory import inventory_bp
     from routes.api import api_bp
     from routes.mechanic import mechanic_bp
+    from routes.booking import booking_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(jobs_bp)
@@ -58,11 +59,12 @@ def create_app():
     app.register_blueprint(inventory_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(mechanic_bp)
+    app.register_blueprint(booking_bp)
 
     # ── Global auth gate ──────────────────────────────────────────────────────
     PUBLIC_ENDPOINTS = {'auth.login', 'auth.totp_verify', 'static',
                         'portal.job_portal', 'portal.not_found',
-                        'api.create_booking'}
+                        'api.create_booking', 'booking.submit'}
 
     @app.before_request
     def require_login():

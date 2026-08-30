@@ -1164,8 +1164,11 @@ def delete_job(job_id):
             except Exception as _e:
                 import logging
                 logging.getLogger('gcal_sync').error(f"Delete cleanup failed for job {job_id}: {_e}")
-        conn.execute("DELETE FROM email_imports WHERE job_id=?", (job_id,))
-        conn.execute("DELETE FROM job_parts WHERE job_id=?", (job_id,))
+        # Delete all dependent rows in order
+        conn.execute("DELETE FROM email_replies WHERE job_id=?",   (job_id,))
+        conn.execute("DELETE FROM email_imports WHERE job_id=?",   (job_id,))
+        conn.execute("DELETE FROM job_parts WHERE job_id=?",       (job_id,))
+        conn.execute("UPDATE eftpos_transactions SET job_id=NULL WHERE job_id=?", (job_id,))
         conn.execute("DELETE FROM jobs WHERE id=?", (job_id,))
         conn.commit()
     flash(f'Job {job["reference"]} deleted.', 'success')
