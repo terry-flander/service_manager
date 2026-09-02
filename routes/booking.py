@@ -188,11 +188,21 @@ def submit():
         from email_sender import send_reply
         notify_body = _notification_text(
             name, email, phone, suburb, services, bike_description, message)
-        send_reply(
+        notify_subject = f"[Booking] {name} - {suburb}" if suburb else f"[Booking] {name}"
+        notify_msg_id = send_reply(
             to_address=NOTIFY_TO,
-            subject=f"New Booking Request from {name}",
+            subject=notify_subject,
             body_text=notify_body,
         )
+        # Update the synthetic email_imports row with the real message_id
+        # so replies to the notification email chain back to this job
+        if notify_msg_id:
+            with get_db() as conn:
+                conn.execute(
+                    "UPDATE email_imports SET message_id=?, thread_id=? "
+                    "WHERE job_id=? AND status='ok' ORDER BY id DESC LIMIT 1",
+                    (notify_msg_id, notify_msg_id, job_id))
+                conn.commit()
         log.info(f"Booking notification sent to {NOTIFY_TO} for {ref}")
     except Exception as e:
         log.error(f"Booking notification send failed for {ref}: {e}")

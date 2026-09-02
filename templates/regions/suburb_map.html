@@ -6,225 +6,469 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
 #map { height: calc(100vh - 56px); width: 100%; }
-.legend {
-  background: var(--sd-surface);
-  border: 1px solid var(--sd-border);
-  border-radius: 8px;
-  padding: 0.75rem 1rem;
-  font-size: 0.82rem;
-  line-height: 1.8;
-  max-height: 60vh;
-  overflow-y: auto;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-}
-.legend-item { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
-.legend-item:hover { opacity: 0.8; }
-.legend-swatch {
-  width: 14px; height: 14px; border-radius: 2px;
-  border: 1px solid rgba(0,0,0,0.2); flex-shrink: 0;
-}
-.legend-count { color: var(--sd-muted); font-size: 0.72rem; }
-.leaflet-popup-content-wrapper {
-  background: var(--sd-surface) !important;
-  color: var(--sd-text) !important;
-  border: 1px solid var(--sd-border) !important;
-  border-radius: 8px !important;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.4) !important;
-}
-.leaflet-popup-tip { background: var(--sd-surface) !important; }
-.suburb-popup h4 { margin: 0 0 0.35rem; font-size: 1rem; }
-.suburb-popup .region-tag {
-  display: inline-block; padding: 0.15rem 0.5rem;
-  border-radius: 4px; font-size: 0.75rem; font-weight: 600;
-  margin-bottom: 0.5rem;
-}
-.suburb-popup a {
-  display: inline-block; margin-top: 0.4rem;
-  font-size: 0.8rem; color: var(--sd-accent);
-  text-decoration: none;
-}
-.suburb-popup a:hover { text-decoration: underline; }
-.map-filter {
+
+/* Week nav toolbar */
+.map-toolbar {
   position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
   z-index: 1000; background: var(--sd-surface);
   border: 1px solid var(--sd-border); border-radius: 8px;
-  padding: 0.4rem 0.75rem; display: flex; align-items: center; gap: 0.5rem;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  padding: 0.4rem 0.85rem; display: flex; align-items: center; gap: 0.55rem;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.3); white-space: nowrap;
 }
-.map-filter input {
+.map-nav-btn {
+  background: var(--sd-surface2); border: 1px solid var(--sd-border);
+  color: var(--sd-text); border-radius: 5px;
+  padding: 0.22rem 0.6rem; font-size: 0.82rem; cursor: pointer;
+  line-height: 1.4; transition: background 0.12s;
+}
+.map-nav-btn:hover { background: var(--sd-border); }
+#week-label {
+  font-size: 0.82rem; font-weight: 600; color: var(--sd-text);
+  min-width: 200px; text-align: center;
+}
+.map-tb-sep { width: 1px; height: 18px; background: var(--sd-border); }
+.map-search-wrap {
+  display: flex; align-items: center; gap: 0.35rem;
+  background: var(--sd-surface2); border: 1px solid var(--sd-border);
+  border-radius: 5px; padding: 0.22rem 0.5rem;
+}
+.map-search-wrap i { color: var(--sd-muted); font-size: 0.8rem; }
+#suburb-search {
   background: transparent; border: none; outline: none;
-  color: var(--sd-text); font-size: 0.85rem; width: 180px;
+  color: var(--sd-text); font-size: 0.82rem; width: 140px;
 }
-.map-filter input::placeholder { color: var(--sd-muted); }
+#suburb-search::placeholder { color: var(--sd-muted); }
+#job-count-badge {
+  font-size: 0.72rem; background: var(--sd-accent);
+  color: #fff; border-radius: 10px; padding: 0.1rem 0.5rem; display: none;
+}
 
+/* Popup */
+.suburb-popup h4 { margin: 0 0 0.3rem; font-size: 0.95rem; }
+.suburb-popup .region-tag {
+  display: inline-block; padding: 0.1rem 0.45rem;
+  border-radius: 4px; font-size: 0.7rem; font-weight: 600; margin-bottom: 0.4rem;
+}
+.suburb-popup .job-list { margin-top: 0.4rem; }
+.suburb-popup .job-item {
+  padding: 0.35rem 0; border-top: 1px solid rgba(128,128,128,0.2); font-size: 0.8rem;
+}
+.suburb-popup .job-item:first-child { border-top: none; }
+.suburb-popup .job-day { font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; margin-bottom: 1px; }
+.suburb-popup .job-time { font-weight: 600; font-size: 0.75rem; }
+.suburb-popup .job-name { font-weight: 500; }
+.suburb-popup .job-addr { font-size: 0.72rem; color: #888; }
+.suburb-popup a.job-link {
+  font-size: 0.72rem; text-decoration: none; float: right; margin-top: 2px;
+}
+.suburb-popup a.job-link:hover { text-decoration: underline; }
+.suburb-popup .no-jobs { font-size: 0.8rem; color: #888; margin-top: 0.3rem; }
+.suburb-popup .edit-link {
+  display: block; margin-top: 0.5rem; font-size: 0.75rem; color: #888; text-decoration: none;
+}
+.suburb-popup .edit-link:hover { color: var(--sd-accent, #3b82f6); }
+
+/* Legend */
+.legend {
+  background: var(--sd-surface); border: 1px solid var(--sd-border);
+  border-radius: 8px; padding: 0.65rem 0.9rem;
+  font-size: 0.78rem; line-height: 1.9; max-height: 60vh; overflow-y: auto;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.legend-title {
+  font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--sd-muted);
+  margin-bottom: 0.4rem; border-bottom: 1px solid var(--sd-border); padding-bottom: 0.3rem;
+}
+.legend-item { display: flex; align-items: center; gap: 0.45rem; cursor: pointer; }
+.legend-item:hover { opacity: 0.75; }
+.legend-swatch { width: 13px; height: 13px; border-radius: 2px; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.2); }
+#day-legend { margin-top: 0.35rem; border-top: 1px solid var(--sd-border); padding-top: 0.35rem; }
+
+/* Leaflet popup */
+.leaflet-popup-content-wrapper {
+  background: var(--sd-surface, #1e293b) !important;
+  color: var(--sd-text, #e2e8f0) !important;
+  border: 1px solid var(--sd-border, #334155) !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+}
+.leaflet-popup-tip { background: var(--sd-surface, #1e293b) !important; }
+.leaflet-popup-content { margin: 12px 16px !important; min-width: 200px; }
 </style>
 {% endblock %}
 
 {% block content %}
 <div style="position:relative;">
-  <!-- Search filter -->
-  <div class="map-filter">
-    <i class="bi bi-search" style="color:var(--sd-muted); font-size:0.85rem;"></i>
-    <input type="text" id="suburb-search" placeholder="Search suburb…"
-           oninput="highlightSearch(this.value)">
-    <button onclick="document.getElementById('suburb-search').value='';highlightSearch('');"
-            style="background:none;border:none;cursor:pointer;color:var(--sd-muted);font-size:0.9rem;">
-      <i class="bi bi-x"></i>
-    </button>
+  <div class="map-toolbar">
+    <button class="map-nav-btn" onclick="navWeek(-1)">&#8249;</button>
+    <button class="map-nav-btn" onclick="navToday()">Today</button>
+    <button class="map-nav-btn" onclick="navWeek(1)">&#8250;</button>
+    <span id="week-label">—</span>
+    <div class="map-tb-sep"></div>
+    <div class="map-search-wrap">
+      <i class="bi bi-search"></i>
+      <input type="text" id="suburb-search" placeholder="Search suburb…"
+             oninput="highlightSearch(this.value)">
+    </div>
+    <span id="job-count-badge"></span>
   </div>
-
   <div id="map"></div>
-
-
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-var SUBURB_DATA = {{ suburb_data | tojson }};
+var SUBURB_DATA    = {{ suburb_data | tojson }};
 var REGION_COLOURS = {{ region_colours | tojson }};
+var DAY_COLOURS    = ['#6366f1','#f59e0b','#10b981','#ec4899','#0ea5e9','#8b5cf6','#f97316'];
+var SETTINGS_KEY   = 'sd_suburb_map_week_sun';
 
-// Initialise map centred on Melbourne
-var map = L.map('map', {
-  center: [-37.82, 145.0],
-  zoom: 11,
-  zoomControl: true
-});
+// ── Week state ─────────────────────────────────────────────────────────────────
+var currentSunday = null;
 
-// Tile layer — CartoDB light (clean, no API key)
-L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-  attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/">CARTO</a>',
+function getSunday(d) {
+  var day  = d.getDay();  // 0=Sun
+  var sun  = new Date(d);
+  sun.setDate(d.getDate() - day);  // back to Sunday
+  sun.setHours(0,0,0,0);
+  return sun;
+}
+
+function loadSavedWeek() {
+  var saved = localStorage.getItem(SETTINGS_KEY);
+  if (saved) {
+    var d = new Date(saved + 'T00:00:00');
+    if (!isNaN(d)) return getSunday(d);
+  }
+  return getSunday(new Date());
+}
+
+function saveWeek(monday) {
+  localStorage.setItem(SETTINGS_KEY, monday.toISOString().slice(0,10));
+}
+
+function fmtDate(d) { return d.toISOString().slice(0,10); }
+
+function weekLabel(sunday) {
+  var sat = new Date(sunday); sat.setDate(sunday.getDate() + 6);
+  var opts = { day: 'numeric', month: 'short' };
+  return sunday.toLocaleDateString('en-AU', opts) + ' – ' +
+         sat.toLocaleDateString('en-AU', {...opts, year: 'numeric'});
+}
+
+function navWeek(dir) {
+  currentSunday = new Date(currentSunday);
+  currentSunday.setDate(currentSunday.getDate() + dir * 7);
+  saveWeek(currentSunday);
+  updateWeekLabel();
+  loadJobs();
+}
+
+function navToday() {
+  currentSunday = getSunday(new Date());
+  saveWeek(currentSunday);
+  updateWeekLabel();
+  loadJobs();
+}
+
+function updateWeekLabel() {
+  document.getElementById('week-label').textContent = weekLabel(currentSunday);
+}
+
+// ── Map init ───────────────────────────────────────────────────────────────────
+var map = L.map('map', { center: [-37.82, 145.0], zoom: 11 });
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '© <a href="https://www.openstreetmap.org/">OpenStreetMap</a>',
   maxZoom: 19
 }).addTo(map);
 
-// Load GeoJSON
-var suburbLayers = {};
-var regionLayers = {};
+var suburbLayers  = {};
+var regionLayers  = {};
+var hiddenRegions = {};
+var jobData       = {};
+var markerLayer   = L.layerGroup().addTo(map);
+var routeLayers   = [];
+var dayColourMap  = {};
+var geoLoaded     = false;
 
 fetch('/regions/suburbs-geojson')
   .then(function(r) { return r.json(); })
   .then(function(geojson) {
-    var geoLayer = L.geoJSON(geojson, {
-      style: function(feature) {
-        var colour = feature.properties.color || '#999';
-        return {
-          fillColor:   colour,
-          fillOpacity: 0.35,
-          color:       colour,
-          weight:      1.5,
-          opacity:     0.8
-        };
+    L.geoJSON(geojson, {
+      style: function(f) {
+        var c = f.properties.color || '#999';
+        return { fillColor: c, fillOpacity: 0.22, color: c, weight: 1.5, opacity: 0.7 };
       },
-      onEachFeature: function(feature, layer) {
-        var p = feature.properties;
-        suburbLayers[p.name.toLowerCase()] = layer;
-
-        // Track region layers for legend toggle
-        if (!regionLayers[p.region]) regionLayers[p.region] = [];
-        regionLayers[p.region].push(layer);
-
-        layer.on('mouseover', function() {
-          if (!layer._highlighted) {
-            layer.setStyle({ fillOpacity: 0.6, weight: 2.5 });
-          }
-        });
-        layer.on('mouseout', function() {
-          if (!layer._highlighted) {
-            layer.setStyle({ fillOpacity: 0.35, weight: 1.5 });
-          }
-        });
-
-        // Build popup
-        var editUrl = '/suburbs/' + encodeURIComponent(p.name) + '/map-edit';
-        // Find suburb_id from our data
-        var suburbId = p.suburb_id;
-        var editLink = suburbId
-          ? '<a href="/suburbs/' + suburbId + '/edit?next=' + encodeURIComponent('/regions/map') + '"><i class="bi bi-pencil"></i> Edit Suburb / Change Region</a>'
-          : '<span style="color:var(--sd-muted);font-size:0.78rem;">Not in DB yet</span>';
-
-        var popup = '<div class="suburb-popup">' +
-          '<h4>' + p.name + '</h4>' +
-          '<span class="region-tag" style="background:' + (p.color || '#999') + '33;' +
-          'color:' + (p.color || '#999') + ';border:1px solid ' + (p.color || '#999') + '55;">' +
-          p.region + '</span>' +
-          '<br>' + editLink + '</div>';
-
-        layer.bindPopup(popup, { maxWidth: 240 });
+      onEachFeature: function(f, layer) {
+        suburbLayers[f.properties.name.toLowerCase()] = layer;
+        layer._baseColor = f.properties.color || '#999';
+        layer._name      = f.properties.name;
+        if (!regionLayers[f.properties.region]) regionLayers[f.properties.region] = [];
+        regionLayers[f.properties.region].push(layer);
+        layer.on('mouseover', function() { layer._hov = true;  applySuburbStyle(layer); });
+        layer.on('mouseout',  function() { layer._hov = false; applySuburbStyle(layer); });
+        layer.on('click',     function() { openSuburbPopup(f.properties, layer); });
       }
     }).addTo(map);
-
+    geoLoaded = true;
     buildLegend();
+    loadJobs();
   });
 
-// ── Legend ────────────────────────────────────────────────────────────────────
-var hiddenRegions = {};
+function applySuburbStyle(layer) {
+  var jobs  = jobData[layer._name] || [];
+  var hover = layer._hov;
+  var dayCol = jobs.length ? getDayColour(jobs[0].scheduled_date) : null;
+  if (jobs.length) {
+    layer.setStyle({ fillColor: '#fff', fillOpacity: hover ? 0.5 : 0.3,
+                     color: dayCol, weight: hover ? 3 : 2.5, opacity: 1 });
+  } else {
+    layer.setStyle({ fillColor: layer._baseColor, fillOpacity: hover ? 0.5 : 0.22,
+                     color: layer._baseColor, weight: hover ? 2.5 : 1.5, opacity: 0.7 });
+  }
+}
 
+function getDayColour(date) {
+  return dayColourMap[date] || '#6366f1';
+}
+
+function openSuburbPopup(p, layer) {
+  var jobs    = jobData[p.name] || [];
+  var subInfo = SUBURB_DATA[p.name] || {};
+  var col     = p.color || '#999';
+  var editLink = subInfo.edit_url
+    ? '<a href="' + subInfo.edit_url + '?next=/regions/map" class="edit-link"><i class="bi bi-pencil"></i> Edit suburb</a>'
+    : '';
+
+  var jobsHtml = '';
+  if (jobs.length) {
+    jobsHtml = '<div class="job-list">';
+    var lastDay = '';
+    jobs.forEach(function(j) {
+      var dayLabel = new Date(j.scheduled_date + 'T12:00:00').toLocaleDateString('en-AU',
+        { weekday:'short', day:'numeric', month:'short' });
+      var dayCol   = getDayColour(j.scheduled_date);
+      var time     = j.scheduled_time ? j.scheduled_time.slice(0,5) : '—';
+      var end      = j.end_time       ? '–' + j.end_time.slice(0,5)  : '';
+      jobsHtml +=
+        '<div class="job-item">' +
+        (lastDay !== j.scheduled_date
+          ? '<div class="job-day" style="color:' + dayCol + ';">' + dayLabel + '</div>' : '') +
+        '<span class="job-time" style="color:' + dayCol + ';">' + time + end + '</span> ' +
+        '<span class="job-name">' + (j.customer_name || '') + '</span>' +
+        '<a href="' + j.detail_url + '" class="job-link" style="color:' + dayCol + ';">' + j.reference + ' →</a>' +
+        (j.address ? '<div class="job-addr">' + j.address + '</div>' : '') +
+        '</div>';
+      lastDay = j.scheduled_date;
+    });
+    jobsHtml += '</div>';
+  } else {
+    jobsHtml = '<div class="no-jobs">No scheduled jobs this week</div>';
+  }
+
+  layer.bindPopup(
+    '<div class="suburb-popup"><h4>' + p.name + '</h4>' +
+    '<span class="region-tag" style="background:' + col + '33;color:' + col + ';border:1px solid ' + col + '55;">' +
+    p.region + '</span>' + jobsHtml + editLink + '</div>',
+    { maxWidth: 290 }
+  ).openPopup();
+}
+
+// ── Jobs ──────────────────────────────────────────────────────────────────────
+function loadJobs() {
+  if (!geoLoaded) return;
+  var sunday   = currentSunday;
+  var saturday = new Date(sunday); saturday.setDate(sunday.getDate() + 6);
+  var dateFrom = fmtDate(sunday), dateTo = fmtDate(saturday);
+
+  fetch('/regions/map/jobs?date_from=' + dateFrom + '&date_to=' + dateTo)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      // Build suburb → all jobs mapping (all statuses except lost)
+      jobData = {};
+      (data.jobs || []).forEach(function(j) {
+        var sub = (j.suburb || '').trim();
+        if (sub) {
+          jobData[sub] = jobData[sub] || [];
+          jobData[sub].push(j);
+        }
+      });
+
+      // Assign day colours
+      dayColourMap = {};
+      var days = Object.keys(data.by_day || {}).sort();
+      days.forEach(function(d, i) { dayColourMap[d] = DAY_COLOURS[i % DAY_COLOURS.length]; });
+
+      renderOverlay(data.by_day || {}, days);
+      updateSuburbStyles();
+
+      var count  = (data.jobs || []).length;
+      var mapped = (data.jobs || []).filter(function(j) {
+        return suburbLayers[(j.suburb || '').toLowerCase()];
+      }).length;
+      var badge = document.getElementById('job-count-badge');
+      if (count) {
+        badge.textContent = mapped + ' mapped' + (mapped < count ? ' of ' + count : '');
+      }
+      badge.style.display = count ? 'inline' : 'none';
+      updateDayLegend(days);
+    });
+}
+
+function updateSuburbStyles() {
+  Object.values(suburbLayers).forEach(function(layer) { applySuburbStyle(layer); });
+}
+
+function renderOverlay(byDay, days) {
+  markerLayer.clearLayers();
+  routeLayers.forEach(function(l) { map.removeLayer(l); });
+  routeLayers = [];
+  var allPoints = [];
+  // Track how many markers already placed at each suburb centroid for offset
+  var suburbMarkerCount = {};
+
+  days.forEach(function(day) {
+    var jobs   = byDay[day] || [];
+    var colour = dayColourMap[day] || '#6366f1';
+    var points = [];
+
+    jobs.forEach(function(j, i) {
+      var layer = suburbLayers[(j.suburb || '').toLowerCase()];
+      if (!layer) return;
+      var base = layer.getBounds().getCenter();
+
+      // Offset markers in the same suburb so they don't stack
+      var subKey = (j.suburb || '').toLowerCase() + '|' + day;
+      var count  = suburbMarkerCount[subKey] || 0;
+      suburbMarkerCount[subKey] = count + 1;
+      // Spiral offset: each subsequent marker in the same suburb gets a small nudge
+      // Spread markers relative to the suburb's own size so they
+      // stay separated regardless of zoom level
+      var bounds = layer.getBounds();
+      var spread = Math.max(
+        bounds.getNorth() - bounds.getSouth(),
+        bounds.getEast()  - bounds.getWest()
+      ) * 0.28;   // 28% of suburb's own width/height
+      var angle  = count * (Math.PI * 2 / 5);  // evenly spaced on a circle
+      var radius = count === 0 ? 0 : spread;
+      var center = count === 0 ? base : L.latLng(
+        base.lat + radius * Math.sin(angle),
+        base.lng + radius * Math.cos(angle) / Math.cos(base.lat * Math.PI / 180)
+      );
+
+      points.push(center);
+      allPoints.push(center);
+
+      var time = j.scheduled_time ? j.scheduled_time.slice(0,5) : '';
+      var end  = j.end_time       ? '–' + j.end_time.slice(0,5)  : '';
+      var icon = L.divIcon({
+        className: '',
+        html: '<div style="background:' + colour + ';color:#fff;border:2px solid #fff;' +
+              'border-radius:50%;width:22px;height:22px;display:flex;align-items:center;' +
+              'justify-content:center;font-size:10px;font-weight:700;' +
+              'box-shadow:0 2px 5px rgba(0,0,0,0.5);">' + (i+1) + '</div>',
+        iconSize:[22,22], iconAnchor:[11,11]
+      });
+
+      var popup =
+        '<div style="font-size:0.8rem;line-height:1.55;">' +
+        '<div style="font-size:0.7rem;color:' + colour + ';font-weight:700;margin-bottom:2px;">' +
+        new Date(day + 'T12:00:00').toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short'}) +
+        '</div>' +
+        '<strong>' + (i+1) + '. ' + (j.customer_name || '') + '</strong><br>' +
+        (time ? '<span style="color:#94a3b8;">' + time + end + ' · </span>' : '') +
+        '<span style="color:#94a3b8;">' + (j.suburb || '') + '</span><br>' +
+        (j.address ? '<span style="color:#94a3b8;font-size:0.72rem;">' + j.address + '</span><br>' : '') +
+        (j.service_types ? '<span style="color:#94a3b8;font-size:0.72rem;">' + j.service_types + '</span><br>' : '') +
+        '<a href="' + j.detail_url + '" style="color:' + colour + ';font-size:0.72rem;">' + j.reference + ' →</a>' +
+        '</div>';
+      L.marker(center, {icon:icon}).bindPopup(popup).addTo(markerLayer);
+    });
+
+    if (points.length > 1) {
+      routeLayers.push(L.polyline(points, {
+        color: colour, weight: 2.5, opacity: 0.75, dashArray: '6 4'
+      }).addTo(map));
+    }
+  });
+
+  // Zoom to job suburbs
+  if (allPoints.length) {
+    map.fitBounds(L.latLngBounds(allPoints).pad(0.2), { maxZoom: 13 });
+  }
+}
+
+// ── Legend ─────────────────────────────────────────────────────────────────────
 function buildLegend() {
   var legend = L.control({ position: 'bottomright' });
   legend.onAdd = function() {
-    var div = L.DomUtil.create('div', 'legend');
-    div.innerHTML = '<div style="font-weight:700;margin-bottom:0.4rem;font-size:0.78rem;' +
-      'text-transform:uppercase;letter-spacing:0.06em;color:var(--sd-muted);">Regions</div>';
-
-    Object.entries(REGION_COLOURS).forEach(function(entry) {
-      var region = entry[0], colour = entry[1];
-      var count = (regionLayers[region] || []).length;
-      if (!count) return;
+    var div = document.createElement('div');
+    div.className = 'legend';
+    div.innerHTML = '<div class="legend-title">Regions</div>';
+    Object.entries(REGION_COLOURS).forEach(function(e) {
+      var region = e[0], colour = e[1];
+      var layers = regionLayers[region];
+      if (!layers || !layers.length) return;
       var item = document.createElement('div');
       item.className = 'legend-item';
       item.innerHTML =
-        '<div class="legend-swatch" style="background:' + colour + ';"></div>' +
-        '<span>' + region + '</span>' +
-        '<span class="legend-count">(' + count + ')</span>';
+        '<div class="legend-swatch" style="background:' + colour + '"></div>' +
+        '<span>' + region + ' <span style="color:var(--sd-muted);font-size:0.7rem;">(' + layers.length + ')</span></span>';
       item.addEventListener('click', function() {
-        toggleRegion(region, colour, item);
+        var hidden = hiddenRegions[region];
+        layers.forEach(function(l) { l.setStyle({ opacity: hidden ? 0.7 : 0, fillOpacity: hidden ? 0.22 : 0 }); });
+        hiddenRegions[region] = !hidden;
+        item.style.opacity = hidden ? '1' : '0.35';
       });
       div.appendChild(item);
     });
+    var dl = document.createElement('div');
+    dl.id = 'day-legend';
+    div.appendChild(dl);
     return div;
   };
   legend.addTo(map);
 }
 
-function toggleRegion(region, colour, item) {
-  var layers = regionLayers[region] || [];
-  if (hiddenRegions[region]) {
-    layers.forEach(function(l) { l.setStyle({ opacity: 0.8, fillOpacity: 0.35 }); });
-    delete hiddenRegions[region];
-    item.style.opacity = '1';
-  } else {
-    layers.forEach(function(l) { l.setStyle({ opacity: 0, fillOpacity: 0 }); });
-    hiddenRegions[region] = true;
-    item.style.opacity = '0.35';
-  }
+function updateDayLegend(days) {
+  var container = document.getElementById('day-legend');
+  if (!container) return;
+  container.innerHTML = days.length
+    ? '<div class="legend-title" style="margin-top:0.4rem;">This week</div>' : '';
+  days.forEach(function(day) {
+    var colour   = dayColourMap[day] || '#6366f1';
+    var dayLabel = new Date(day + 'T12:00:00').toLocaleDateString('en-AU',
+      { weekday:'short', day:'numeric', month:'short' });
+    var item = document.createElement('div');
+    item.className = 'legend-item';
+    item.innerHTML =
+      '<div style="width:12px;height:12px;border-radius:50%;background:' + colour +
+      ';border:2px solid #fff;flex-shrink:0;"></div><span>' + dayLabel + '</span>';
+    container.appendChild(item);
+  });
 }
 
-// ── Search highlight ──────────────────────────────────────────────────────────
-var _lastHighlighted = null;
-
+// ── Search ─────────────────────────────────────────────────────────────────────
+var _lastHL = null;
 function highlightSearch(q) {
-  if (_lastHighlighted) {
-    _lastHighlighted._highlighted = false;
-    _lastHighlighted.setStyle({ fillOpacity: 0.35, weight: 1.5 });
-    _lastHighlighted = null;
-  }
+  if (_lastHL) { _lastHL._hov = false; applySuburbStyle(_lastHL); _lastHL = null; }
   if (!q) return;
   var key = q.toLowerCase().trim();
   var layer = suburbLayers[key];
-  if (!layer) {
-    // Partial match
-    for (var k in suburbLayers) {
-      if (k.startsWith(key)) { layer = suburbLayers[k]; break; }
-    }
-  }
+  if (!layer) { for (var k in suburbLayers) { if (k.startsWith(key)) { layer = suburbLayers[k]; break; } } }
   if (layer) {
-    layer._highlighted = true;
-    layer.setStyle({ fillOpacity: 0.8, weight: 3, color: '#fff' });
+    layer._hov = true; applySuburbStyle(layer);
     map.fitBounds(layer.getBounds(), { maxZoom: 14 });
-    layer.openPopup();
-    _lastHighlighted = layer;
+    openSuburbPopup({ name: layer._name, region: '', color: layer._baseColor }, layer);
+    _lastHL = layer;
   }
 }
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+currentSunday = loadSavedWeek();
+updateWeekLabel();
 </script>
 {% endblock %}

@@ -15,13 +15,39 @@
 
 {% block head %}
 <link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
   body.is-mobile .hide-mobile { display: none !important; }
+  #cal-layout {
+    display: flex; gap: 0.75rem; align-items: flex-start;
+  }
   #calendar-wrap {
+    flex: 1 1 0; min-width: 0;
     background: var(--sd-surface);
     border: 1px solid var(--sd-border);
     border-radius: 8px;
     padding: 1.5rem;
+  }
+  #map-panel {
+    width: 25%; min-width: 260px; max-width: 420px; flex-shrink: 0;
+    border: 1px solid var(--sd-border); border-radius: 8px;
+    overflow: hidden; position: sticky; top: 0.75rem;
+  }
+  #map-panel-header {
+    padding: 0.4rem 0.75rem; background: var(--sd-surface2);
+    border-bottom: 1px solid var(--sd-border);
+    font-size: 0.72rem; font-weight: 600; color: var(--sd-muted);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  #suburb-map {
+    height: calc(100vh - 120px); min-height: 400px;
+    background: #1a2030;
+  }
+  @media (max-width: 900px) {
+    #cal-layout { flex-direction: column; }
+    #map-panel  { width: 100%; max-width: none; position: static; }
+    #suburb-map { height: 320px; }
   }
   .fc { font-family: 'IBM Plex Sans', sans-serif; }
   .fc-toolbar-title { font-size: 1rem !important; font-weight: 600; color: var(--sd-text); }
@@ -301,8 +327,32 @@
   </div>
 </div>
 
-<div id="calendar-wrap">
-  <div id="calendar"></div>
+<div id="cal-layout">
+  <div id="calendar-wrap">
+    <div id="calendar"></div>
+  </div>
+  <div id="map-panel">
+    <div id="map-panel-header">
+      <span><i class="bi bi-map"></i> Suburb Map</span>
+      <span id="map-day-selector" style="display:none; align-items:center; gap:0.4rem;">
+        <select id="map-day-select" onchange="loadCalMapJobs()"
+                style="background:var(--sd-surface); border:1px solid var(--sd-border);
+                       color:var(--sd-text); border-radius:4px; font-size:0.72rem;
+                       padding:0.1rem 0.35rem; cursor:pointer; outline:none;">
+          <option value="all">All week</option>
+          <option value="0">Sunday</option>
+          <option value="1">Monday</option>
+          <option value="2">Tuesday</option>
+          <option value="3">Wednesday</option>
+          <option value="4">Thursday</option>
+          <option value="5">Friday</option>
+          <option value="6">Saturday</option>
+        </select>
+      </span>
+      <span id="map-job-count" style="color:var(--sd-accent);"></span>
+    </div>
+    <div id="suburb-map"></div>
+  </div>
 </div>
 
 <div class="legend" style="margin-top:1rem;">
@@ -644,6 +694,13 @@ document.addEventListener('DOMContentLoaded', function() {
         method: 'POST', headers: {'Content-Type':'application/json'},
         body: JSON.stringify({ view: info.view.type, date: info.startStr.slice(0,10) }),
       });
+      // Refresh embedded map to match new date range
+      if (typeof loadCalMapJobs === 'function') {
+        // Reset day selector when view or week changes
+        var sel = document.getElementById('map-day-select');
+        if (sel) sel.value = 'all';
+        setTimeout(loadCalMapJobs, 100);
+      }
     },
 
     slotMinTime:  '07:00:00',
@@ -830,6 +887,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (data.ok) {
           const timeStr = data.scheduled_time ? ` at ${data.scheduled_time}` : ' (all day)';
           showToast(`✓ ${data.reference} → ${data.scheduled_date}${timeStr}`, 'success');
+          if (typeof loadCalMapJobs === 'function') setTimeout(loadCalMapJobs, 200);
         } else {
           info.revert();
           showToast('Could not save.', 'error');
@@ -925,5 +983,220 @@ document.addEventListener('DOMContentLoaded', function() {
     if (e.target === this) closeDelRegionDate();
   });
 
+</script>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── Embedded suburb map ───────────────────────────────────────────────────────
+var calMap      = null;
+var calMapTiles = null;
+var calSuburbs  = {};   // name.lower → layer
+var calJobData  = {};   // suburb → [jobs]
+var calMarkers  = L.layerGroup ? null : null;
+var calRoutes   = [];
+var calGeoLoaded = false;
+
+var DAY_COLS = ['#6366f1','#f59e0b','#10b981','#ec4899','#0ea5e9','#8b5cf6','#f97316'];
+
+function initCalMap() {
+  if (calMap) return;
+  calMap     = L.map('suburb-map', { center: [-37.82, 145.0], zoom: 11,
+                                      zoomControl: true, attributionControl: true });
+  calMarkers = L.layerGroup().addTo(calMap);
+
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://www.openstreetmap.org/">OpenStreetMap</a>',
+    maxZoom: 19
+  }).addTo(calMap);
+
+  fetch('/regions/suburbs-geojson')
+    .then(function(r) { return r.json(); })
+    .then(function(geo) {
+      L.geoJSON(geo, {
+        style: function(f) {
+          var c = f.properties.color || '#555';
+          return { fillColor: c, fillOpacity: 0.18, color: c, weight: 1, opacity: 0.5 };
+        },
+        onEachFeature: function(f, layer) {
+          calSuburbs[f.properties.name.toLowerCase()] = layer;
+          layer._baseColor = f.properties.color || '#555';
+          layer._name      = f.properties.name;
+        }
+      }).addTo(calMap);
+      calGeoLoaded = true;
+      // Load jobs now that both GeoJSON and calendar are ready
+      loadCalMapJobs();
+    });
+}
+
+function loadCalMapJobs() {
+  if (!calMap || !calGeoLoaded) return;
+  var info = getCalDateRange();
+  if (!info) return;
+
+  // Show/hide day selector based on view, clear map if month
+  var daySelector = document.getElementById('map-day-selector');
+  var countEl     = document.getElementById('map-job-count');
+
+  if (info.viewType === 'month') {
+    daySelector.style.display = 'none';
+    // Clear map for month view
+    calMarkers.clearLayers();
+    calRoutes.forEach(function(l) { calMap.removeLayer(l); });
+    calRoutes = [];
+    Object.values(calSuburbs).forEach(function(layer) {
+      layer.setStyle({ fillColor: layer._baseColor, fillOpacity: 0.18,
+                       color: layer._baseColor, weight: 1, opacity: 0.5 });
+    });
+    if (countEl) countEl.textContent = '';
+    return;
+  }
+
+  if (info.viewType === 'week') {
+    daySelector.style.display = 'flex';
+    // Set selector to the current day if in week view and a day is active
+    var dayVal = document.getElementById('map-day-select').value;
+    // Filter to selected day
+    if (dayVal !== 'all') {
+      var targetDay = parseInt(dayVal);
+      // Find the date in the week matching this day-of-week
+      var d = new Date(info.from + 'T12:00:00');
+      var weekEnd = new Date(info.to + 'T12:00:00');
+      var found = null;
+      while (d <= weekEnd) {
+        if (d.getDay() === targetDay) { found = d; break; }
+        d.setDate(d.getDate() + 1);
+      }
+      if (found) {
+        var iso = found.toISOString().slice(0, 10);
+        info.from = iso;
+        info.to   = iso;
+      }
+    }
+  } else if (info.viewType === 'day') {
+    daySelector.style.display = 'none';
+  }
+
+  fetch('/regions/map/jobs?date_from=' + info.from + '&date_to=' + info.to)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      calJobData = data.by_suburb || {};
+      renderCalMapJobs(data.by_day || {});
+      var count = (data.jobs || []).length;
+      if (countEl) countEl.textContent = count ? count + ' jobs' : '';
+    });
+}
+
+function renderCalMapJobs(byDay) {
+  // Reset suburb styles
+  Object.values(calSuburbs).forEach(function(layer) {
+    layer.setStyle({
+      fillColor: layer._baseColor, fillOpacity: 0.18,
+      color: layer._baseColor, weight: 1, opacity: 0.5
+    });
+    layer.unbindTooltip && layer.unbindTooltip();
+  });
+
+  // Clear markers and routes
+  calMarkers.clearLayers();
+  calRoutes.forEach(function(l) { calMap.removeLayer(l); });
+  calRoutes = [];
+
+  var days = Object.keys(byDay).sort();
+  var dayColMap = {};
+  days.forEach(function(d, i) { dayColMap[d] = DAY_COLS[i % DAY_COLS.length]; });
+
+  var jobSuburbs = new Set();
+  var jobPoints  = [];
+  var suburbMarkerCount = {};
+
+  days.forEach(function(day) {
+    var jobs   = byDay[day] || [];
+    var colour = dayColMap[day] || '#6366f1';
+    var points = [];
+
+    jobs.forEach(function(j, idx) {
+      var key   = (j.suburb || '').toLowerCase();
+      var layer = calSuburbs[key];
+      if (!layer) return;
+      var base   = layer.getBounds().getCenter();
+      var subKey = key + '|' + day;
+      var count  = suburbMarkerCount[subKey] || 0;
+      suburbMarkerCount[subKey] = count + 1;
+      var bounds = layer.getBounds();
+      var spread = Math.max(
+        bounds.getNorth() - bounds.getSouth(),
+        bounds.getEast()  - bounds.getWest()
+      ) * 0.28;
+      var angle  = count * (Math.PI * 2 / 5);
+      var radius = count === 0 ? 0 : spread;
+      var center = count === 0 ? base : L.latLng(
+        base.lat + radius * Math.sin(angle),
+        base.lng + radius * Math.cos(angle) / Math.cos(base.lat * Math.PI / 180)
+      );
+      points.push(center);
+      jobPoints.push(center);
+
+      // Highlight suburb
+      layer.setStyle({
+        fillColor: '#ffffff', fillOpacity: 0.3,
+        color: colour, weight: 2.5, opacity: 0.9
+      });
+
+      // Numbered marker
+      var num  = idx + 1;
+      var time = j.scheduled_time ? j.scheduled_time.slice(0,5) : '';
+      var icon = L.divIcon({
+        className: '',
+        html: '<div style="background:' + colour + ';color:#fff;border:2px solid #fff;' +
+              'border-radius:50%;width:20px;height:20px;display:flex;align-items:center;' +
+              'justify-content:center;font-size:10px;font-weight:700;' +
+              'box-shadow:0 2px 5px rgba(0,0,0,0.5);">' + num + '</div>',
+        iconSize: [20,20], iconAnchor: [10,10]
+      });
+      var popup =
+        '<div style="font-size:0.78rem;line-height:1.5;">' +
+        '<strong>' + (j.customer_name || '') + '</strong><br>' +
+        (time ? '<span style="color:#94a3b8;">' + time + ' · </span>' : '') +
+        '<span style="color:#94a3b8;">' + (j.suburb || '') + '</span><br>' +
+        '<a href="' + j.detail_url + '" style="color:' + colour + ';font-size:0.72rem;">' +
+        j.reference + ' →</a></div>';
+      L.marker(center, {icon:icon}).bindPopup(popup).addTo(calMarkers);
+    });
+
+    if (points.length > 1) {
+      calRoutes.push(L.polyline(points, {
+        color: colour, weight: 2, opacity: 0.7, dashArray: '5 4'
+      }).addTo(calMap));
+    }
+  });
+
+  // Auto-zoom to job suburbs
+  if (jobPoints.length) {
+    calMap.fitBounds(L.latLngBounds(jobPoints).pad(0.25), { maxZoom: 13 });
+  }
+}
+
+function getCalDateRange() {
+  var cal = window.calendar;
+  if (!cal) return null;
+  var view = cal.view;
+  if (!view) return null;
+  var start = view.currentStart;
+  var end   = new Date(view.currentEnd);
+  end.setDate(end.getDate() - 1);
+  function fmt(d) { return d.toISOString().slice(0,10); }
+  var vt = view.type;
+  var viewType = (vt === 'dayGridMonth') ? 'month'
+               : (vt === 'timeGridWeek' || vt === 'listWeek') ? 'week'
+               : 'day';
+  return { from: fmt(start), to: fmt(end), viewType: viewType };
+}
+
+// Initialise map after FullCalendar has rendered
+document.addEventListener('DOMContentLoaded', function() {
+  // Wait for FullCalendar to render before initialising the map
+  setTimeout(initCalMap, 1000);
+});
 </script>
 {% endblock %}

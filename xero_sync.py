@@ -284,21 +284,50 @@ def check_paid_invoices(invoice_numbers):
         invoice_numbers — list of strings e.g. ['fb0001', 'fb0002']
 
     Returns:
-        dict mapping invoice_number → Xero status string
-        e.g. {'fb0001': 'PAID', 'fb0002': 'AUTHORISED'}
+        dict mapping invoice_number → dict with keys:
+            status      — Xero status string ('PAID', 'AUTHORISED', etc.)
+            paid_date   — ISO date string or None
+            amount_paid — float or None
     """
     if not invoice_numbers:
         return {}
 
-    # Xero supports filtering by InvoiceNumbers as a comma-separated param
+    import re as _re
+
+    # Do NOT use summaryOnly — we need FullyPaidOnDate and AmountPaid
     nums_param = ','.join(invoice_numbers)
-    path = f'Invoices?InvoiceNumbers={urllib.parse.quote(nums_param)}&summaryOnly=true'
+    path = f'Invoices?InvoiceNumbers={urllib.parse.quote(nums_param)}'
 
     result = _xero_request('GET', path)
     invoices = result.get('Invoices', [])
 
-    return {
-        inv['InvoiceNumber']: inv['Status']
-        for inv in invoices
-        if inv.get('InvoiceNumber')
-    }
+    out = {}
+    for inv in invoices:
+        inv_num = inv.get('InvoiceNumber')
+        if not inv_num:
+            continue
+
+        # Parse FullyPaidOnDate — Xero returns /Date(ms+offset)/ format
+        paid_date = None
+        fpod = inv.get('FullyPaidOnDate') or ''
+        if fpod:
+            ms_match = _re.search(r'\d+', fpod)
+            if ms_match:
+                import datetime as _dt
+                ts = int(ms_match.group()) / 1000
+                paid_date = _dt.datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d')
+
+        amount_paid = inv.get('AmountPaid') or None
+        if amount_paid is not None:
+            try:
+                amount_paid = float(amount_paid)
+            except (TypeError, ValueError):
+                amount_paid = None
+
+        out[inv_num] = {
+            'status':      inv.get('Status', ''),
+            'paid_date':   paid_date,
+            'amount_paid': amount_paid,
+        }
+
+    return out

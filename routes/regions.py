@@ -703,6 +703,48 @@ def suburbs_geojson():
     return resp
 
 
+@regions_bp.route('/regions/map/jobs')
+def suburb_map_jobs():
+    """Return scheduled jobs for a date (or week) as JSON for the map overlay."""
+    from flask import jsonify, request as _req
+    date_from = _req.args.get('date_from', '')
+    date_to   = _req.args.get('date_to',   date_from)
+    if not date_from:
+        from datetime import date as _d
+        date_from = date_to = _d.today().isoformat()
+
+    with get_db() as conn:
+        rows = conn.execute("""
+            SELECT j.id, j.reference, j.customer_name, j.customer_phone,
+                   j.suburb, j.address, j.scheduled_date, j.scheduled_time,
+                   j.end_time, j.status, j.service_types, j.job_type,
+                   r.name as region_name
+            FROM jobs j
+            LEFT JOIN regions r ON r.id = j.region_id
+            WHERE j.scheduled_date >= ?
+              AND j.scheduled_date <= ?
+              AND j.status NOT IN ('lost')
+              AND j.job_type = 'booking'
+            ORDER BY j.scheduled_date, j.scheduled_time, j.suburb
+        """, (date_from, date_to)).fetchall()
+
+    # Group by suburb, also add day grouping for week view
+    by_suburb = {}
+    by_day    = {}
+    all_jobs  = []
+    for r in rows:
+        d = dict(r)
+        d['detail_url'] = f"/jobs/{d['id']}"   # correct URL
+        sub = (d['suburb'] or '').strip()
+        day = d['scheduled_date'] or ''
+        if sub:
+            by_suburb.setdefault(sub, []).append(d)
+        by_day.setdefault(day, []).append(d)
+        all_jobs.append(d)
+
+    return jsonify({'by_suburb': by_suburb, 'by_day': by_day, 'jobs': all_jobs})
+
+
 @regions_bp.route('/regions/map')
 def suburb_map():
     """Interactive Leaflet map of suburbs by region."""

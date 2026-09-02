@@ -1906,18 +1906,27 @@ def xero_check_payments():
 
     paid_count = 0
     with get_db() as conn:
-        for inv_num, xero_status in statuses.items():
-            job_id = id_map.get(inv_num)
+        for inv_num, info in statuses.items():
+            job_id      = id_map.get(inv_num)
             if not job_id:
                 continue
-            db_status = 'paid' if xero_status == 'PAID' else \
-                        'voided' if xero_status == 'VOIDED' else 'sent'
+            xero_status = info['status']
+            db_status   = 'paid'   if xero_status == 'PAID'   else \
+                          'voided' if xero_status == 'VOIDED' else 'sent'
             if xero_status == 'PAID':
-                conn.execute(
-                    "UPDATE jobs SET xero_status=?, status='paid' WHERE id=?",
-                    (db_status, job_id))
+                paid_date   = info.get('paid_date')
+                amount_paid = info.get('amount_paid')
+                conn.execute("""
+                    UPDATE jobs
+                    SET xero_status=?, status='paid',
+                        payment_type='Transfer',
+                        paid_date=COALESCE(paid_date, ?),
+                        amount_paid=COALESCE(amount_paid, ?)
+                    WHERE id=?
+                """, (db_status, paid_date, amount_paid, job_id))
                 paid_count += 1
-                log.info(f"Xero: job {job_id} ({inv_num}) marked paid")
+                log.info(f"Xero: job {job_id} ({inv_num}) marked paid "
+                         f"date={paid_date} amount={amount_paid}")
             else:
                 conn.execute(
                     "UPDATE jobs SET xero_status=? WHERE id=?",
