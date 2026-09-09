@@ -166,14 +166,23 @@ def _build_event_body(job):
     """Build the Google Calendar event payload from a job row (dict-like)."""
     jt = job['job_type']
 
-    first_name = (job['customer_name'] or '').split(' ')[0].strip() or job['customer_name'] or ''
+    customer_name = (job['customer_name'] or '').strip()
+    suburb        = job['suburb'] or ''
     service_types = job['service_types'] or ''
-    summary = f"{first_name} – {service_types}" if service_types else first_name
+
+    if jt == 'rental':
+        # Rentals: full name + suburb so multi-day events are identifiable
+        name_part = customer_name
+        if suburb:
+            name_part = f"{customer_name} – {suburb}"
+        summary = name_part
+    else:
+        first_name = customer_name.split(' ')[0].strip() or customer_name
+        summary = f"{first_name} – {service_types}" if service_types else first_name
 
     job_url      = f"{_base_url()}/jobs/{job['id']}"
     thread_url   = f"{_base_url()}/email/thread/{job['id']}/view"
     address      = job['address'] or ''
-    suburb       = job['suburb'] or ''
     dest         = (address + (', ' + suburb if suburb else '')).strip()
     dir_url        = ('https://www.google.com/maps/dir/?api=1&destination=' + urllib.parse.quote_plus(dest)) if dest else ''
     apple_dir_url  = ('https://maps.apple.com/?daddr=' + urllib.parse.quote_plus(dest) + '&dirflg=d') if dest else ''

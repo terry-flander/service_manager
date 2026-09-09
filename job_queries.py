@@ -419,6 +419,8 @@ COLUMN_CATALOG = {
     'amount':     {'label': 'Amount Paid',      'align': 'right'},
     'reconciled': {'label': 'Reconciled',       'align': 'center'},
     'status':     {'label': 'Status',           'align': 'left'},
+    'end_date':   {'label': 'End Date',         'align': 'left'},
+    'weeks':      {'label': 'Weeks',            'align': 'right'},
 }
 
 # Defaults — exactly match what's hardcoded in the template, so a query

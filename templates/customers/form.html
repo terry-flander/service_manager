@@ -184,10 +184,20 @@
     <div class="sd-card">
       <div class="sd-card-header">
         Job History
-        <a href="{{ url_for('jobs.new_job') }}?customer_id={{ customer['id'] }}"
-           class="btn-accent" style="padding:0.25rem 0.75rem; font-size:0.78rem;">
-          <i class="bi bi-plus-lg"></i> New Job
-        </a>
+        <div style="display:flex; gap:0.5rem; align-items:center;">
+          {% if customer and customer['email'] and not customer['email'].endswith('.internal') %}
+          <button type="button" class="btn-ghost"
+                  style="padding:0.25rem 0.75rem; font-size:0.78rem;"
+                  onclick="openReplyModal(null, CUST_EMAIL, CUST_NAME,
+                    {mode:'history', customerId:{{ customer['id'] }}, customerName:CUST_NAME})">
+            <i class="bi bi-clock-history"></i> Email History
+          </button>
+          {% endif %}
+          <a href="{{ url_for('jobs.new_job') }}?customer_id={{ customer['id'] }}"
+             class="btn-accent" style="padding:0.25rem 0.75rem; font-size:0.78rem;">
+            <i class="bi bi-plus-lg"></i> New Job
+          </a>
+        </div>
       </div>
       <div class="table-responsive-sd"><table class="sd-table">
         <thead>
@@ -252,6 +262,7 @@
 {% block scripts %}
 <script>
 // Customer email lookup by job_id — for Reply modal
+var CUST_EMAIL = {{ (customer['email'] or '')|tojson }};
 var CUST_EMAIL_MAP = {
   {% for job in jobs %}
   {{ job['id'] }}: {{ (job['customer_email'] or '')|tojson }},

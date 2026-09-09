@@ -561,6 +561,7 @@ def _create_job(conn, parsed, message_id, thread_id=None, in_reply_to=None):
         conn, parsed['name'], parsed['email'],
         parsed['phone'], parsed['suburb'], ''
     )
+    log.info(f"_create_job: customer_id={customer_id} stored_address={repr(stored_address[:60] if stored_address else '')}")
 
     # If no address stored yet, try GCal search by customer name
     if not stored_address:
@@ -578,6 +579,8 @@ def _create_job(conn, parsed, message_id, thread_id=None, in_reply_to=None):
                         (gcal_address, customer_id))
                     conn.commit()
                     log.info(f"GCal address found for '{parsed['name']}': {gcal_address[:60]}")
+                else:
+                    log.info(f"GCal search for '{parsed['name']}' returned no address")
         except Exception as _gcal_err:
             log.debug(f"GCal address lookup skipped: {_gcal_err}")
 
@@ -606,6 +609,7 @@ def _create_job(conn, parsed, message_id, thread_id=None, in_reply_to=None):
                   parsed['message'], parsed.get('bike_description', ''),
                   parsed['service_types'], region_id,
                   f"Imported from email: {parsed['subject']}"))
+            log.info(f"_create_job: job address='{stored_address or parsed['suburb']}'")
 
             job_id = conn.execute(
                 "SELECT id FROM jobs WHERE reference=?", (ref,)).fetchone()['id']

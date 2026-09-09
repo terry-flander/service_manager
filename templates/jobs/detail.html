@@ -145,6 +145,14 @@ function silentSave(callback) {
       {% endif %}
     </button>
     {% endif %}
+    {% if job['cust_id'] %}
+    <button type="button" class="btn-ghost"
+            style="padding:0.35rem 0.85rem; font-size:0.82rem;"
+            onclick="openReplyModal({{ job['id'] }}, JOB_CUST_EMAIL, JOB_CUST_NAME,
+              {mode:'history', customerId:{{ job['cust_id'] }}, customerName:JOB_CUST_NAME})">
+      <i class="bi bi-clock-history"></i> History
+    </button>
+    {% endif %}
     <!-- Close -->
     <button type="button" id="btn-cancel" class="btn-ghost"
             style="padding:0.35rem 0.85rem; font-size:0.82rem;"

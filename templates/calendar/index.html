@@ -8,6 +8,9 @@
   <a href="{{ url_for('jobs.new_sale') }}" class="btn-ghost hide-mobile">
     <i class="bi bi-cash-coin"></i><span> Counter Sale</span>
   </a>
+  <button type="button" class="btn-ghost hide-mobile" onclick="openNewEventDefault()">
+    <i class="bi bi-calendar-plus"></i><span> New Event</span>
+  </button>
   <a href="{{ url_for('jobs.new_job') }}" class="btn-accent">
     <i class="bi bi-plus-lg"></i> New Job
   </a>
@@ -411,6 +414,7 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('event-modal-overlay').classList.add('open');
     document.getElementById('ev-title').focus();
   }
+  window.openModal = openModal;
 
   window.closeModal = function() {
     document.getElementById('event-modal-overlay').classList.remove('open');
@@ -735,19 +739,10 @@ document.addEventListener('DOMContentLoaded', function() {
       const dateStr = info.dateStr.slice(0, 10);
 
       if (info.allDay) {
-        // All-day area click → Add Region Date dialog
+        // All-day area click → Add Region Date dialog only
         openAddRegionDate(dateStr);
-      } else {
-        // Timed slot click → existing event modal
-        const timeStr = info.dateStr.slice(11, 16);
-        let endStr = '';
-        if (timeStr) {
-          const [h, m] = timeStr.split(':').map(Number);
-          const endH = String(Math.min(h + 1, 23)).padStart(2, '0');
-          endStr = `${endH}:${m.toString().padStart(2,'0')}`;
-        }
-        openModal('New Event', dateStr, timeStr, endStr, true);
       }
+      // Timed slot click: do nothing — use the New Event button instead
     },
 
     // ── Click on event ─────────────────────────────────────────────────────
@@ -887,6 +882,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (data.ok) {
           const timeStr = data.scheduled_time ? ` at ${data.scheduled_time}` : ' (all day)';
           showToast(`✓ ${data.reference} → ${data.scheduled_date}${timeStr}`, 'success');
+          if (data.gcal_warning) showToast(data.gcal_warning, 'warning');
           if (typeof loadCalMapJobs === 'function') setTimeout(loadCalMapJobs, 200);
         } else {
           info.revert();
@@ -978,6 +974,18 @@ document.addEventListener('DOMContentLoaded', function() {
     })
     .catch(() => showToast('Network error', 'error'));
   };
+
+  function openNewEventDefault() {
+    // Default to Monday of the current calendar week at 09:00
+    const cal     = window.calendar;
+    const anchor  = cal ? cal.view.currentStart : new Date();
+    const d = new Date(anchor);
+    const dow = d.getDay(); // 0=Sun
+    const monday = new Date(d);
+    monday.setDate(d.getDate() + (dow === 0 ? 1 : dow === 1 ? 0 : 8 - dow));
+    const dateStr = monday.toISOString().slice(0, 10);
+    openModal('New Event', dateStr, '09:00', '10:00', true);
+  }
 
   document.getElementById('del-region-date-overlay').addEventListener('click', function(e) {
     if (e.target === this) closeDelRegionDate();

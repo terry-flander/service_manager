@@ -174,6 +174,18 @@
             {{ job['status']|replace('_',' ') }}
           </span>
         </td>
+        {% elif col_key == 'end_date' %}
+        <td class="{{ hide_classes }}" style="font-size:0.82rem; color:var(--sd-muted);">
+          {{ job['end_date']|fmt_date('dmy') if job['end_date'] else '—' }}
+        </td>
+        {% elif col_key == 'weeks' %}
+        <td class="mono{{ hide_classes }}" style="text-align:right; font-size:0.85rem;">
+          {% if job['end_date'] and job['scheduled_date'] %}
+            {{ job['rental_weeks'] }}
+          {% else %}
+            <span style="color:var(--sd-muted);">—</span>
+          {% endif %}
+        </td>
         {% endif %}
         {% endfor %}
       </tr>

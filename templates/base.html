@@ -1172,9 +1172,8 @@ document.getElementById('email-modal').addEventListener('close', function() {
               background:var(--sd-navy);">
     <div style="text-align:center; color:var(--sd-muted); padding:1rem;">Loading…</div>
   </div>
-
   <!-- Compose panel -->
-  <div style="padding:0.875rem 1rem; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:0.6rem;">
+  <div id="reply-modal-compose" style="padding:0.875rem 1rem; overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:0.6rem;">
 
     <!-- Error banner -->
     <div id="reply-modal-error"
@@ -1272,13 +1271,32 @@ var _replySubject = null;
 var _replyRte     = null;
 var _replyContactId = null;
 
-function openReplyModal(jobId, toAddr, customerName) {
+// opts = { mode: 'history', customerId: N, customerName: '...' }
+function openReplyModal(jobId, toAddr, customerName, opts) {
   _replyJobId     = jobId;
   _replyToAddr    = toAddr;
   _replyContactId = null;
-  var modal = document.getElementById('reply-modal');
-  var err   = document.getElementById('reply-modal-error');
+  var modal   = document.getElementById('reply-modal');
+  var err     = document.getElementById('reply-modal-error');
+  var compose = document.getElementById('reply-modal-compose');
   err.style.display = 'none';
+
+  var isHistory = opts && opts.mode === 'history';
+  var histCustId = opts && opts.customerId;
+  var histName   = (opts && opts.customerName) || customerName || '';
+
+  if (isHistory) {
+    // History mode: thread only, no compose form
+    document.getElementById('reply-modal-title').textContent =
+      'Email History — ' + histName;
+    if (compose) compose.style.display = 'none';
+    modal.style.display = 'flex';
+    _replyLoadCustomerHistory(histCustId);
+    return;
+  }
+
+  // Normal reply mode
+  if (compose) compose.style.display = '';
   document.getElementById('reply-modal-title').textContent =
     'Reply — ' + (customerName || '');
   if (!_replyRte) {
@@ -1289,8 +1307,91 @@ function openReplyModal(jobId, toAddr, customerName) {
   modal.style.display = 'flex';
   _replyLoadThread();
   _replyLoadTemplates();
-  // Fetch all available email addresses for this job
   _replyLoadAddresses(toAddr);
+}
+
+function _replyLoadCustomerHistory(customerId) {
+  var container = document.getElementById('reply-modal-thread');
+  container.innerHTML =
+    '<div style="text-align:center; color:var(--sd-muted); padding:1rem;">Loading history…</div>';
+  fetch('/email/thread/customer/' + customerId)
+    .then(function(r) { return r.json(); })
+    .then(function(msgs) {
+      if (!msgs || !msgs.length) {
+        container.innerHTML =
+          '<div style="text-align:center; color:var(--sd-muted); padding:1rem;">No email history.</div>';
+        return;
+      }
+      var html = '';
+      var lastJobId = null;
+      msgs.forEach(function(m) {
+        var isOut = m.direction === 'outbound';
+        var ts    = utcToLocal(m.ts);
+        // Job header separator — ref, scheduled date, status
+        if (m.job_id !== lastJobId) {
+          var schedDate = m.scheduled_date
+            ? new Date(m.scheduled_date + 'T00:00:00').toLocaleDateString('en-AU',
+                { day:'numeric', month:'short', year:'numeric' })
+            : '—';
+          var statusColour = {
+            pending:'#f59e0b', scheduled:'#3b82f6', in_progress:'#8b5cf6',
+            complete:'#10b981', invoiced:'#6b7280', paid:'#10b981',
+            lost:'#ef4444'
+          }[m.job_status] || '#6b7280';
+          html += '<div style="display:flex; align-items:center; gap:0.5rem; ' +
+            'margin:0.75rem 0 0.4rem; padding:0.35rem 0.6rem; ' +
+            'background:var(--sd-surface2); border-radius:6px; ' +
+            'border:1px solid var(--sd-border);">' +
+            '<a href="/jobs/' + m.job_id + '" target="_parent" ' +
+            'style="font-size:0.75rem; font-weight:700; color:var(--sd-accent); ' +
+            'text-decoration:none;">' + escHtmlThread(m.job_ref || '') + '</a>' +
+            '<span style="font-size:0.72rem; color:var(--sd-muted);">' + schedDate + '</span>' +
+            '<span style="font-size:0.68rem; font-weight:600; padding:0.1rem 0.45rem; ' +
+            'border-radius:4px; background:' + statusColour + '22; color:' + statusColour + '; ' +
+            'border:1px solid ' + statusColour + '44; text-transform:capitalize;">' +
+            escHtmlThread((m.job_status || '').replace('_',' ')) + '</span>' +
+            '</div>';
+          lastJobId = m.job_id;
+        }
+        html += '<div style="display:flex; justify-content:' +
+          (isOut ? 'flex-end' : 'flex-start') + '; margin-bottom:0.65rem;">' +
+          '<div style="max-width:85%; background:' +
+            (isOut ? 'rgba(249,115,22,0.12)' : 'var(--sd-slate)') +
+            '; border:1px solid ' +
+            (isOut ? 'rgba(249,115,22,0.25)' : 'var(--sd-border)') +
+            '; border-radius:' + (isOut ? '10px 10px 3px 10px' : '10px 10px 10px 3px') +
+            '; padding:0.5rem 0.75rem;">' +
+          '<div style="font-size:0.68rem; color:var(--sd-muted); margin-bottom:0.2rem;' +
+               'display:flex; gap:0.5rem; flex-wrap:wrap;">' +
+            '<span>' + escHtmlThread(m.from_addr || '') + '</span>' +
+            '<span style="margin-left:auto;">' + escHtmlThread(ts) + '</span>' +
+          '</div>' +
+          '<div style="font-size:0.75rem; font-weight:600; margin-bottom:0.2rem;">' +
+            escHtmlThread(m.subject || '') + '</div>' +
+          '<div style="font-size:0.78rem; white-space:pre-wrap; word-break:break-word;">' +
+            escHtmlThread(stripEmailQuotes(m.body || '').slice(0, 800)) +
+          '</div>';
+        // Attachments
+        if (m.attachments && m.attachments.length) {
+          html += '<div style="display:flex; flex-wrap:wrap; gap:0.35rem; margin-top:0.4rem;">';
+          m.attachments.forEach(function(a) {
+            html += '<a href="/attachments/' + a.id + '" target="_blank" ' +
+              'style="font-size:0.7rem; color:var(--sd-accent); text-decoration:none; ' +
+              'background:var(--sd-surface2); padding:0.1rem 0.4rem; border-radius:4px; ' +
+              'border:1px solid var(--sd-border);">' +
+              '<i class="bi bi-image"></i> ' + escHtmlThread(a.filename) + '</a>';
+          });
+          html += '</div>';
+        }
+        html += '</div></div>';
+      });
+      container.innerHTML = html;
+      // Scroll to bottom (most recent)
+      setTimeout(function() { container.scrollTop = container.scrollHeight; }, 50);
+    })
+    .catch(function() {
+      container.innerHTML = '<div style="color:#f87171; padding:1rem;">Error loading history.</div>';
+    });
 }
 
 function _replyLoadAddresses(fallbackAddr) {
@@ -1335,6 +1436,8 @@ function replySelectAddress(sel) {
 
 function closeReplyModal() {
   document.getElementById('reply-modal').style.display = 'none';
+  var compose = document.getElementById('reply-modal-compose');
+  if (compose) compose.style.display = '';
 }
 
 function _replyLoadThread() {

@@ -392,7 +392,10 @@ def index():
     with get_db() as conn:
         query = """
             SELECT j.*, r.name as region_name,
-                   c.id as cust_id
+                   c.id as cust_id,
+                   MAX(CAST((julianday(j.end_date) - julianday(j.scheduled_date) + 1) / 7.0 AS INTEGER) +
+                       CASE WHEN ((julianday(j.end_date) - julianday(j.scheduled_date) + 1) % 7) > 0 THEN 1 ELSE 0 END,
+                       1) as rental_weeks
             FROM jobs j
             JOIN regions r ON j.region_id = r.id
             LEFT JOIN customers c ON j.customer_id = c.id
@@ -698,6 +701,9 @@ def job_detail(job_id):
                           or None)
 
         add_to_calendar = 1 if request.form.get('add_to_calendar') else 0
+        # Never keep a lost job on the calendar
+        if new_status == 'lost':
+            add_to_calendar = 0
         referral_source = request.form.get('referral_source', '').strip() or None
 
         svc_types = ''  # only set for workshop below
@@ -2190,23 +2196,43 @@ def email_thread_job_view(job_id):
 
 @jobs_bp.route('/email/thread/customer/<int:customer_id>')
 def email_thread_customer(customer_id):
-    """AJAX: return all emails for a customer's jobs, reverse date order."""
+    """AJAX: all emails for a customer's jobs, oldest first, with job metadata."""
     from flask import jsonify
     with get_db() as conn:
         rows = conn.execute("""
             SELECT 'inbound' as direction, ei.imported_at as ts,
                    ei.sender as from_addr, ei.subject, ei.body,
-                   ei.status, ei.id, j.reference as job_ref
+                   ei.status, ei.id as email_id, j.reference as job_ref,
+                   j.id as job_id, j.scheduled_date, j.status as job_status,
+                   ei.read, ei.id as import_id
             FROM email_imports ei
             JOIN jobs j ON j.id = ei.job_id
             WHERE j.customer_id = ?
             UNION ALL
             SELECT 'outbound' as direction, er.sent_at as ts,
                    er.to_address as from_addr, er.subject, er.body,
-                   'sent' as status, er.id, j.reference as job_ref
+                   'sent' as status, er.id as email_id, j.reference as job_ref,
+                   j.id as job_id, j.scheduled_date, j.status as job_status,
+                   0 as read, NULL as import_id
             FROM email_replies er
             JOIN jobs j ON j.id = er.job_id
             WHERE j.customer_id = ?
-            ORDER BY ts DESC
+            ORDER BY ts ASC
         """, (customer_id, customer_id)).fetchall()
-    return jsonify([dict(r) for r in rows])
+
+        # Load attachments for inbound emails
+        thread_atts = {}
+        for r in rows:
+            if r['direction'] == 'inbound' and r['import_id']:
+                atts = conn.execute("""
+                    SELECT id, filename, mime_type, size_bytes
+                    FROM email_import_attachments
+                    WHERE email_import_id=? ORDER BY id
+                """, (r['import_id'],)).fetchall()
+                if atts:
+                    thread_atts[r['import_id']] = [dict(a) for a in atts]
+
+    result = [dict(r) for r in rows]
+    for m in result:
+        m['attachments'] = thread_atts.get(m.get('import_id'), [])
+    return jsonify(result)

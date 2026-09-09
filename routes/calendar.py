@@ -282,21 +282,58 @@ def events():
 def move_job():
     """
     Called when a job event is dragged to a new position.
-    Payload: { id, date, time }
-      date — ISO date string (YYYY-MM-DD)
-      time — HH:MM string or null (when dropped onto all-day slot)
+    Updates DB then removes and re-adds the GCal event.
     """
     data     = request.get_json()
     job_id   = int(data['id'])
     new_date = data.get('date')
-    new_time = data.get('time')     # None when dropped to all-day row
-    new_end  = data.get('end_time') # None when all-day
+    new_time = data.get('time')
+    new_end  = data.get('end_time')
+
+    gcal_warning = None
 
     with get_db() as conn:
         conn.execute(
             "UPDATE jobs SET scheduled_date=?, scheduled_time=?, end_time=? WHERE id=?",
             (new_date, new_time, new_end, job_id))
         conn.commit()
+
+        job = conn.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
+
+        gcal_row = conn.execute(
+            "SELECT value FROM settings WHERE key='gcal_enabled'").fetchone()
+        gcal_enabled = gcal_row and gcal_row['value'] == '1'
+
+        if gcal_enabled and job['add_to_calendar']:
+            try:
+                from gcal_sync import upsert_calendar_event, delete_calendar_event
+
+                # Delete existing event
+                if job['gcal_event_id']:
+                    delete_calendar_event(job['gcal_event_id'])
+                    conn.execute(
+                        "UPDATE jobs SET gcal_event_id=NULL WHERE id=?", (job_id,))
+                    conn.commit()
+
+                # Re-fetch then create fresh event
+                fresh = conn.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
+                new_event_id = upsert_calendar_event(fresh)
+                if new_event_id:
+                    conn.execute(
+                        "UPDATE jobs SET gcal_event_id=? WHERE id=?",
+                        (new_event_id, job_id))
+                    conn.commit()
+                    import logging
+                    logging.getLogger('app').info(
+                        f"GCal updated for job {job_id} after drag: {new_event_id}")
+                else:
+                    gcal_warning = 'Job moved — calendar sync failed, please re-save.'
+            except Exception as e:
+                import logging
+                logging.getLogger('app').error(f"GCal sync on move_job {job_id}: {e}")
+                gcal_warning = f'Job moved — calendar sync error: {e}'
+
+        # Re-fetch final state for response
         job = conn.execute(
             "SELECT reference, scheduled_date, scheduled_time, end_time FROM jobs WHERE id=?",
             (job_id,)).fetchone()
@@ -307,6 +344,7 @@ def move_job():
         'scheduled_date': job['scheduled_date'],
         'scheduled_time': job['scheduled_time'],
         'end_time':       job['end_time'],
+        'gcal_warning':   gcal_warning,
     })
 
 
