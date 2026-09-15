@@ -16,11 +16,23 @@
         <form method="post" id="template-form">
           <div class="row g-3">
 
-            <div class="col-12">
+            <div class="col-md-8">
               <label class="sd-label">Template Name *</label>
               <input type="text" name="name" class="sd-input" required
                      placeholder="e.g. Booking Confirmation"
                      value="{{ tmpl['name'] if tmpl else '' }}">
+            </div>
+
+            <div class="col-md-4">
+              <label class="sd-label">Group</label>
+              <select name="grp" class="sd-input">
+                {% for g in (groups or ['booking','shop','bike','rental','misc']) %}
+                <option value="{{ g }}" style="text-transform:capitalize;"
+                  {% if tmpl and (tmpl['grp'] if tmpl['grp'] else 'misc') == g %}selected{% endif %}>
+                  {{ g|title }}
+                </option>
+                {% endfor %}
+              </select>
             </div>
 
             <div class="col-12">

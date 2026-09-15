@@ -25,6 +25,7 @@
         </button>
       </div>
 
+      <div id="customer-section">
       <div class="sd-card-header">
         <span><i class="bi bi-person-circle" style="color:var(--sd-accent);"></i> Customer</span>
       </div>
@@ -246,6 +247,7 @@
             </div>
           </div>
         </div>
+      </div><!-- end customer-section -->
 
         <div style="padding:1.5rem; display:flex; justify-content:flex-end; gap:0.75rem;">
           <a href="{{ url_for('jobs.index') }}" class="btn-ghost">Cancel</a>
@@ -278,7 +280,7 @@
                      transition:border-color 0.15s;"
               onmouseover="this.style.borderColor='var(--sd-accent)'"
               onmouseout="this.style.borderColor='var(--sd-border)'">
-        <i class="bi bi-{% if key == 'booking' %}calendar-check{% elif key == 'workshop' %}tools{% else %}bicycle{% endif %}"
+        <i class="bi bi-{% if key == 'booking' %}calendar-check{% elif key == 'workshop' %}tools{% elif key == 'sale_bike' %}bicycle{% elif key == 'sale' %}cash-coin{% else %}bicycle{% endif %}"
            style="font-size:1.3rem; color:var(--sd-accent); flex-shrink:0;"></i>
         <span>
           <strong>{{ info.label }}</strong>
@@ -322,10 +324,10 @@ TYPE_MODAL.addEventListener('click', function(e) {
 // Open modal immediately on page load — type is required
 window.addEventListener('DOMContentLoaded', function() {
   const preType = {{ (request.args.get('type', '') or '')|tojson }};
-  if (preType && ['booking','workshop','rental'].includes(preType)) {
+  if (preType && ['booking','workshop','rental','sale_bike'].includes(preType)) {
     selectType(preType,
-      {'booking':'Booking','workshop':'Workshop','rental':'Rental'}[preType],
-      {'booking':'FB','workshop':'PB','rental':'RB'}[preType]);
+      {'booking':'Booking','workshop':'Workshop','rental':'Rental','sale_bike':'Bike for Sale'}[preType],
+      {'booking':'FB','workshop':'PB','rental':'RB','sale_bike':'BK'}[preType]);
   } else {
     TYPE_MODAL.style.display = 'flex';
   }
@@ -520,6 +522,7 @@ function updateJobType(type) {
   const isBooking  = type === 'booking';
   const isWorkshop = type === 'workshop';
   const isRental   = type === 'rental';
+  const isSaleBike = type === 'sale_bike';
 
   // Booking date mode row
   const modeRow = document.getElementById('booking-mode-row');
@@ -529,6 +532,17 @@ function updateJobType(type) {
   const srCol = document.getElementById('sr-types-col');
   if (srCol) srCol.style.display = isWorkshop ? '' : 'none';
 
+  // Customer section — hidden for sale_bike (auto-assigned)
+  const custSection = document.getElementById('customer-section');
+  if (custSection) custSection.style.display = isSaleBike ? 'none' : '';
+
+  // Tax treatment — hidden for sale_bike (always inclusive)
+  const taxRow = document.getElementById('tax-select');
+  if (taxRow && taxRow.parentElement) {
+    taxRow.parentElement.style.display = isSaleBike ? 'none' : '';
+    if (isSaleBike) taxRow.value = '1';  // force inclusive
+  }
+
   // Region + suburb + time slots: booking only
   [document.getElementById('region-col'),
    document.getElementById('suburb-col'),
@@ -537,10 +551,10 @@ function updateJobType(type) {
     if (el) el.style.display = isBooking ? '' : 'none';
   });
 
-  // Address + service types: hide for workshop and rental
+  // Address + service types: hide for workshop, rental, sale_bike
   [document.getElementById('address-col'),
    document.getElementById('service-types-col')].forEach(function(el) {
-    if (el) el.style.display = (isWorkshop || isRental) ? 'none' : '';
+    if (el) el.style.display = (isWorkshop || isRental || isSaleBike) ? 'none' : '';
   });
   const bikeCol = document.getElementById('bike-desc-col');
   if (bikeCol) bikeCol.style.display = isRental ? 'none' : '';
@@ -564,6 +578,7 @@ function updateJobType(type) {
       nonbkDate.style.display = '';
       nonbkDate.disabled      = false;
       if (isWorkshop && !nonbkDate.value) nonbkDate.value = new Date().toISOString().slice(0,10);
+      if (isSaleBike && !nonbkDate.value) nonbkDate.value = new Date().toISOString().slice(0,10);
       if (isRental) nonbkDate.value = '';
     }
   }

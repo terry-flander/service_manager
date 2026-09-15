@@ -670,6 +670,9 @@
     <a href="{{ url_for('regions.suburb_map') }}" data-label="Suburb Map" class="sidebar-link {% if request.endpoint == 'regions.suburb_map' %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-map"></i> Suburb Map
     </a>
+    <a href="{{ url_for('bikes.bikes_list') }}" data-label="Bikes for Sale" class="sidebar-link {% if request.endpoint and 'bikes' in request.endpoint %}active{% endif %}" onclick="closeSidebar()">
+      <i class="bi bi-bicycle"></i> Bikes for Sale
+    </a>
     <div class="nav-section-label" style="margin-top:0.5rem;">Reports</div>
     <a href="{{ url_for('reports.sales') }}" data-label="Sales Report" class="sidebar-link {% if request.endpoint == 'reports.sales' %}active{% endif %}" onclick="closeSidebar()">
       <i class="bi bi-bar-chart-line"></i> Sales Report
@@ -1400,10 +1403,18 @@ function _replyLoadAddresses(fallbackAddr) {
     .then(function(r) { return r.json(); })
     .then(function(res) {
       if (!res.ok || !res.addresses || res.addresses.length === 0) {
-        _replyToAddr = fallbackAddr || '';
-        toSpan.innerHTML = 'To: ' + (_replyToAddr || '(no email on file)');
+        // No valid address — show warning and disable send
+        _replyToAddr = '';
+        toSpan.innerHTML =
+          '<span style="color:#f87171; font-size:0.8rem;">' +
+          '⚠ No valid email address — update the customer record first</span>';
+        var sendBtn = document.getElementById('reply-modal-send-btn');
+        if (sendBtn) { sendBtn.disabled = true; sendBtn.title = 'No valid email address'; }
         return;
       }
+      // Re-enable send in case it was previously disabled
+      var sendBtn = document.getElementById('reply-modal-send-btn');
+      if (sendBtn) { sendBtn.disabled = false; sendBtn.title = ''; }
       if (res.addresses.length === 1) {
         _replyToAddr    = res.addresses[0].email;
         _replyContactId = res.addresses[0].contact_id;
@@ -1418,7 +1429,6 @@ function _replyLoadAddresses(fallbackAddr) {
       });
       sel += '</select>';
       toSpan.innerHTML = 'To: ' + sel;
-      // Set initial selection
       _replyToAddr    = res.addresses[0].email;
       _replyContactId = res.addresses[0].contact_id;
     })
@@ -1816,10 +1826,11 @@ function initRichTextEditor(textareaId, options) {
 // list/report with the chosen query.
 
 const JOB_TYPE_CHOICES = [
-  ['booking',  'Booking'],
-  ['rental',   'Rental'],
-  ['workshop', 'Workshop'],
-  ['sale',     'Counter Sale'],
+  ['booking',   'Booking'],
+  ['rental',    'Rental'],
+  ['workshop',  'Workshop'],
+  ['sale',      'Counter Sale'],
+  ['sale_bike', 'Bike for Sale'],
 ];
 const STATUS_CHOICES = [
   ['pending',     'Pending'],

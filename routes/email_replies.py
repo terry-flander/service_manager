@@ -214,12 +214,22 @@ def _get_thread_refs(conn, job_id):
 
 # ── Email Templates CRUD ──────────────────────────────────────────────────────
 
+TEMPLATE_GROUPS = ['booking', 'shop', 'bike', 'rental', 'misc']
+
 @email_replies_bp.route('/email-templates')
 def templates_index():
+    grp = request.args.get('grp', '')
     with get_db() as conn:
-        templates = conn.execute(
-            "SELECT * FROM email_templates ORDER BY name").fetchall()
-    return render_template('email_templates/index.html', templates=templates)
+        if grp:
+            templates = conn.execute(
+                "SELECT * FROM email_templates WHERE grp=? ORDER BY name",
+                (grp,)).fetchall()
+        else:
+            templates = conn.execute(
+                "SELECT * FROM email_templates ORDER BY grp, name").fetchall()
+    return render_template('email_templates/index.html',
+                           templates=templates,
+                           groups=TEMPLATE_GROUPS, active_grp=grp)
 
 
 @email_replies_bp.route('/email-templates/new', methods=['GET', 'POST'])
@@ -228,18 +238,21 @@ def new_template():
         name    = request.form.get('name', '').strip()
         subject = request.form.get('subject', '').strip()
         body    = request.form.get('body', '').strip()
+        grp     = request.form.get('grp', 'misc').strip()
         if not name or not subject or not body:
             flash('Name, subject and body are all required.', 'danger')
             return render_template('email_templates/form.html',
-                                   tmpl=request.form, is_new=True)
+                                   tmpl=request.form, is_new=True,
+                                   groups=TEMPLATE_GROUPS)
         with get_db() as conn:
             conn.execute(
-                "INSERT INTO email_templates (name, subject, body) VALUES (?,?,?)",
-                (name, subject, body))
+                "INSERT INTO email_templates (name, subject, body, grp) VALUES (?,?,?,?)",
+                (name, subject, body, grp))
             conn.commit()
         flash(f'Template "{name}" created.', 'success')
         return redirect(url_for('email_replies.templates_index'))
-    return render_template('email_templates/form.html', tmpl=None, is_new=True)
+    return render_template('email_templates/form.html', tmpl=None, is_new=True,
+                           groups=TEMPLATE_GROUPS)
 
 
 @email_replies_bp.route('/email-templates/<int:tmpl_id>/edit', methods=['GET', 'POST'])
@@ -254,23 +267,26 @@ def edit_template(tmpl_id):
         name    = request.form.get('name', '').strip()
         subject = request.form.get('subject', '').strip()
         body    = request.form.get('body', '').strip()
+        grp     = request.form.get('grp', 'misc').strip()
         if not name or not subject or not body:
             flash('Name, subject and body are all required.', 'danger')
             return render_template('email_templates/form.html',
-                                   tmpl=request.form, is_new=False, tmpl_id=tmpl_id)
+                                   tmpl=request.form, is_new=False,
+                                   tmpl_id=tmpl_id, groups=TEMPLATE_GROUPS)
         with get_db() as conn:
             conn.execute("""
                 UPDATE email_templates
-                SET name=?, subject=?, body=?,
+                SET name=?, subject=?, body=?, grp=?,
                     updated_at=datetime('now')
                 WHERE id=?
-            """, (name, subject, body, tmpl_id))
+            """, (name, subject, body, grp, tmpl_id))
             conn.commit()
         flash(f'Template "{name}" updated.', 'success')
         return redirect(url_for('email_replies.templates_index'))
 
     return render_template('email_templates/form.html',
-                           tmpl=tmpl, is_new=False, tmpl_id=tmpl_id)
+                           tmpl=tmpl, is_new=False, tmpl_id=tmpl_id,
+                           groups=TEMPLATE_GROUPS)
 
 
 @email_replies_bp.route('/email-templates/<int:tmpl_id>/delete', methods=['POST'])
@@ -329,14 +345,22 @@ def compose_reply(job_id):
         body    = request.form.get('body', '').strip()
         tmpl_id = request.form.get('template_id') or None
 
+        from email_sender import is_sendable_email
         if not to_addr or not subject or not body:
             flash('To, Subject and Body are all required.', 'danger')
             return render_template('jobs/reply_compose.html',
                                    job=job, templates=templates,
                                    preview={'to': to_addr, 'subject': subject,
                                             'body': body},
-                                   template_id=tmpl_id,
-                                   thread_subject=thread_subject)
+                                   template_id=tmpl_id)
+        if not is_sendable_email(to_addr):
+            flash('This customer has no valid email address. '
+                  'Please update the customer or contact record first.', 'danger')
+            return render_template('jobs/reply_compose.html',
+                                   job=job, templates=templates,
+                                   preview={'to': to_addr, 'subject': subject,
+                                            'body': body},
+                                   template_id=tmpl_id)
 
         with get_db() as conn:
             in_reply_to, references = _get_thread_refs(conn, job_id)
@@ -507,6 +531,12 @@ def compose_send(job_id):
     if not to_addr or not subject or not body:
         return _j({'ok': False, 'error': 'To, Subject and Body are all required.'}), 400
 
+    from email_sender import is_sendable_email
+    if not is_sendable_email(to_addr):
+        return _j({'ok': False,
+            'error': 'This customer has no valid email address. '
+                     'Please update the customer or contact record first.'}), 400
+
     with get_db() as conn:
         job = conn.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchone()
         if not job:
@@ -627,7 +657,11 @@ def send_feedback_email(job_id):
         in_reply_to, references = _get_thread_refs(conn, job_id)
 
     try:
-        from email_sender import send_reply
+        from email_sender import send_reply, is_sendable_email
+        if not is_sendable_email(job['customer_email']):
+            return jsonify({'ok': False,
+                'error': 'No valid email address for this customer. '
+                         'Please update the customer record first.'}), 400
         msg_id = send_reply(
             to_address  = job['customer_email'],
             subject     = subject,

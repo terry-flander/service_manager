@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Second-Hand Bikes — Pista Bikes Melbourne</title>
+<meta name="description" content="Quality second-hand bikes for sale at Pista Bikes, Caulfield. Serviced, tested and ready to ride.">
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Lora:ital,wght@0,400;0,600;1,400&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --black:    #111111;
+    --white:    #ffffff;
+    --offwhite: #f8f7f4;
+    --surface:  #1c1c1c;
+    --copper:   #c97d3a;
+    --copper2:  #a86428;
+    --muted:    #888888;
+    --border:   #2a2a2a;
+    --card-bg:  #1a1a1a;
+    --green:    #2d7a45;
+  }
+
+  body { background: var(--black); color: var(--white);
+         font-family: 'Inter', system-ui, sans-serif; line-height: 1.6; }
+
+  /* ── Navbar — matches pistabikes.html exactly ── */
+  body { font-family: 'Barlow', sans-serif; }
+  h1, h2, h3 { font-family: 'Barlow Condensed', sans-serif; }
+
+  #navbar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    padding: 1.1rem 0;
+    transition: background .3s, box-shadow .3s;
+  }
+  #navbar.scrolled {
+    background: rgba(13,26,46,.96);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 2px 20px rgba(0,0,0,.5);
+  }
+  #navbar .inner {
+    max-width: 1280px; margin: 0 auto; padding: 0 2rem;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .logo {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 900; font-size: 1.6rem;
+    letter-spacing: .05em; text-transform: uppercase;
+    color: var(--white); text-decoration: none;
+    display: flex; align-items: center; gap: .4rem;
+  }
+  .logo span { color: var(--copper); }
+  nav { display: flex; gap: 2rem; }
+  nav a {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 600; font-size: 1rem;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--white); text-decoration: none; transition: color .2s;
+  }
+  nav a:hover, nav a.active { color: var(--copper); }
+  .hamburger {
+    display: none; flex-direction: column;
+    gap: 5px; cursor: pointer; padding: 4px;
+    background: none; border: none;
+  }
+  .hamburger span {
+    display: block; width: 24px; height: 2px;
+    background: var(--white); border-radius: 2px; transition: all .3s;
+  }
+  .nav-mobile {
+    display: none; position: fixed;
+    top: 64px; left: 0; right: 0;
+    background: rgba(13,26,46,.98);
+    padding: 1.5rem; flex-direction: column;
+    gap: 1.25rem; z-index: 99;
+  }
+  .nav-mobile.open { display: flex; }
+  .nav-mobile a {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700; font-size: 1.25rem;
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--white); text-decoration: none;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: .75rem;
+  }
+  .nav-mobile a:hover { color: var(--copper); }
+  @media (max-width: 768px) {
+    nav { display: none; }
+    .hamburger { display: flex; }
+  }
+
+  /* ── Hero — same structure as pistabikes.html ── */
+  .hero {
+    position: relative; min-height: 60vh;
+    display: flex; align-items: flex-end;
+    padding-bottom: 4rem; overflow: hidden;
+  }
+  .hero-bg {
+    position: absolute; inset: 0;
+    background-image: url('/static/img/site/Workshop.jpg');
+    background-size: cover; background-position: center 40%;
+  }
+  .hero-bg::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(to bottom,
+      rgba(13,26,46,.55) 0%,
+      rgba(13,26,46,.45) 40%,
+      rgba(13,26,46,.80) 75%,
+      rgba(13,26,46,1.0) 100%);
+  }
+  .hero-inner {
+    max-width: 1280px; margin: 0 auto; padding: 0 2rem;
+    position: relative; z-index: 1; width: 100%;
+  }
+  .hero-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: .78rem; font-weight: 700; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--copper); margin-bottom: .85rem;
+  }
+  .hero h1 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: clamp(2.5rem, 6vw, 4.5rem); font-weight: 900;
+    letter-spacing: .02em; text-transform: uppercase;
+    line-height: 1.0; margin-bottom: .75rem;
+  }
+  .hero p {
+    font-family: 'Lora', serif; font-style: italic;
+    color: rgba(255,255,255,.75); font-size: 1.05rem;
+    max-width: 520px; line-height: 1.65;
+  }
+
+  .controls-bar {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    position: sticky; top: 63px; z-index: 50;
+  }
+  .controls-inner {
+    max-width: 1280px; margin: 0 auto; padding: .85rem 2rem;
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+    flex-wrap: wrap;
+  }
+  .bike-count { font-size: .85rem; color: var(--muted); font-family: 'Barlow', sans-serif; }
+  .bike-count strong { color: var(--white); }
+  .sort-wrap { display: flex; align-items: center; gap: .6rem; }
+  .sort-wrap label { font-size: .82rem; color: var(--muted); font-family: 'Barlow', sans-serif; }
+  .sort-wrap select {
+    background: var(--card-bg); border: 1px solid var(--border);
+    color: var(--white); border-radius: 6px;
+    padding: .3rem .75rem; font-size: .82rem; cursor: pointer; outline: none;
+    font-family: 'Barlow', sans-serif;
+  }
+  .sort-wrap select:focus { border-color: var(--copper); }
+
+  /* ── Grid ── */
+  .gallery-section { max-width: 1280px; margin: 0 auto; padding: 3rem 2rem 4rem; }
+  .bike-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.5rem;
+  }
+
+  /* ── Card ── */
+  .bike-card {
+    background: var(--card-bg); border: 1px solid var(--border);
+    border-radius: 10px; overflow: hidden; cursor: pointer;
+    transition: transform .2s, border-color .2s, box-shadow .2s;
+  }
+  .bike-card:hover {
+    transform: translateY(-4px); border-color: var(--copper);
+    box-shadow: 0 12px 40px rgba(201,125,58,.15);
+  }
+  .card-img {
+    aspect-ratio: 4/3; overflow: hidden; background: #111;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .card-img img { width: 100%; height: 100%; object-fit: cover;
+                  transition: transform .3s; }
+  .bike-card:hover .card-img img { transform: scale(1.04); }
+  .card-img .no-img { color: var(--border); font-size: 3rem; }
+  .card-body { padding: 1rem 1.1rem 1.25rem; }
+  .card-meta { display: flex; align-items: center; gap: .5rem;
+               margin-bottom: .4rem; flex-wrap: wrap; }
+  .card-year { font-size: .7rem; font-weight: 600; color: var(--copper);
+               text-transform: uppercase; letter-spacing: .06em; }
+  .card-condition { font-size: .7rem; padding: .1rem .4rem;
+                    border: 1px solid var(--border); border-radius: 3px;
+                    color: var(--muted); }
+  .card-size { font-size: .7rem; padding: .1rem .4rem;
+               border: 1px solid var(--copper); border-radius: 3px;
+               color: var(--copper); }
+  .card-title { font-size:.97rem; font-weight:700; line-height:1.35;
+                margin-bottom:.5rem; color:var(--white);
+                font-family:'Barlow Condensed', sans-serif; letter-spacing:.03em; }
+  .card-colour { font-size:.78rem; color:var(--muted); margin-bottom:.75rem;
+                 font-family:'Barlow', sans-serif; }
+  .card-price { font-size:1.3rem; font-weight:800; color:var(--white);
+                font-family:'Barlow Condensed', sans-serif; }
+  .card-sold { color: var(--muted); font-size: 1rem; font-style: italic; }
+  .card-enquire {
+    display: block; width: 100%; margin-top: .85rem;
+    background: var(--copper); color: var(--white);
+    border: none; border-radius: 6px; padding: .6rem;
+    font-size: .82rem; font-weight: 600; cursor: pointer;
+    transition: background .15s; text-align: center;
+  }
+  .card-enquire:hover { background: var(--copper2); }
+
+  /* ── Loading / empty ── */
+  .loading { text-align: center; padding: 5rem 2rem; color: var(--muted); font-size: 1rem; }
+  .loading-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+                 background: var(--copper); margin: 0 3px;
+                 animation: bounce .9s infinite alternate; }
+  .loading-dot:nth-child(2) { animation-delay: .3s; }
+  .loading-dot:nth-child(3) { animation-delay: .6s; }
+  @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-10px); } }
+  .empty-state { text-align: center; padding: 5rem 2rem; }
+  .empty-state h3 { font-size: 1.3rem; margin-bottom: .5rem; }
+  .empty-state p { color: var(--muted); }
+
+  /* ── Popup modal ── */
+  #bike-modal-overlay {
+    display: none; position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0,0,0,.85); backdrop-filter: blur(4px);
+    align-items: center; justify-content: center; padding: 1rem;
+  }
+  #bike-modal-overlay.open { display: flex; }
+  #bike-modal {
+    background: #1a1a1a; border: 1px solid var(--border);
+    border-radius: 12px; width: min(1000px, 100%); max-height: 92vh;
+    display: flex; flex-direction: column; overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0,0,0,.8);
+  }
+  .modal-header {
+    padding: .9rem 1.25rem; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  }
+  .modal-header h3 { font-size:1rem; font-weight:700;
+                     font-family:'Barlow Condensed', sans-serif; letter-spacing:.05em; text-transform:uppercase; }
+  .modal-close { background:none; border:none; color:var(--muted);
+                 font-size:1.5rem; cursor:pointer; line-height:1;
+                 transition:color .15s; padding:.25rem; }
+  .modal-close:hover { color:var(--white); }
+  .modal-body {
+    display: grid; grid-template-columns: 1fr 1fr;
+    overflow-y: auto; flex: 1;
+  }
+  @media (max-width: 640px) { .modal-body { grid-template-columns: 1fr; } }
+
+  /* Modal — image side */
+  .modal-images { padding: 1.25rem; display: flex; flex-direction: column; gap: .75rem; }
+  .modal-main-img {
+    aspect-ratio: 4/3; border-radius: 8px; overflow: hidden;
+    background: #111; border: 1px solid var(--border);
+  }
+  .modal-main-img img { width: 100%; height: 100%; object-fit: cover; }
+  .modal-thumb-strip { display: flex; gap: .5rem; flex-wrap: wrap; }
+  .modal-thumb {
+    width: 64px; height: 64px; border-radius: 5px; overflow: hidden;
+    cursor: pointer; border: 2px solid transparent; transition: border-color .15s; flex-shrink: 0;
+  }
+  .modal-thumb.active { border-color: var(--copper); }
+  .modal-thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+  /* Modal — details side */
+  .modal-details { padding: 1.5rem 1.5rem 1.5rem 1rem; overflow-y: auto; }
+  .modal-year-label { font-size: .72rem; font-weight: 700; letter-spacing: .1em;
+                      text-transform: uppercase; color: var(--copper); margin-bottom: .35rem; }
+  .modal-title { font-family:'Barlow Condensed', sans-serif;
+                 font-size:1.6rem; font-weight:900; letter-spacing:.02em; text-transform:uppercase;
+                 line-height:1.1; margin-bottom:.4rem; }
+  .modal-tags { display:flex; gap:.4rem; flex-wrap:wrap; margin-bottom:1rem; }
+  .modal-tag { font-size:.72rem; padding:.2rem .55rem; border-radius:4px;
+               border:1px solid var(--border); color:var(--muted);
+               font-family:'Barlow', sans-serif; }
+  .modal-tag.copper { border-color:var(--copper); color:var(--copper); }
+  .modal-price { font-family:'Barlow Condensed', sans-serif;
+                 font-size:2.2rem; font-weight:900; color:var(--white);
+                 margin-bottom:1.25rem; letter-spacing:.01em; }
+  .modal-enquire {
+    display: block; width: 100%; background: var(--copper);
+    color: var(--white); border: none; border-radius: 7px;
+    padding: .85rem; font-size: .95rem; font-weight: 700;
+    cursor: pointer; text-align: center; text-decoration: none;
+    transition: background .15s; margin-bottom: 1.25rem;
+  }
+  .modal-enquire:hover { background: var(--copper2); }
+  .modal-divider { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
+  .modal-desc { font-size: .85rem; color: rgba(255,255,255,.8); line-height: 1.7; }
+  .modal-desc h3 { color: var(--white); font-size: .78rem; font-weight: 700;
+                   text-transform: uppercase; letter-spacing: .08em;
+                   margin: 1rem 0 .3rem; }
+  .modal-desc p { margin-bottom: .5rem; }
+  .modal-specs-plain { font-size: .8rem; color: var(--muted); white-space: pre-wrap;
+                       font-family: monospace; line-height: 1.8; }
+
+  /* ── Map section ── */
+  .map-section { background: var(--surface); border-top: 1px solid var(--border); }
+  .map-inner { max-width: 1280px; margin: 0 auto; padding: 4rem 2rem;
+               display: grid; grid-template-columns: 1fr 1fr; gap: 3rem;
+               align-items: center; }
+  @media (max-width: 768px) { .map-inner { grid-template-columns: 1fr; } }
+  .map-text h2 { font-size:1.8rem; font-weight:800; letter-spacing:.02em; text-transform:uppercase;
+                 font-family:'Barlow Condensed', sans-serif; margin-bottom:.75rem; }
+  .map-text p { color: rgba(255,255,255,.65); line-height: 1.7; margin-bottom: 1rem; }
+  .map-address { display: flex; flex-direction: column; gap: .3rem;
+                 font-size: .9rem; margin-top: 1.25rem; }
+  .map-address span { color: rgba(255,255,255,.7); }
+  .map-address strong { color: var(--white); }
+  .map-frame { border-radius: 10px; overflow: hidden; border: 1px solid var(--border); height: 320px; }
+  .map-frame iframe { width: 100%; height: 100%; border: none; }
+
+  /* ── Footer ── */
+  footer { text-align: center; padding: 2rem; font-size: .78rem; color: var(--muted);
+           border-top: 1px solid var(--border); }
+  footer a { color: var(--muted); text-decoration: none; }
+  footer a:hover { color: var(--copper); }
+</style>
+</head>
+<body>
+
+<!-- Navbar — matches pistabikes.html -->
+<header id="navbar">
+  <div class="inner">
+    <a href="pistabikes.html" class="logo">Pista <span>Bikes</span></a>
+    <nav>
+      <a href="pistabikes.html">Home</a>
+      <a href="pistabikes.html#section-services">Services</a>
+      <a href="pistabikes.html#section-repairs">Repairs</a>
+      <a href="pistabikes.html#section-gear">Shop</a>
+      <a href="pistabikes-bikes.html" class="active">Used Bikes</a>
+      <a href="pistabikes.html#section-contact">Book</a>
+    </nav>
+    <div class="hamburger" id="hamburgerBtn" aria-label="Open menu" onclick="toggleNav()">
+      <span></span><span></span><span></span>
+    </div>
+  </div>
+</header>
+
+<div class="nav-mobile" id="nav-mobile">
+  <a href="pistabikes.html"                  onclick="closeNav()">Home</a>
+  <a href="pistabikes.html#section-services" onclick="closeNav()">Services</a>
+  <a href="pistabikes.html#section-repairs"  onclick="closeNav()">Repairs</a>
+  <a href="pistabikes.html#section-gear"     onclick="closeNav()">Shop</a>
+  <a href="pistabikes-bikes.html"            onclick="closeNav()">Used Bikes</a>
+  <a href="pistabikes.html#section-contact"  onclick="closeNav()">Book a Visit</a>
+</div>
+
+<!-- Hero -->
+<section class="hero" style="padding-top:64px;">
+  <div class="hero-bg"></div>
+  <div class="hero-inner">
+    <div class="hero-label">Pre-loved &amp; Workshop-ready</div>
+    <h1>Second-Hand<br>Bikes</h1>
+    <p>Every bike is donated, professionally serviced by our mechanics, and priced to get you riding.</p>
+  </div>
+</section>
+
+<!-- Controls bar -->
+<div class="controls-bar">
+  <div class="controls-inner">
+    <div class="bike-count"><strong id="count-num">—</strong> <span id="count-label">bikes available</span></div>
+    <div class="sort-wrap">
+      <label for="sort-select">Sort by</label>
+      <select id="sort-select" onchange="renderGrid()">
+        <option value="default">Latest first</option>
+        <option value="price-asc">Price: Low → High</option>
+        <option value="price-desc">Price: High → Low</option>
+        <option value="name-asc">Name A → Z</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<!-- Gallery -->
+<section class="gallery-section">
+  <div id="bike-grid" class="bike-grid">
+    <div class="loading" style="grid-column:1/-1;">
+      <span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span>
+      <p style="margin-top:1rem;">Loading bikes…</p>
+    </div>
+  </div>
+</section>
+
+<!-- Popup modal -->
+<div id="bike-modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div id="bike-modal">
+    <div class="modal-header">
+      <h3 id="modal-title">—</h3>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <!-- Images -->
+      <div class="modal-images">
+        <div class="modal-main-img">
+          <img id="modal-main-img" src="" alt="">
+        </div>
+        <div class="modal-thumb-strip" id="modal-thumbs"></div>
+      </div>
+      <!-- Details -->
+      <div class="modal-details">
+        <div class="modal-year-label" id="modal-year">—</div>
+        <div class="modal-title" id="modal-name">—</div>
+        <div class="modal-tags" id="modal-tags"></div>
+        <div class="modal-price" id="modal-price">—</div>
+        <a href="pistabikes.html#section-contact" class="modal-enquire">
+          Enquire about this bike →
+        </a>
+        <hr class="modal-divider">
+        <div class="modal-desc" id="modal-desc"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Map -->
+<section class="map-section">
+  <div class="map-inner">
+    <div class="map-text">
+      <h2>Visit the Workshop</h2>
+      <p>All our second-hand bikes are at our Caulfield workshop. Come in for a test ride — we're open six days a week. Our mechanics are on hand to answer any questions.</p>
+      <div class="map-address">
+        <strong>Pista Bikes</strong>
+        <span>255 Hawthorn Road, Caulfield North VIC 3161</span>
+        <span>Mon–Sat · 9am – 5pm</span>
+        <span><a href="tel:0403225135" style="color:var(--copper);">0403 225 135</a></span>
+      </div>
+    </div>
+    <div class="map-frame">
+      <iframe
+        src="https://www.openstreetmap.org/export/embed.html?bbox=145.0455,-37.8804,145.0555,-37.8740&layer=mapnik&marker=37.879356,145.023747"
+        allowfullscreen loading="lazy"
+        title="Pista Bikes location">
+      </iframe>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <p>© 2026 Pista Bikes · 255 Hawthorn Road, Caulfield North · Part of the <a href="https://theflyingbike.com.au">Flying Bike Group</a></p>
+</footer>
+
+<script>
+const API_URL = 'https://app.theflyingbike.com.au/bikes-for-sale';
+var allBikes = [];
+
+// ── Fetch ──────────────────────────────────────────────────────────────────
+fetch(API_URL)
+  .then(r => r.json())
+  .then(data => {
+    allBikes = data.filter(b => b.status === 'available');
+    renderGrid();
+  })
+  .catch(() => {
+    document.getElementById('bike-grid').innerHTML =
+      '<div class="empty-state" style="grid-column:1/-1;"><h3>Could not load bikes</h3><p>Please try again later or call us on <a href="tel:0403225135" style="color:var(--copper);">0403 225 135</a>.</p></div>';
+  });
+
+// ── Sort & render ──────────────────────────────────────────────────────────
+function sortedBikes() {
+  var sort = document.getElementById('sort-select').value;
+  var bikes = allBikes.slice();
+  if (sort === 'price-asc')  bikes.sort((a,b) => (a.asking_price||9999) - (b.asking_price||9999));
+  if (sort === 'price-desc') bikes.sort((a,b) => (b.asking_price||0) - (a.asking_price||0));
+  if (sort === 'name-asc')   bikes.sort((a,b) => (a.short_desc||'').localeCompare(b.short_desc||''));
+  return bikes;
+}
+
+function renderGrid() {
+  var bikes = sortedBikes();
+  var grid  = document.getElementById('bike-grid');
+
+  // Count
+  var count = bikes.length;
+  document.getElementById('count-num').textContent = count;
+  document.getElementById('count-label').textContent = count === 1 ? 'bike available' : 'bikes available';
+
+  if (!count) {
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><h3>No bikes at the moment</h3><p>Check back soon — we regularly receive donated bikes and get them road-ready.</p></div>';
+    return;
+  }
+
+  grid.innerHTML = bikes.map(b => {
+    var img   = b.images && b.images[0] ? `<img src="${b.images[0].url}" alt="${esc(b.short_desc)}" loading="lazy">` : '<span class="no-img">🚲</span>';
+    var price = b.asking_price ? `<div class="card-price">$${Number(b.asking_price).toLocaleString('en-AU', {minimumFractionDigits:0})}</div>` : '<div class="card-price" style="color:var(--muted);">POA</div>';
+    var meta  = [
+      b.year_est ? `<span class="card-year">${b.year_est}</span>` : '',
+      b.condition_grade ? `<span class="card-condition">${esc(b.condition_grade)}</span>` : '',
+      b.frame_size ? `<span class="card-size">${esc(b.frame_size)}</span>` : '',
+    ].filter(Boolean).join('');
+    var colour = b.colour ? `<div class="card-colour">${esc(b.colour)}</div>` : '';
+    return `<div class="bike-card" onclick="openModal(${b.id})">
+      <div class="card-img">${img}</div>
+      <div class="card-body">
+        <div class="card-meta">${meta}</div>
+        <div class="card-title">${esc(b.short_desc || b.bike_description || 'Bicycle')}</div>
+        ${colour}
+        ${price}
+        <button class="card-enquire" onclick="event.stopPropagation(); window.location='pistabikes.html#section-contact';">Enquire →</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Modal ──────────────────────────────────────────────────────────────────
+function openModal(bikeId) {
+  var b = allBikes.find(x => x.id === bikeId);
+  if (!b) return;
+
+  document.getElementById('modal-title').textContent =
+    b.short_desc || b.bike_description || 'Bicycle';
+  document.getElementById('modal-year').textContent =
+    b.year_est ? b.year_est : '';
+  document.getElementById('modal-name').textContent =
+    b.short_desc || b.bike_description || 'Bicycle';
+
+  // Tags
+  var tags = [];
+  if (b.condition_grade) tags.push(`<span class="modal-tag">${esc(b.condition_grade)}</span>`);
+  if (b.frame_size)      tags.push(`<span class="modal-tag copper">${esc(b.frame_size)}</span>`);
+  if (b.colour)          tags.push(`<span class="modal-tag">${esc(b.colour)}</span>`);
+  document.getElementById('modal-tags').innerHTML = tags.join('');
+
+  // Price
+  document.getElementById('modal-price').textContent =
+    b.asking_price ? `$${Number(b.asking_price).toLocaleString('en-AU', {minimumFractionDigits:0})}` : 'Price on application';
+
+  // Description
+  var descEl = document.getElementById('modal-desc');
+  if (b.description_html && b.description_html.trim()) {
+    descEl.innerHTML = b.description_html;
+  } else if (b.specs && b.specs.trim()) {
+    descEl.innerHTML = `<pre class="modal-specs-plain">${esc(b.specs)}</pre>`;
+  } else {
+    descEl.innerHTML = '<p style="color:var(--muted);">Contact us for full specifications.</p>';
+  }
+
+  // Images
+  var imgs = b.images || [];
+  var mainImg = document.getElementById('modal-main-img');
+  if (imgs.length) {
+    mainImg.src = imgs[0].url;
+    mainImg.alt = b.short_desc || '';
+  } else {
+    mainImg.src = '';
+  }
+
+  var thumbStrip = document.getElementById('modal-thumbs');
+  thumbStrip.innerHTML = imgs.map((img, i) =>
+    `<div class="modal-thumb ${i===0?'active':''}" onclick="selectThumb(this,'${img.url}')">
+      <img src="${img.url}" alt="Photo ${i+1}">
+    </div>`
+  ).join('');
+
+  document.getElementById('bike-modal-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function selectThumb(el, url) {
+  document.getElementById('modal-main-img').src = url;
+  document.querySelectorAll('.modal-thumb').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function closeModal() {
+  document.getElementById('bike-modal-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// ── Navbar scroll ──────────────────────────────────────────────────────────
+window.addEventListener('scroll', () => {
+  document.getElementById('navbar').classList.toggle('scrolled', window.scrollY > 40);
+});
+document.getElementById('navbar').classList.add('scrolled');
+
+function toggleNav() { document.getElementById('nav-mobile').classList.toggle('open'); }
+function closeNav()  { document.getElementById('nav-mobile').classList.remove('open'); }
+// Navbar always scrolled on this page (no full-height hero to scroll past)
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>

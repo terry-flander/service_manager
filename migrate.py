@@ -460,3 +460,67 @@ try:
     print("email_import_attachments table ready.")
 except Exception as e:
     print(f"email_import_attachments migration skipped: {e}")
+
+# ── Bikes for Sale tables ──────────────────────────────────────────────────────
+try:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS bikes_for_sale (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id       INTEGER UNIQUE REFERENCES jobs(id) ON DELETE CASCADE,
+            short_desc   TEXT NOT NULL DEFAULT '',
+            specs        TEXT NOT NULL DEFAULT '',
+            year_est     INTEGER,
+            asking_price REAL,
+            min_price    REAL,
+            status       TEXT NOT NULL DEFAULT 'preparing',
+            created_at   TEXT DEFAULT (datetime('now')),
+            updated_at   TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS bike_images (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            bike_id    INTEGER NOT NULL REFERENCES bikes_for_sale(id) ON DELETE CASCADE,
+            filename   TEXT NOT NULL,
+            filepath   TEXT NOT NULL,
+            sort_order INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    conn.commit()
+    print("bikes_for_sale and bike_images tables ready.")
+except Exception as e:
+    print(f"bikes_for_sale migration skipped: {e}")
+
+# ── email_templates.grp column ────────────────────────────────────────────────
+try:
+    conn.execute("ALTER TABLE email_templates ADD COLUMN grp TEXT NOT NULL DEFAULT 'misc'")
+    conn.commit()
+    print("email_templates.grp column added.")
+except Exception as e:
+    print(f"email_templates.grp skipped: {e}")
+
+# ── bikes_sold_days setting ───────────────────────────────────────────────────
+try:
+    conn.execute("""
+        INSERT OR IGNORE INTO settings (key, value)
+        VALUES ('bikes_sold_days', '30')
+    """)
+    conn.commit()
+    print("bikes_sold_days setting ready.")
+except Exception as e:
+    print(f"bikes_sold_days setting skipped: {e}")
+
+# ── bikes_for_sale additional columns ────────────────────────────────────────
+for col, defn in [
+    ('description_html', 'TEXT DEFAULT ""'),
+    ('condition_grade',  'TEXT DEFAULT ""'),
+    ('frame_size',       'TEXT DEFAULT ""'),
+    ('colour',           'TEXT DEFAULT ""'),
+]:
+    try:
+        conn.execute(f"ALTER TABLE bikes_for_sale ADD COLUMN {col} {defn}")
+        conn.commit()
+        print(f"bikes_for_sale.{col} added.")
+    except Exception as e:
+        print(f"bikes_for_sale.{col} skipped: {e}")

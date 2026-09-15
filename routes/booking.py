@@ -209,8 +209,11 @@ def submit():
 
     # Send acknowledgement to customer and store in email_replies for thread
     try:
-        from email_sender import send_reply
-        ack_html = _acknowledgement_html(name, services)
+        from email_sender import send_reply, is_sendable_email
+        if not is_sendable_email(email):
+            log.warning(f"Booking ack skipped — no valid email for {ref}")
+        else:
+            ack_html = _acknowledgement_html(name, services)
         ack_text = _acknowledgement_text(name, services)
         ack_subject = "Your booking with The Flying Bike"
         ack_msg_id  = send_reply(

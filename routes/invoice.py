@@ -191,6 +191,13 @@ def pdf_invoice_file(job_id):
     subtotal, gst, total = job['subtotal'] or 0.0, job['gst'] or 0.0, job['total'] or 0.0
     tax_inclusive = bool(tax_raw) and not gst_exempt
 
+    # sale_bike: always tax inclusive; total IS the agreed sale price
+    if job['job_type'] == 'sale_bike':
+        tax_inclusive = True
+        total    = job['total'] or 0.0
+        subtotal = round(total / 1.1, 2)
+        gst      = round(total - subtotal, 2)
+
     from invoice_pdf import generate_invoice_pdf
     buf = generate_invoice_pdf(job, job_parts, tax_inclusive, subtotal, gst, total)
 

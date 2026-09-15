@@ -153,8 +153,8 @@ def _xero_request(method, path, payload=None):
 
 def _tax_type_and_inclusive(job):
     """Map ServiceDesk tax_inclusive field to Xero tax fields."""
-    tax_raw = job.get('tax_inclusive') or 0
-    payment = (job.get('payment_type') or '').lower()
+    tax_raw = job['tax_inclusive'] or 0
+    payment = (job['payment_type'] or '').lower()
     gst_exempt = (tax_raw == 2)
 
     if payment == 'cash' or gst_exempt:
@@ -189,33 +189,54 @@ def push_invoice(job, job_parts, invoice_number):
     pc_match = _re.search(r'\b(\d{4})\b', address)
     postcode = pc_match.group(1) if pc_match else ''
 
-    # Send a single consolidated line item using the job's stored total.
-    # For tax-inclusive jobs, send the full inclusive amount with LineAmountTypes=Inclusive.
-    # For tax-exclusive jobs, send the subtotal (ex-GST).
-    if line_amount_type == 'Inclusive':
-        unit_amount = float(job.get('total') or 0)
-    else:
-        unit_amount = float(job.get('subtotal') or job.get('total') or 0)
+    is_sale_bike = (job['job_type'] or '') == 'sale_bike'
 
-    if job_parts:
-        desc_lines = []
-        for jp in job_parts:
-            pnum = (jp.get('part_number') or '').strip()
-            pdesc = (jp.get('description') or '').strip()
-            qty  = float(jp['quantity'])
-            price = float(jp['unit_cost'])
-            # Show part_number as primary label, description as subtitle if different
-            if pnum and pdesc and pnum != pdesc:
-                label = f"{pnum} ({pdesc})"
-            elif pnum:
-                label = pnum
+    if is_sale_bike:
+        # Bike for Sale: single line, description from bikes_for_sale,
+        # total = full sale price, always tax inclusive
+        try:
+            from models import get_db as _gdb
+            with _gdb() as _conn:
+                _brow = _conn.execute(
+                    "SELECT short_desc, year_est FROM bikes_for_sale WHERE job_id=?",
+                    (job['id'],)).fetchone()
+            if _brow and _brow['short_desc']:
+                bike_desc = _brow['short_desc']
+                if _brow['year_est']:
+                    bike_desc = f"{_brow['year_est']} {bike_desc}"
             else:
-                label = pdesc
-            desc_lines.append(
-                f"{qty:.0f}x {label} ${price:.2f}")
-        description = '\n'.join(desc_lines)
+                bike_desc = job['bike_description'] or 'Bicycle'
+        except Exception:
+            bike_desc = job['bike_description'] or 'Bicycle'
+
+        description     = bike_desc
+        unit_amount     = float(job['total'] or 0)
+        tax_type        = 'OUTPUT'
+        line_amount_type = 'Inclusive'
     else:
-        description = f"Bicycle service — {job['reference']}"
+        # Send a single consolidated line item using the job's stored total.
+        if line_amount_type == 'Inclusive':
+            unit_amount = float(job['total'] or 0)
+        else:
+            unit_amount = float(job['subtotal'] or job['total'] or 0)
+
+        if job_parts:
+            desc_lines = []
+            for jp in job_parts:
+                pnum  = (jp.get('part_number') or '').strip()
+                pdesc = (jp.get('description') or '').strip()
+                qty   = float(jp['quantity'])
+                price = float(jp['unit_cost'])
+                if pnum and pdesc and pnum != pdesc:
+                    label = f"{pnum} ({pdesc})"
+                elif pnum:
+                    label = pnum
+                else:
+                    label = pdesc
+                desc_lines.append(f"{qty:.0f}x {label} ${price:.2f}")
+            description = '\n'.join(desc_lines)
+        else:
+            description = f"Bicycle service — {job['reference']}"
 
     line_items = [{
         'Description': description,

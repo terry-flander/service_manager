@@ -362,8 +362,31 @@ def init_db():
                 name       TEXT NOT NULL,
                 subject    TEXT NOT NULL,
                 body       TEXT NOT NULL,
+                grp        TEXT NOT NULL DEFAULT 'misc',
                 created_at TEXT DEFAULT (datetime('now')),
                 updated_at TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS bikes_for_sale (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_id       INTEGER UNIQUE REFERENCES jobs(id) ON DELETE CASCADE,
+                short_desc   TEXT NOT NULL DEFAULT '',
+                specs        TEXT NOT NULL DEFAULT '',
+                year_est     INTEGER,
+                asking_price REAL,
+                min_price    REAL,
+                status       TEXT NOT NULL DEFAULT 'preparing',
+                created_at   TEXT DEFAULT (datetime('now')),
+                updated_at   TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS bike_images (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                bike_id    INTEGER NOT NULL REFERENCES bikes_for_sale(id) ON DELETE CASCADE,
+                filename   TEXT NOT NULL,
+                filepath   TEXT NOT NULL,
+                sort_order INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (datetime('now'))
             );
 
             CREATE TABLE IF NOT EXISTS email_replies (

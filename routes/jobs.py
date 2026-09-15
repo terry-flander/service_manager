@@ -83,10 +83,11 @@ def _load_service_types(conn, job_group=None):
                       'Tribe/Cargo Bike Service', '3 or More Bikes', 'Other']]
 
 JOB_TYPES = {
-    'booking':  {'label': 'Booking',  'prefix': 'FB'},
-    'workshop': {'label': 'Workshop', 'prefix': 'PB'},
-    'rental':   {'label': 'Rental',   'prefix': 'RB'},
-    'sale':     {'label': 'Sale',     'prefix': 'CS'},
+    'booking':   {'label': 'Booking',       'prefix': 'FB'},
+    'workshop':  {'label': 'Workshop',      'prefix': 'PB'},
+    'rental':    {'label': 'Rental',        'prefix': 'RB'},
+    'sale':      {'label': 'Sale',          'prefix': 'CS'},
+    'sale_bike': {'label': 'Bike for Sale', 'prefix': 'BK'},
 }
 
 
@@ -509,16 +510,22 @@ def new_job():
         sched_time = request.form.get('scheduled_time') or None
         end_time   = request.form.get('end_time') or None
         end_date   = request.form.get('end_date') or None
-        # Workshop and rental jobs have no time slots
-        if job_type in ('workshop', 'rental'):
+        # Workshop, rental and sale_bike jobs have no time slots
+        if job_type in ('workshop', 'rental', 'sale_bike'):
             sched_time = None
             end_time   = None
         # Non-rental jobs have no end_date
         if job_type != 'rental':
             end_date = None
-        cust_name  = request.form['customer_name']
-        cust_email = request.form.get('customer_email', '').strip()
-        cust_phone = request.form.get('customer_phone', '').strip()
+        # sale_bike: auto-assign Bikes for Sale internal customer
+        if job_type == 'sale_bike':
+            cust_name  = 'Bikes for Sale'
+            cust_email = 'bikes.for.sale@flyingbike.internal'
+            cust_phone = ''
+        else:
+            cust_name  = request.form['customer_name']
+            cust_email = request.form.get('customer_email', '').strip()
+            cust_phone = request.form.get('customer_phone', '').strip()
 
         cust_address = request.form.get('customer_address', '').strip()
         # If customer_id was passed from the customer page, use it directly
@@ -536,13 +543,12 @@ def new_job():
                 explicit_address = request.form.get('address', '').strip()
                 job_address = explicit_address or stored_address or suburb
                 try:
-                    # Rental: no region/suburb/bike_desc/service_types
-                    _suburb       = '' if job_type == 'rental' else suburb
-                    _region_id    = region_id
-                    _bike_desc    = '' if job_type == 'rental' else request.form.get('bike_description', '')
-                    # service_types: filter submitted values to only labels
-                    # valid for this job's group (booking/workshop)
-                    if job_type == 'rental':
+                    # Rental: no suburb/bike_desc/service_types
+                    # sale_bike: no suburb/region/service_types (like workshop)
+                    _suburb    = '' if job_type in ('rental', 'sale_bike') else suburb
+                    _region_id = region_id
+                    _bike_desc = '' if job_type == 'rental' else request.form.get('bike_description', '')
+                    if job_type in ('rental', 'sale_bike'):
                         _svc_types = ''
                     else:
                         _group = 'workshop' if job_type == 'workshop' else 'booking'
@@ -972,20 +978,27 @@ def edit_job_legacy(job_id):
         suburb     = request.form.get('suburb', '').strip()
         address    = request.form.get('address', '').strip() or suburb
 
-        cust_name  = request.form['customer_name']
-        cust_email = request.form.get('customer_email', '').strip()
-        cust_phone = request.form.get('customer_phone', '').strip()
         job_type   = request.form.get('job_type', job['job_type'])
+        # sale_bike: keep internal customer locked
+        if job_type == 'sale_bike':
+            cust_name  = job['customer_name']
+            cust_email = job['customer_email']
+            cust_phone = job['customer_phone']
+        else:
+            cust_name  = request.form['customer_name']
+            cust_email = request.form.get('customer_email', '').strip()
+            cust_phone = request.form.get('customer_phone', '').strip()
+
         sched_time = request.form.get('scheduled_time') or None
         end_time   = request.form.get('end_time') or None
         end_date   = request.form.get('end_date') or None
-        if job_type in ('workshop', 'rental'):
+        if job_type in ('workshop', 'rental', 'sale_bike'):
             sched_time = None
             end_time   = None
         if job_type != 'rental':
             end_date = None
-        # Rental: clear inapplicable fields
-        _suburb     = '' if job_type == 'rental' else suburb
+        # sale_bike/rental: clear inapplicable fields
+        _suburb     = '' if job_type in ('rental', 'sale_bike') else suburb
         _bike_desc  = '' if job_type == 'rental' else request.form.get('bike_description', '')
         _svc_types  = '' if job_type == 'rental' else ', '.join(request.form.getlist('service_types'))
         _region_id  = int(request.form.get('region_id') or 1)
@@ -1206,6 +1219,13 @@ def send_trigger_email(job_id):
         if not job or not tmpl:
             return jsonify({'ok': False, 'error': 'Not found'}), 404
 
+        # Block sending to system-generated placeholder addresses
+        from email_sender import is_sendable_email
+        if not is_sendable_email(job['customer_email']):
+            return jsonify({'ok': False,
+                'error': 'No valid email address for this customer. '
+                         'Please update the customer record before sending.'}), 400
+
     try:
         from routes.email_replies import _substitute, _get_thread_refs
         from email_sender import send_reply
@@ -1308,7 +1328,8 @@ def job_email_addresses(job_id):
         if not job:
             return jsonify({'ok': False, 'error': 'Not found'}), 404
         addresses = []
-        if job['customer_email']:
+        from email_sender import is_sendable_email
+        if job['customer_email'] and is_sendable_email(job['customer_email']):
             addresses.append({
                 'email': job['customer_email'],
                 'label': job['customer_name'] or job['customer_email'],
@@ -1321,11 +1342,12 @@ def job_email_addresses(job_id):
                 "ORDER BY name",
                 (job['customer_id'],)).fetchall()
             for c in contacts:
-                addresses.append({
-                    'email': c['email'],
-                    'label': c['name'],
-                    'contact_id': c['id'],
-                })
+                if is_sendable_email(c['email']):
+                    addresses.append({
+                        'email': c['email'],
+                        'label': c['name'],
+                        'contact_id': c['id'],
+                    })
     return jsonify({'ok': True, 'addresses': addresses})
 
 
@@ -1945,7 +1967,7 @@ def xero_check_payments():
 @jobs_bp.route('/settings/status-triggers', methods=['GET', 'POST'])
 def status_triggers():
     """Admin page to configure automatic email triggers per job type and status."""
-    JOB_TYPES_LIST  = ['booking', 'rental', 'workshop', 'sale']
+    JOB_TYPES_LIST  = ['booking', 'rental', 'workshop', 'sale', 'sale_bike']
     STATUS_LIST = ['pending', 'scheduled', 'in_progress', 'quote',
                    'complete', 'invoiced', 'paid', 'lost']
     with get_db() as conn:

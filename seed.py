@@ -124,6 +124,85 @@ def _seed_cash_sales_customer(conn):
     print("  Counter Sales customer created")
 
 
+def _seed_bikes_for_sale_customer(conn):
+    """Ensure the locked Bikes for Sale internal customer exists."""
+    existing = conn.execute(
+        "SELECT id FROM customers WHERE email='bikes.for.sale@flyingbike.internal'"
+    ).fetchone()
+    if existing:
+        return
+    conn.execute("""
+        INSERT INTO customers (name, email, phone, suburb, address)
+        VALUES ('Bikes for Sale', 'bikes.for.sale@flyingbike.internal', '', '', '')
+    """)
+    conn.commit()
+    print("  Bikes for Sale customer created")
+
+
+BIKE_SPEC_TEMPLATE = """FRAMESET
+FRAME
+
+HEADSET
+Integrated (IS) Sealed Bearing, IS 52/28.6 | IS 52/40
+
+SUSPENSION
+FORK
+
+DRIVETRAIN
+REAR DERAILLEUR
+
+FRONT DERAILLEUR
+
+SHIFTER
+
+CRANK
+Crank Arm Length:
+
+CHAINRING
+
+CASSETTE
+
+CHAIN
+
+BRAKES
+BRAKE LEVER
+
+BRAKE CALIPER
+
+WHEELS
+RIM
+
+TYRE
+
+COCKPIT
+HANDLEBAR
+
+STEM
+
+SEAT POST
+
+SADDLE
+
+COMPONENTS
+PEDALS
+
+"""
+
+def _seed_bike_spec_template(conn):
+    """Ensure the default bike spec template exists."""
+    existing = conn.execute(
+        "SELECT id FROM email_templates WHERE name='Bike Specification Template'"
+    ).fetchone()
+    if existing:
+        return
+    conn.execute("""
+        INSERT INTO email_templates (name, subject, body, grp)
+        VALUES ('Bike Specification Template', 'Bike Specification', ?, 'bike')
+    """, (BIKE_SPEC_TEMPLATE,))
+    conn.commit()
+    print("  Bike Specification Template created")
+
+
 def seed_data():
     with get_db() as conn:
         parts_count = conn.execute("SELECT COUNT(*) FROM parts").fetchone()[0]
@@ -133,4 +212,6 @@ def seed_data():
             print(f'  Parts already present ({parts_count}) — skipping CSV load')
         _seed_regions(conn)
         _seed_cash_sales_customer(conn)
+        _seed_bikes_for_sale_customer(conn)
+        _seed_bike_spec_template(conn)
         conn.commit()

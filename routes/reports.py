@@ -44,6 +44,7 @@ def _get_report_data(date_from, date_to, job_types, show_cash=False, sort_by='pa
         job_types = list(job_types) + ['sale']
     if 'sale' in job_types and 'workshop' not in job_types:
         job_types = [t for t in job_types if t != 'sale']
+    # sale_bike is independent — no co-travel requirement
     # Filter out the display-only None entry
     job_types = [t for t in job_types if t]
     if not job_types:
@@ -240,7 +241,7 @@ def sales():
             date_from, date_to = get_resolved_date_range(saved_query)
             date_from = date_from or '1900-01-01'
             date_to   = date_to   or today.isoformat()
-            job_types  = saved_query.get('job_types') or ['booking', 'workshop', 'sale']
+            job_types  = saved_query.get('job_types') or ['booking', 'workshop', 'sale', 'sale_bike']
             # Sort order derived from the query's date_field — no user override
             sort_by = 'scheduled' if saved_query.get('date_field') == 'scheduled' else 'paid'
             # Save this query_id as the last-used filter for this user
@@ -258,7 +259,7 @@ def sales():
                 conn.commit()
                 date_from  = first_of_month
                 date_to    = default_to
-                job_types  = ['booking', 'workshop', 'sale']
+                job_types  = ['booking', 'workshop', 'sale', 'sale_bike']
                 sort_by    = 'paid'
             else:
                 row = conn.execute(
@@ -279,7 +280,7 @@ def sales():
                                 date_from, date_to = get_resolved_date_range(saved_query)
                                 date_from  = date_from or '1900-01-01'
                                 date_to    = date_to   or today.isoformat()
-                                job_types  = saved_query.get('job_types') or ['booking', 'workshop', 'sale']
+                                job_types  = saved_query.get('job_types') or ['booking', 'workshop', 'sale', 'sale_bike']
                                 sort_by    = 'scheduled' if saved_query.get('date_field') == 'scheduled' else 'paid'
                                 # Don't fall through to defaults
                                 return_early = False
@@ -289,7 +290,7 @@ def sales():
                     # No saved query — show current month as default
                     date_from  = first_of_month
                     date_to    = default_to
-                    job_types  = ['booking', 'workshop', 'sale']
+                    job_types  = ['booking', 'workshop', 'sale', 'sale_bike']
                     sort_by    = 'paid'
 
     ran = True  # always run — shows saved query or current month default
@@ -335,7 +336,7 @@ def sales_csv():
         date_from, date_to = get_resolved_date_range(saved_query)
         date_from = date_from or '1900-01-01'
         date_to   = date_to   or date.today().isoformat()
-        job_types = saved_query.get('job_types') or ['booking', 'workshop', 'sale']
+        job_types = saved_query.get('job_types') or ['booking', 'workshop', 'sale', 'sale_bike']
     else:
         date_from = request.args.get('date_from', date.today().replace(day=1).isoformat())
         date_to   = request.args.get('date_to',   date.today().isoformat())
@@ -426,7 +427,7 @@ def sales_pdf():
         date_from, date_to = get_resolved_date_range(saved_query)
         date_from = date_from or '1900-01-01'
         date_to   = date_to   or date.today().isoformat()
-        job_types = saved_query.get('job_types') or ['booking', 'workshop', 'sale']
+        job_types = saved_query.get('job_types') or ['booking', 'workshop', 'sale', 'sale_bike']
     else:
         date_from = request.args.get('date_from', date.today().replace(day=1).isoformat())
         date_to   = request.args.get('date_to',   date.today().isoformat())

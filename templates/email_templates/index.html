@@ -15,11 +15,28 @@
       Use <code style="font-size:0.78rem;">{{'{{'}}field{{'}}'}}</code> for substitution
     </span>
   </div>
+  <!-- Group filter tabs -->
+  <div style="padding:0.5rem 1rem; border-bottom:1px solid var(--sd-border);
+              display:flex; gap:0.35rem; flex-wrap:wrap;">
+    <a href="{{ url_for('email_replies.templates_index') }}"
+       class="btn-ghost" style="font-size:0.75rem; padding:0.2rem 0.6rem;
+              {% if not active_grp %}background:var(--sd-accent); color:#fff;{% endif %}">
+      All
+    </a>
+    {% for g in groups %}
+    <a href="{{ url_for('email_replies.templates_index', grp=g) }}"
+       class="btn-ghost" style="font-size:0.75rem; padding:0.2rem 0.6rem; text-transform:capitalize;
+              {% if active_grp == g %}background:var(--sd-accent); color:#fff;{% endif %}">
+      {{ g }}
+    </a>
+    {% endfor %}
+  </div>
   <div class="table-responsive-sd">
     <table class="sd-table">
       <thead>
         <tr>
           <th>Name</th>
+          <th>Group</th>
           <th>Subject</th>
           <th>Updated</th>
           <th></th>
@@ -29,6 +46,11 @@
         {% for t in templates %}
         <tr>
           <td style="font-weight:500;">{{ t['name'] }}</td>
+          <td style="font-size:0.75rem;">
+            <span style="text-transform:capitalize; padding:0.1rem 0.45rem;
+                         background:var(--sd-surface2); border-radius:4px;
+                         border:1px solid var(--sd-border);">{{ t['grp'] or 'misc' }}</span>
+          </td>
           <td style="font-size:0.82rem; color:var(--sd-muted);">
             {{ t['subject'][:60] }}{% if t['subject']|length > 60 %}…{% endif %}
           </td>

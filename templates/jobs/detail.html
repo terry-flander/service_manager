@@ -100,7 +100,8 @@ function silentSave(callback) {
 {% endblock %}
 
 {% block content %}
-{% set is_workshop = job['job_type'] == 'workshop' %}
+{% set is_workshop  = job['job_type'] == 'workshop' %}
+{% set is_sale_bike = job['job_type'] == 'sale_bike' %}
 {% set is_sale     = job['job_type'] == 'sale' %}
 
 <!-- ── Save form wraps ALL editable content ──────────────────────────────── -->
@@ -151,6 +152,13 @@ function silentSave(callback) {
             onclick="openReplyModal({{ job['id'] }}, JOB_CUST_EMAIL, JOB_CUST_NAME,
               {mode:'history', customerId:{{ job['cust_id'] }}, customerName:JOB_CUST_NAME})">
       <i class="bi bi-clock-history"></i> History
+    </button>
+    {% endif %}
+    {% if is_sale_bike %}
+    <button type="button" class="btn-ghost"
+            style="padding:0.35rem 0.85rem; font-size:0.82rem;"
+            onclick="openBikeDetailsModal({{ job['id'] }})">
+      <i class="bi bi-bicycle"></i> Bike Details
     </button>
     {% endif %}
     <!-- Close -->
@@ -262,9 +270,9 @@ function silentSave(callback) {
                 {% endif %}
               </td>
             </tr>
-            {% for label, value in [
-              ('Phone', job['customer_phone']|fmt_phone if job['customer_phone'] else '—'),
-            ] + ([] if is_workshop else [('Suburb', job['suburb'] or '—')]) %}
+            {% for label, value in (
+              [] if is_sale_bike else [('Phone', job['customer_phone']|fmt_phone if job['customer_phone'] else '—')]
+            ) + ([] if (is_workshop or is_sale_bike) else [('Suburb', job['suburb'] or '—')]) %}
             <tr style="border-bottom:1px solid var(--sd-border);">
               <td style="color:var(--sd-muted); padding:0.45rem 0; width:30%; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em;">{{ label }}</td>
               <td style="padding:0.45rem 0 0.45rem 1rem;">{{ value }}</td>
@@ -293,7 +301,7 @@ function silentSave(callback) {
       </div>
 
 
-      {% if portal_url %}
+      {% if portal_url and not is_sale_bike %}
       <div class="sd-card mb-3">
         <div class="sd-card-header">Customer Portal Link</div>
         <div style="padding:0.75rem 1.25rem; display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
@@ -359,13 +367,14 @@ function silentSave(callback) {
                         style="resize:vertical;">{{ job['description'] or '' }}</textarea>
             </div>
 
-            <!-- Bike Description — workshop and booking -->
-            {% if is_workshop or job['job_type'] == 'booking' %}
+            <!-- Bike Description — workshop, booking and sale_bike -->
+            {% if is_workshop or job['job_type'] == 'booking' or is_sale_bike %}
             <div class="col-12">
-              <label class="sd-label">Bike Description</label>
-              <input type="text" name="bike_description" class="sd-input"
+              <label class="sd-label">Bike Description{% if is_sale_bike %} <span style="font-size:0.72rem; color:var(--sd-muted);">(used as short description on listing)</span>{% endif %}</label>
+              <input type="text" name="bike_description" id="bike-desc-input" class="sd-input"
                      value="{{ job['bike_description'] or '' }}"
-                     placeholder="e.g. 2022 Trek Domane, black — Separate additional bikes with a comma (,)">
+                     placeholder="e.g. 2022 Trek Domane, black — Separate additional bikes with a comma (,)"
+                     {% if is_sale_bike %}oninput="syncBikeShortDesc(this.value)"{% endif %}>
             </div>
             {% endif %}
 
@@ -413,8 +422,8 @@ function silentSave(callback) {
             </div>
             {% endif %}
 
-            <!-- Address — booking + rental -->
-            {% if not is_workshop %}
+            <!-- Address — booking + rental, not sale_bike -->
+            {% if not is_workshop and not is_sale_bike %}
             <div class="col-12">
               <label class="sd-label">Address</label>
               <div style="display:flex; gap:0.5rem; align-items:center;">
@@ -1739,5 +1748,241 @@ function regeneratePortalToken() {
     });
 }
 
+// ── Bike Details modal (sale_bike jobs only) ──────────────────────────────
+var _bikeDetailId = null;
+var _bikeSpecTemplates = {};
+
+function openBikeDetailsModal(jobId) {
+  var modal = document.getElementById('bike-detail-modal');
+  if (!modal) { alert('Bike Details modal not available for this job type.'); return; }
+  fetch('/bikes/for-job/' + jobId)
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) { alert('Error: ' + data.error); return; }
+      var b = data.bike;
+      _bikeDetailId = b.id;
+      document.getElementById('bm-short-desc').value = b.short_desc || '';
+      document.getElementById('bm-year').value       = b.year_est || '';
+      document.getElementById('bm-asking').value     = b.asking_price || '';
+      document.getElementById('bm-min').value        = b.min_price || '';
+      document.getElementById('bm-specs').value      = b.specs || '';
+      document.getElementById('bm-condition').value  = b.condition_grade || '';
+      document.getElementById('bm-frame-size').value = b.frame_size || '';
+      document.getElementById('bm-colour').value     = b.colour || '';
+      document.getElementById('bm-status').value     = b.status || 'preparing';
+      document.getElementById('bm-desc-html').value  = b.description_html || '';
+      if (!window._bmRte) {
+        window._bmRte = initRichTextEditor('bm-desc-html-editor', {minHeight:'120px'});
+      }
+      if (window._bmRte) window._bmRte.setContent(b.description_html || '');
+      var sel = document.getElementById('bm-spec-tmpl');
+      if (sel) {
+        sel.innerHTML = '<option value="">Load template…</option>';
+        _bikeSpecTemplates = {};
+        (b.spec_templates || []).forEach(t => {
+          _bikeSpecTemplates[t.id] = t.body;
+          sel.innerHTML += `<option value="${t.id}">${t.name}</option>`;
+        });
+      }
+      renderBikeDetailImages(b.images || []);
+      document.getElementById('bike-detail-modal').style.display = 'flex';
+    });
+}
+
+function closeBikeDetailsModal() {
+  document.getElementById('bike-detail-modal').style.display = 'none';
+  _bikeDetailId = null;
+}
+
+function renderBikeDetailImages(images) {
+  var c = document.getElementById('bm-images');
+  if (!c) return;
+  c.innerHTML = images.map(img =>
+    `<div style="position:relative; display:inline-block;">
+      <img src="${img.url}" style="width:90px;height:70px;object-fit:cover;border-radius:5px;border:1px solid var(--sd-border);" onerror="this.src=''">
+      <button onclick="deleteBikeDetailImage(${img.id})"
+        style="position:absolute;top:-4px;right:-4px;background:#ef4444;border:none;color:#fff;border-radius:50%;width:18px;height:18px;font-size:0.7rem;cursor:pointer;display:flex;align-items:center;justify-content:center;">×</button>
+    </div>`
+  ).join('');
+}
+
+function applyBikeSpecTemplate() {
+  var sel = document.getElementById('bm-spec-tmpl');
+  var body = _bikeSpecTemplates[sel.value];
+  if (body) { document.getElementById('bm-specs').value = body; sel.value = ''; }
+}
+
+function uploadBikeDetailImage(input) {
+  if (!input.files[0] || !_bikeDetailId) return;
+  var status = document.getElementById('bm-image-status');
+  if (status) status.textContent = 'Uploading…';
+  var fd = new FormData();
+  fd.append('image', input.files[0]);
+  fetch('/bikes/' + _bikeDetailId + '/images', { method: 'POST', body: fd })
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        if (status) status.textContent = '';
+        openBikeDetailsModal({{ job['id'] }});
+      } else {
+        if (status) status.textContent = 'Error: ' + data.error;
+      }
+    });
+  input.value = '';
+}
+
+function deleteBikeDetailImage(imgId) {
+  if (!confirm('Remove this photo?')) return;
+  fetch('/bikes/images/' + imgId, { method: 'DELETE' })
+    .then(r => r.json())
+    .then(data => { if (data.ok) openBikeDetailsModal({{ job['id'] }}); });
+}
+
+function saveBikeDetails() {
+  if (!_bikeDetailId) return;
+  fetch('/bikes/' + _bikeDetailId, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      short_desc:       document.getElementById('bm-short-desc').value,
+      year_est:         document.getElementById('bm-year').value || null,
+      asking_price:     document.getElementById('bm-asking').value || null,
+      min_price:        document.getElementById('bm-min').value || null,
+      specs:            document.getElementById('bm-specs').value,
+      condition_grade:  document.getElementById('bm-condition').value,
+      frame_size:       document.getElementById('bm-frame-size').value,
+      colour:           document.getElementById('bm-colour').value,
+      description_html: window._bmRte ? window._bmRte.getContent() : document.getElementById('bm-desc-html').value,
+      status:           document.getElementById('bm-status').value,
+    })
+  }).then(r => r.json()).then(data => {
+    if (data.ok) closeBikeDetailsModal();
+    else alert('Error: ' + data.error);
+  });
+}
+// Sync bike_description field → bikes_for_sale.short_desc
+var _syncBikeTimer = null;
+var _bikeFsId      = null;
+function syncBikeShortDesc(val) {
+  if (!_bikeFsId) {
+    fetch('/bikes/for-job/{{ job["id"] }}')
+      .then(r => r.json())
+      .then(data => { if (data.ok) { _bikeFsId = data.bike.id; _doSyncShortDesc(val); } });
+  } else {
+    _doSyncShortDesc(val);
+  }
+}
+function _doSyncShortDesc(val) {
+  clearTimeout(_syncBikeTimer);
+  _syncBikeTimer = setTimeout(function() {
+    fetch('/bikes/' + _bikeFsId, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({short_desc: val})
+    });
+  }, 800);
+}
+
 </script>
+
+<!-- Bike Details Modal — always rendered -->
+<div id="bike-detail-modal" style="display:none; position:fixed; inset:0; z-index:9000;
+     background:rgba(0,0,0,0.6); align-items:center; justify-content:center;">
+  <div style="background:var(--sd-surface); border:1px solid var(--sd-border);
+              border-radius:10px; width:min(720px,95vw); max-height:90vh;
+              display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+    <div style="padding:0.875rem 1.25rem; border-bottom:1px solid var(--sd-border);
+                display:flex; align-items:center; justify-content:space-between;">
+      <h5 style="margin:0; font-size:0.95rem; font-weight:700;">
+        <i class="bi bi-bicycle"></i> Bike Details
+      </h5>
+      <button onclick="closeBikeDetailsModal()"
+              style="background:none; border:none; color:var(--sd-muted); font-size:1.2rem; cursor:pointer;">×</button>
+    </div>
+    <div style="overflow-y:auto; flex:1; padding:1rem 1.25rem;">
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
+        <div>
+          <label class="sd-label">Short Description *</label>
+          <input type="text" id="bm-short-desc" class="sd-input" placeholder="e.g. Trek FX3 Hybrid 2019 M">
+        </div>
+        <div>
+          <label class="sd-label">Estimated Year</label>
+          <input type="number" id="bm-year" class="sd-input" min="1980" max="2030">
+        </div>
+        <div>
+          <label class="sd-label">Asking Price ($)</label>
+          <input type="number" id="bm-asking" class="sd-input" step="0.01" min="0">
+        </div>
+        <div>
+          <label class="sd-label">Minimum Price ($)</label>
+          <input type="number" id="bm-min" class="sd-input" step="0.01" min="0">
+        </div>
+      </div>
+      <div style="margin-bottom:1rem;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.4rem;">
+          <label class="sd-label" style="margin:0;">Specifications</label>
+          <select id="bm-spec-tmpl" class="sd-input" style="width:auto; font-size:0.75rem; padding:0.2rem 0.5rem;"
+                  onchange="applyBikeSpecTemplate()">
+            <option value="">Load template…</option>
+          </select>
+        </div>
+        <textarea id="bm-specs" class="sd-input" rows="12"
+                  style="font-family:monospace; font-size:0.8rem; resize:vertical;"
+                  placeholder="Enter specifications…"></textarea>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:1rem; margin-bottom:1rem;">
+        <div>
+          <label class="sd-label">Condition</label>
+          <select id="bm-condition" class="sd-input">
+            <option value="">—</option>
+            <option value="Good">Good</option>
+            <option value="Very Good">Very Good</option>
+            <option value="Excellent">Excellent</option>
+          </select>
+        </div>
+        <div>
+          <label class="sd-label">Frame Size</label>
+          <input type="text" id="bm-frame-size" class="sd-input" placeholder="e.g. M / 54cm">
+        </div>
+        <div>
+          <label class="sd-label">Colour</label>
+          <input type="text" id="bm-colour" class="sd-input" placeholder="e.g. Matte Black">
+        </div>
+      </div>
+      <div style="margin-bottom:1rem;">
+        <label class="sd-label">Website Description <span style="font-size:0.7rem;color:var(--sd-muted);">(shown in bike popup)</span></label>
+        <div id="bm-desc-html-editor" style="min-height:120px; border:1px solid var(--sd-border); border-radius:5px;"></div>
+        <textarea id="bm-desc-html" style="display:none;"></textarea>
+      </div>
+      <div style="margin-bottom:1rem;">
+        <label class="sd-label">Status</label>
+        <select id="bm-status" class="sd-input">
+          <option value="preparing">Preparing</option>
+          <option value="available">Available</option>
+          <option value="sold">Sold</option>
+          <option value="n/a">N/A (scrapped)</option>
+        </select>
+      </div>
+      <div>
+        <label class="sd-label">Photos</label>
+        <div id="bm-images" style="display:flex; flex-wrap:wrap; gap:0.5rem; margin-bottom:0.5rem;"></div>
+        <label style="display:inline-flex; align-items:center; gap:0.4rem; cursor:pointer;
+                      background:var(--sd-surface2); border:1px solid var(--sd-border);
+                      border-radius:5px; padding:0.3rem 0.65rem; font-size:0.8rem;">
+          <i class="bi bi-upload"></i> Add Photo
+          <input type="file" accept="image/*" style="display:none;"
+                 onchange="uploadBikeDetailImage(this)">
+        </label>
+        <div id="bm-image-status" style="font-size:0.75rem; color:var(--sd-muted); margin-top:0.3rem;"></div>
+      </div>
+    </div>
+    <div style="padding:0.75rem 1.25rem; border-top:1px solid var(--sd-border);
+                display:flex; justify-content:flex-end; gap:0.5rem;">
+      <button onclick="closeBikeDetailsModal()" class="btn-ghost">Cancel</button>
+      <button onclick="saveBikeDetails()" class="btn-accent">
+        <i class="bi bi-check-lg"></i> Save
+      </button>
+    </div>
+  </div>
+</div>
 {% endblock %}

@@ -75,7 +75,23 @@ def _new_message_id(from_addr):
     return f"<{int(time.time())}.{uuid.uuid4().hex[:12]}@{domain}>"
 
 
-def _html_to_plain_fallback(html_body):
+def is_sendable_email(addr):
+    """Return True if addr is a real email we can send to.
+    Blocks system-generated placeholder addresses (@unknown.local)
+    and empty/None values."""
+    if not addr:
+        return False
+    addr = addr.strip().lower()
+    if not addr:
+        return False
+    if addr.endswith('@unknown.local'):
+        return False
+    if '@' not in addr:
+        return False
+    return True
+
+
+
     """Build a plain-text fallback from an HTML body, for the
     multipart/alternative plain-text part. Reuses the same converter
     the inbound poller uses for HTML emails."""
@@ -88,6 +104,16 @@ def _html_to_plain_fallback(html_body):
         import re
         return re.sub(r'<[^>]+>', '', html_body).strip()
 
+
+
+def _html_to_plain_fallback(html_body):
+    """Convert HTML email body to plain text fallback."""
+    try:
+        from email_poller import _html_to_text
+        return _html_to_text(html_body)
+    except Exception:
+        import re
+        return re.sub(r'<[^>]+>', '', html_body).strip()
 
 def send_reply(to_address, subject, body_text,
                in_reply_to=None, references=None,

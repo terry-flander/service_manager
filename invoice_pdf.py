@@ -159,32 +159,62 @@ def generate_invoice_pdf(job, job_parts, tax_inclusive, subtotal, gst, total):
 
     row_y = table_top - 7*mm
     _reg(c, 9)
-    for jp in job_parts:
-        qty  = jp['quantity']
-        uc   = jp['unit_cost']
-        line = qty * uc
-        if gst == 0.0:
-            # Cash job — no GST, show raw prices as-is
-            unit_ex = uc
-            line_ex = line
-        elif tax_inclusive:
-            unit_ex = uc / 1.1
-            line_ex = qty * unit_ex
-        else:
-            unit_ex = uc
-            line_ex = line
 
-        desc = jp['description']
-        # Truncate long descriptions
-        if len(desc) > 55:
-            desc = desc[:52] + "…"
+    is_sale_bike = (job['job_type'] or '') == 'sale_bike'
 
-        c.drawString(col['desc'],  row_y, desc)
-        c.drawRightString(col['qty'],   row_y, f"{qty:.2f}")
-        c.drawRightString(col['price'], row_y, f"{unit_ex:.4f}")
-        c.drawRightString(col['gst'],   row_y, "10%" if gst > 0 else "—")
-        c.drawRightString(col['amt'],   row_y, f"{line_ex:.2f}")
+    if is_sale_bike:
+        # Sale bike invoice: single line — bike description + total price
+        # Fetch bike details (short_desc) if available
+        try:
+            from models import get_db as _gdb
+            with _gdb() as _conn:
+                _brow = _conn.execute(
+                    "SELECT short_desc, year_est FROM bikes_for_sale WHERE job_id=?",
+                    (job['id'],)).fetchone()
+            bike_desc = (_brow['short_desc'] if _brow and _brow['short_desc']
+                         else job['bike_description'] or 'Bicycle')
+            if _brow and _brow['year_est']:
+                bike_desc = f"{_brow['year_est']} {bike_desc}"
+        except Exception:
+            bike_desc = job['bike_description'] or 'Bicycle'
+
+        if len(bike_desc) > 55:
+            bike_desc = bike_desc[:52] + '…'
+
+        # Single line item — all inclusive
+        c.drawString(col['desc'],  row_y, bike_desc)
+        c.drawRightString(col['qty'],   row_y, '1.00')
+        c.drawRightString(col['price'], row_y, _fmt(total)[1:])
+        c.drawRightString(col['gst'],   row_y, '10%')
+        c.drawRightString(col['amt'],   row_y, _fmt(total)[1:])
         row_y -= 6*mm
+    else:
+        for jp in job_parts:
+            qty  = jp['quantity']
+            uc   = jp['unit_cost']
+            line = qty * uc
+            if gst == 0.0:
+                # Cash job — no GST, show raw prices as-is
+                unit_ex = uc
+                line_ex = line
+            elif tax_inclusive:
+                unit_ex = uc / 1.1
+                line_ex = qty * unit_ex
+            else:
+                unit_ex = uc
+                line_ex = line
+
+            desc = jp['description']
+            # Truncate long descriptions
+            if len(desc) > 55:
+                desc = desc[:52] + '…'
+
+            c.drawString(col['desc'],  row_y, desc)
+            c.drawRightString(col['qty'],   row_y, f'{qty:.2f}')
+            c.drawRightString(col['price'], row_y, f'{unit_ex:.4f}')
+            c.drawRightString(col['gst'],   row_y, '10%' if gst > 0 else '—')
+            c.drawRightString(col['amt'],   row_y, f'{line_ex:.2f}')
+            row_y -= 6*mm
 
     # ── Totals block ──────────────────────────────────────────────────────────
     totals_y = row_y - 4*mm
