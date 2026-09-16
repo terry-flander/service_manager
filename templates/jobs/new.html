@@ -25,13 +25,14 @@
         </button>
       </div>
 
-      <div id="customer-section">
-      <div class="sd-card-header">
+      <div id="customer-header" class="sd-card-header">
         <span><i class="bi bi-person-circle" style="color:var(--sd-accent);"></i> Customer</span>
       </div>
       <div style="padding:1.25rem 1.5rem 0.5rem;">
 
         <!-- Live customer search -->
+        <div id="customer-search-row" style="margin-bottom:0.75rem; position:relative;">
+          <label class="sd-label">Search existing customers</label>
         <div style="margin-bottom:0.75rem; position:relative;">
           <label class="sd-label">Search existing customers</label>
           <div style="display:flex; gap:0.5rem;">
@@ -68,7 +69,7 @@
         <input type="hidden" name="customer_id" id="customer_id_field" value="">
         <input type="hidden" name="customer_address" id="customer_address_field" value="">
 
-        <div style="padding:0 1.5rem;">
+        <div id="customer-fields-row" style="padding:0 1.5rem;">
           <div class="row g-3">
             <!-- Hidden field — carries customer_id when launched from customer page -->
             <input type="hidden" name="customer_id_prefill"
@@ -247,7 +248,6 @@
             </div>
           </div>
         </div>
-      </div><!-- end customer-section -->
 
         <div style="padding:1.5rem; display:flex; justify-content:flex-end; gap:0.75rem;">
           <a href="{{ url_for('jobs.index') }}" class="btn-ghost">Cancel</a>
@@ -533,8 +533,17 @@ function updateJobType(type) {
   if (srCol) srCol.style.display = isWorkshop ? '' : 'none';
 
   // Customer section — hidden for sale_bike (auto-assigned)
-  const custSection = document.getElementById('customer-section');
-  if (custSection) custSection.style.display = isSaleBike ? 'none' : '';
+  const custHeader     = document.getElementById('customer-header');
+  const custSearchRow  = document.getElementById('customer-search-row');
+  const custFieldsRow  = document.getElementById('customer-fields-row');
+  const custNameInput  = document.getElementById('f_name');
+  const custEmailInput = document.getElementById('f_email');
+  [custHeader, custSearchRow, custFieldsRow].forEach(function(el) {
+    if (el) el.style.display = isSaleBike ? 'none' : '';
+  });
+  // Disable required on hidden fields so form can submit
+  if (custNameInput)  custNameInput.required  = !isSaleBike;
+  if (custEmailInput) custEmailInput.required = !isSaleBike;
 
   // Tax treatment — hidden for sale_bike (always inclusive)
   const taxRow = document.getElementById('tax-select');

@@ -507,6 +507,10 @@ def new_job():
         suburb     = request.form.get('suburb', '').strip()
         job_type   = request.form.get('job_type', 'booking')
         sched_date = request.form.get('scheduled_date') or None
+        # sale_bike defaults to today if no date submitted
+        if not sched_date and job_type == 'sale_bike':
+            from datetime import date as _date
+            sched_date = _date.today().isoformat()
         sched_time = request.form.get('scheduled_time') or None
         end_time   = request.form.get('end_time') or None
         end_date   = request.form.get('end_date') or None
@@ -690,7 +694,7 @@ def job_detail(job_id):
         jt          = job['job_type']
         description = request.form.get('description', '').strip()
         address     = request.form.get('address', '').strip()
-        bike_desc   = request.form.get('bike_description', '').strip() if jt in ('workshop', 'booking') else (job['bike_description'] or '')
+        bike_desc   = request.form.get('bike_description', '').strip() if jt in ('workshop', 'booking', 'sale_bike') else (job['bike_description'] or '')
         notes       = request.form.get('notes', '').strip()
         tax_incl    = int(request.form.get('tax_inclusive', '1') or 1)
         # Status & Payment (merged from separate update_status form)
@@ -1028,7 +1032,7 @@ def edit_job_legacy(job_id):
                           _suburb, address, request.form.get('description', ''),
                           _bike_desc, _svc_types, _region_id,
                           1 if request.form.get('tax_inclusive', '1') == '1' else 0,
-                          request.form.get('scheduled_date') or None,
+                          sched_date or request.form.get('scheduled_date') or None,
                           sched_time, end_time, end_date,
                           request.form['status'],
                           request.form.get('notes', ''),

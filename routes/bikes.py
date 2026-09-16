@@ -91,6 +91,17 @@ def bike_for_job(job_id):
 
 # ── Edit ──────────────────────────────────────────────────────────────────────
 
+@bikes_bp.route('/bikes/<int:bike_id>/short-desc', methods=['POST'])
+def bike_update_short_desc(bike_id):
+    """Partial update — only short_desc, used by job detail sync."""
+    data = request.get_json() or {}
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE bikes_for_sale SET short_desc=?, updated_at=datetime('now') WHERE id=?",
+            ((data.get('short_desc') or '').strip(), bike_id))
+        conn.commit()
+    return jsonify({'ok': True})
+
 @bikes_bp.route('/bikes/<int:bike_id>', methods=['GET', 'POST'])
 def bike_edit(bike_id):
     with get_db() as conn:

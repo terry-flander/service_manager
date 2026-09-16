@@ -1747,52 +1747,158 @@ function initRichTextEditor(textareaId, options) {
   toolbar.className = 'rte-toolbar';
   toolbar.style.cssText =
     'display:flex; gap:0.15rem; padding:0.4rem; background:var(--sd-surface2);' +
-    'border-bottom:1px solid var(--sd-border); flex-wrap:wrap;';
+    'border-bottom:1px solid var(--sd-border); flex-wrap:wrap; align-items:center;';
 
-  const buttons = [
-    { cmd: 'bold',          icon: 'bi-type-bold',      title: 'Bold' },
-    { cmd: 'italic',        icon: 'bi-type-italic',    title: 'Italic' },
-    { cmd: 'underline',     icon: 'bi-type-underline', title: 'Underline' },
-    { sep: true },
-    { cmd: 'insertUnorderedList', icon: 'bi-list-ul',   title: 'Bullet list' },
-    { cmd: 'insertOrderedList',   icon: 'bi-list-ol',   title: 'Numbered list' },
-    { sep: true },
-    { cmd: 'createLink',   icon: 'bi-link-45deg',     title: 'Insert link', needsArg: true },
-    { cmd: 'unlink',       icon: 'bi-link',           title: 'Remove link' },
-    { sep: true },
-    { cmd: 'removeFormat', icon: 'bi-eraser',         title: 'Clear formatting' },
-  ];
+  function _sep() {
+    const d = document.createElement('div');
+    d.style.cssText = 'width:1px; background:var(--sd-border); margin:0.1rem 0.2rem; align-self:stretch;';
+    toolbar.appendChild(d);
+  }
 
-  buttons.forEach(function (b) {
-    if (b.sep) {
-      const divider = document.createElement('div');
-      divider.style.cssText = 'width:1px; background:var(--sd-border); margin:0.1rem 0.25rem;';
-      toolbar.appendChild(divider);
-      return;
-    }
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.title = b.title;
-    btn.innerHTML = `<i class="bi ${b.icon}"></i>`;
-    btn.style.cssText =
-      'background:none; border:none; color:var(--sd-text); padding:0.35rem 0.5rem;' +
-      'border-radius:4px; cursor:pointer; font-size:0.9rem;';
-    btn.addEventListener('mousedown', function (e) { e.preventDefault(); }); // keep editor focus
-    btn.addEventListener('click', function () {
-      editor.focus();
-      if (b.needsArg) {
-        const url = prompt('Link URL:', 'https://');
-        if (url) document.execCommand(b.cmd, false, url);
-      } else {
-        document.execCommand(b.cmd, false, null);
-      }
-      sync();
+  function _btn(icon, title, fn) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.title = title;
+    b.innerHTML = '<i class="bi ' + icon + '"></i>';
+    b.style.cssText =
+      'background:none; border:none; color:var(--sd-text); padding:0.3rem 0.45rem;' +
+      'border-radius:4px; cursor:pointer; font-size:0.9rem; flex-shrink:0;';
+    b.addEventListener('mousedown', function(e) { e.preventDefault(); });
+    b.addEventListener('click', function() { editor.focus(); fn(); sync(); });
+    b.addEventListener('mouseover', function() { this.style.background = 'var(--sd-surface)'; });
+    b.addEventListener('mouseout',  function() { this.style.background = 'none'; });
+    toolbar.appendChild(b);
+    return b;
+  }
+
+  function _sel(opts, title, fn, width) {
+    const s = document.createElement('select');
+    s.title = title;
+    s.style.cssText =
+      'background:var(--sd-surface2); border:1px solid var(--sd-border); color:var(--sd-text);' +
+      'border-radius:4px; padding:0.2rem 0.3rem; font-size:0.78rem; cursor:pointer;' +
+      (width ? 'width:' + width + ';' : '') + ' flex-shrink:0;';
+    opts.forEach(function(pair) {
+      const o = document.createElement('option'); o.value = pair[0]; o.textContent = pair[1];
+      s.appendChild(o);
     });
-    btn.addEventListener('mouseover', function () { this.style.background = 'var(--sd-surface)'; });
-    btn.addEventListener('mouseout',  function () { this.style.background = 'none'; });
-    toolbar.appendChild(btn);
+    s.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+    s.addEventListener('change', function() {
+      editor.focus(); fn(s.value); s.value = opts[0][0]; sync();
+    });
+    toolbar.appendChild(s);
+    return s;
+  }
+
+  function _colBtn(label, title, cmd) {
+    const lbl = document.createElement('label');
+    lbl.title = title;
+    lbl.style.cssText =
+      'display:inline-flex; align-items:center; gap:0.15rem; cursor:pointer;' +
+      'padding:0.25rem 0.35rem; border-radius:4px; font-size:0.75rem; color:var(--sd-muted);' +
+      'background:none; flex-shrink:0;';
+    const inp = document.createElement('input');
+    inp.type = 'color'; inp.value = '#ffffff';
+    inp.style.cssText = 'width:16px; height:16px; border:none; padding:0; cursor:pointer;';
+    inp.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+    inp.addEventListener('input', function() {
+      editor.focus(); document.execCommand(cmd, false, inp.value); sync();
+    });
+    lbl.textContent = label + ' ';
+    lbl.appendChild(inp);
+    toolbar.appendChild(lbl);
+  }
+
+  // Block format
+  _sel([
+    ['', 'Format…'], ['p', 'Paragraph'],
+    ['h1', 'Heading 1'], ['h2', 'Heading 2'], ['h3', 'Heading 3'], ['h4', 'Heading 4'],
+    ['pre', 'Code block'],
+  ], 'Block format', function(v) { if (v) document.execCommand('formatBlock', false, v); }, '9rem');
+
+  // Font family
+  _sel([
+    ['', 'Font…'],
+    ['Arial, sans-serif', 'Arial'],
+    ['Georgia, serif', 'Georgia'],
+    ['Courier New, monospace', 'Courier New'],
+    ['Verdana, sans-serif', 'Verdana'],
+    ['Tahoma, sans-serif', 'Tahoma'],
+    ['Times New Roman, serif', 'Times New Roman'],
+  ], 'Font family', function(v) { if (v) document.execCommand('fontName', false, v); }, '8rem');
+
+  // Font size
+  _sel([
+    ['', 'Size…'],
+    ['1','8pt'],['2','10pt'],['3','12pt'],['4','14pt'],['5','18pt'],['6','24pt'],['7','36pt'],
+  ], 'Font size', function(v) { if (v) document.execCommand('fontSize', false, v); }, '6rem');
+
+  _sep();
+
+  // Inline formatting
+  _btn('bi-type-bold',          'Bold',          function() { document.execCommand('bold'); });
+  _btn('bi-type-italic',        'Italic',        function() { document.execCommand('italic'); });
+  _btn('bi-type-underline',     'Underline',     function() { document.execCommand('underline'); });
+  _btn('bi-type-strikethrough', 'Strikethrough', function() { document.execCommand('strikeThrough'); });
+
+  _sep();
+
+  // Colour pickers
+  _colBtn('A', 'Text colour', 'foreColor');
+  _colBtn('▒', 'Highlight',   'hiliteColor');
+
+  _sep();
+
+  // Alignment
+  _btn('bi-text-left',   'Align left',   function() { document.execCommand('justifyLeft'); });
+  _btn('bi-text-center', 'Align centre', function() { document.execCommand('justifyCenter'); });
+  _btn('bi-text-right',  'Align right',  function() { document.execCommand('justifyRight'); });
+
+  _sep();
+
+  // Lists & indent
+  _btn('bi-list-ul',           'Bullet list',   function() { document.execCommand('insertUnorderedList'); });
+  _btn('bi-list-ol',           'Numbered list', function() { document.execCommand('insertOrderedList'); });
+  _btn('bi-text-indent-left',  'Indent',        function() { document.execCommand('indent'); });
+  _btn('bi-text-indent-right', 'Outdent',       function() { document.execCommand('outdent'); });
+
+  _sep();
+
+  // Links
+  _btn('bi-link-45deg', 'Insert link', function() {
+    var url = prompt('URL:', 'https://');
+    if (url) document.execCommand('createLink', false, url);
+  });
+  _btn('bi-link', 'Remove link', function() { document.execCommand('unlink'); });
+
+  _sep();
+
+  // Table
+  _btn('bi-table', 'Insert table', function() {
+    var r = parseInt(prompt('Rows:', '3') || '0');
+    var c = parseInt(prompt('Columns:', '3') || '0');
+    if (r > 0 && c > 0) {
+      var html = '<table style="border-collapse:collapse;width:100%;">';
+      for (var i = 0; i < r; i++) {
+        html += '<tr>';
+        for (var j = 0; j < c; j++) {
+          var tag = i === 0 ? 'th' : 'td';
+          html += '<' + tag + ' style="border:1px solid #555;padding:0.35rem 0.6rem;">&nbsp;</' + tag + '>';
+        }
+        html += '</tr>';
+      }
+      html += '</table><p><br></p>';
+      document.execCommand('insertHTML', false, html);
+    }
   });
 
+  _sep();
+
+  // Undo / redo / clear
+  _btn('bi-arrow-counterclockwise', 'Undo', function() { document.execCommand('undo'); });
+  _btn('bi-arrow-clockwise',        'Redo', function() { document.execCommand('redo'); });
+  _btn('bi-eraser', 'Clear formatting', function() { document.execCommand('removeFormat'); });
+
+  // Editor area
   const editor = document.createElement('div');
   editor.className = 'rte-editor sd-input';
   editor.contentEditable = 'true';
@@ -1808,14 +1914,14 @@ function initRichTextEditor(textareaId, options) {
 
   textarea.style.display = 'none';
   textarea.parentNode.insertBefore(wrap, textarea);
+
   wrap.appendChild(toolbar);
   wrap.appendChild(editor);
-  wrap.appendChild(textarea);
 
   return {
-    setContent: function (html) { editor.innerHTML = html || ''; sync(); },
-    getContent: function () { return editor.innerHTML; },
-    sync: sync,
+    getContent: function() { sync(); return textarea.value; },
+    setContent: function(html) { editor.innerHTML = html || ''; sync(); },
+    focus:      function() { editor.focus(); },
   };
 }
 

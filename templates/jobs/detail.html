@@ -543,6 +543,14 @@ function silentSave(callback) {
                      value="{{ job['scheduled_date'] or '' }}">
             </div>
 
+            <!-- Scheduling — sale_bike: service date -->
+            {% elif is_sale_bike %}
+            <div class="col-md-6">
+              <label class="sd-label">Service Date</label>
+              <input type="date" name="scheduled_date" class="sd-input"
+                     value="{{ job['scheduled_date'] or '' }}">
+            </div>
+
             <!-- Scheduling — rental: start + end date -->
             {% elif job['job_type'] == 'rental' %}
             <div class="col-md-6">
@@ -1875,7 +1883,7 @@ function syncBikeShortDesc(val) {
 function _doSyncShortDesc(val) {
   clearTimeout(_syncBikeTimer);
   _syncBikeTimer = setTimeout(function() {
-    fetch('/bikes/' + _bikeFsId, {
+    fetch('/bikes/' + _bikeFsId + '/short-desc', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({short_desc: val})
