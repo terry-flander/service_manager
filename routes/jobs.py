@@ -622,7 +622,7 @@ def new_job():
             if sched_time:
                 msg += f' at {TIME_LABELS.get(sched_time, sched_time)}'
         flash(msg + '.', 'success')
-        return redirect(url_for('jobs.job_detail', job_id=job_id))
+        return redirect(url_for('jobs.job_detail', job_id=job_id) + '?from_new=1')
 
     # ── GET — optionally pre-fill from a customer record ─────────────────────
     prefill_customer = None
@@ -1114,7 +1114,7 @@ def add_part(job_id):
     # Part number is required in all cases
     if not part_number:
         flash('Part number is required.', 'danger')
-        return redirect(url_for('jobs.job_detail', job_id=job_id) + '#add-part')
+        return redirect(url_for('jobs.job_detail', job_id=job_id) + '#add-part-again')
 
     if part_id:
         # Existing part selected — use submitted part_number (may differ from master)
@@ -1124,7 +1124,7 @@ def add_part(job_id):
                 "SELECT * FROM parts WHERE id=?", (int(part_id),)).fetchone()
             if not part:
                 flash('Part not found.', 'danger')
-                return redirect(url_for('jobs.job_detail', job_id=job_id) + '#add-part')
+                return redirect(url_for('jobs.job_detail', job_id=job_id) + '#add-part-again')
             conn.execute("""
                 INSERT INTO job_parts (job_id, part_id, description, part_number, quantity, unit_cost)
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -1159,7 +1159,10 @@ def add_part(job_id):
             recalc_job_totals(conn, job_id)
 
     flash('Part added.', 'success')
-    return redirect(url_for('jobs.job_detail', job_id=job_id) + '#add-part')
+    add_another = request.form.get('add_another', '0')
+    if add_another == '1':
+        return redirect(url_for('jobs.job_detail', job_id=job_id) + '#add-part-again')
+    return redirect(url_for('jobs.job_detail', job_id=job_id) + '#parts')
 
 
 @jobs_bp.route('/jobs/<int:job_id>/remove-part/<int:jp_id>', methods=['POST'])

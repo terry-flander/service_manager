@@ -695,7 +695,7 @@ function silentSave(callback) {
     {% endif %}{# end not is_sale #}
     <div class="sd-card mb-3">
       <div class="sd-card-header">
-        <button type="button" class="btn-accent" onclick="openAddPartModal()"
+        <button type="button" class="btn-accent" onclick="openAddPartModal(false)"
                 style="padding:0.2rem 0.6rem; font-size:0.78rem;">
           <i class="bi bi-plus-lg"></i> Add Part
         </button>
@@ -880,10 +880,16 @@ function silentSave(callback) {
                  class="sd-input" value="0.00" step="0.01">
         </div>
       </div>
+      <input type="hidden" id="add-another-hidden" name="add_another" value="0">
       <div style="display:flex; gap:0.6rem; justify-content:flex-end;">
         <button type="button" class="btn-ghost" onclick="closeAddPartModal()">Cancel</button>
-        <button type="submit" class="btn-accent">
-          <i class="bi bi-plus-lg"></i> Add Part
+        <button type="submit" class="btn-ghost"
+                onclick="document.getElementById('add-another-hidden').value='0'">
+          <i class="bi bi-plus-lg"></i> Add
+        </button>
+        <button type="submit" class="btn-accent"
+                onclick="document.getElementById('add-another-hidden').value='1'">
+          <i class="bi bi-plus-lg"></i> Add &amp; Next
         </button>
       </div>
     </form>
@@ -1481,21 +1487,21 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) closeDropdown();
   });
 
-  // ── Restore focus after add (page reloads to #add-part) ───────────────────
-  if (window.location.hash === '#add-part') {
-    openAddPartModal();
+  // ── Restore focus after "Add Another" (page reloads to #add-part-again) ───
+  if (window.location.hash === '#add-part-again') {
+    openAddPartModal(true);
   }
   {% if not job_parts %}
-  // No parts logged yet — open Add Part automatically on first load only.
-  // ESC / Cancel close it without reopening (no further auto-trigger).
-  else if (window.location.hash !== '#add-part') {
-    openAddPartModal();
+  // No parts yet — auto-open only when arriving from New Job (from_new=1).
+  else if (new URLSearchParams(window.location.search).get('from_new') === '1') {
+    openAddPartModal(false);
   }
   {% endif %}
 })();
 
 // ── Add Part modal open/close ─────────────────────────────────────────────────
-function openAddPartModal() {
+function openAddPartModal(addAnother) {
+  window._addPartAnother = !!addAnother;
   if (window._jobIsDirty) {
     silentSave(_doOpenAddPartModal);
   } else {
@@ -1508,12 +1514,15 @@ function _doOpenAddPartModal() {
   document.body.style.overflow = 'hidden';
   // Reset form
   const form = document.getElementById('add-part-form');
-  document.getElementById('part-search').value  = '';
+  document.getElementById('part-search').value    = '';
   document.getElementById('part-id-hidden').value = '';
-  document.getElementById('part-number').value  = '';
-  document.getElementById('part-qty').value     = '1';
-  document.getElementById('part-cost').value    = '0.00';
+  document.getElementById('part-number').value    = '';
+  document.getElementById('part-qty').value       = '1';
+  document.getElementById('part-cost').value      = '0.00';
   document.getElementById('part-dropdown').style.display = 'none';
+  // Set add_another hidden field based on how modal was opened
+  const addAnotherField = document.getElementById('add-another-hidden');
+  if (addAnotherField) addAnotherField.value = window._addPartAnother ? '1' : '0';
   setTimeout(() => document.getElementById('part-search').focus(), 100);
 }
 function closeAddPartModal() {
