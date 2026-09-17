@@ -1,148 +1,154 @@
-# Flying Bike ServiceDesk — AWS Deployment Runbook
-# ===================================================
-# Architecture: EC2 (t3.small) + Docker Compose (nginx + Flask/gunicorn)
-#               behind an AWS ALB that terminates HTTPS via ACM certificate.
+# Flying Bike ServiceDesk — Deployment Runbook
+# Version 1.5.0
+# ==============================================
+# Architecture: Docker Compose (nginx + Flask/gunicorn)
+# DNS/SSL:      Cloudflare (free SSL, proxy)
+# Servers:
+#   Production:  AWS Lightsail (Amazon Linux 2023) — company AWS account
+#   Legacy:      AWS EC2 t3.small (personal account) — being decommissioned
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PART 1 — AWS INFRASTRUCTURE
+# PART 1 — LIGHTSAIL SERVER SETUP (current production target)
 # ─────────────────────────────────────────────────────────────────────────────
 
-# 1a. Create a Security Group (call it "servicedesk-sg"):
-#   Inbound:
-#     HTTP  (80)   from 0.0.0.0/0          ← ALB health checks + redirect
-#     HTTPS (443)  from 0.0.0.0/0          ← user traffic (ALB only)
-#     SSH   (22)   from YOUR_IP/32          ← your office IP only
-#   Outbound:
-#     All traffic  to 0.0.0.0/0            ← for apt/pip/docker pulls
+# Instance spec:
+#   Platform:  Amazon Linux 2023
+#   Plan:      512 MB RAM, 2 vCPU, 20 GB SSD  (upgrade to 1 GB if builds fail)
+#   IP:        13.210.197.67 (static Lightsail IP)
+#   SSH key:   your Lightsail .pem
 
-# 1b. Launch EC2 instance:
-#   AMI:           Amazon Linux 2023 (x86_64)
-#   Instance type: t3.small  (2 vCPU, 2 GB RAM)
-#   Storage:       20 GB gp3
-#   Security Group: servicedesk-sg (from 1a)
-#   Key pair:      create or use existing .pem
+ssh -i your-lightsail-key.pem ec2-user@13.210.197.67
 
-# 1c. Allocate and attach an Elastic IP to the instance
-#     (so the IP doesn't change on restart)
-
-# 1d. Request an ACM certificate:
-#   Go to: AWS Console → Certificate Manager → Request certificate
-#   Domain: yourdomain.com (and *.yourdomain.com if you want subdomains)
-#   Validation: DNS validation (add the CNAME record ACM provides to your DNS)
-#   Wait ~5 minutes for validation
-
-# 1e. Create an Application Load Balancer:
-#   Scheme:         Internet-facing
-#   Listeners:
-#     HTTP  (80)  → Redirect to HTTPS (301)
-#     HTTPS (443) → Forward to Target Group
-#   Target Group:
-#     Type:     Instance
-#     Protocol: HTTP, Port: 80
-#     Health check path: /health
-#     Register your EC2 instance
-#   SSL Certificate: select the ACM cert from 1d
-
-# 1f. Point your domain to the ALB:
-#   In Route 53 (or your DNS provider):
-#   Create an A record (Alias) → ALB DNS name
-#   e.g.  servicedesk.flyingbike.com.au → ALB-xyz.ap-southeast-2.elb.amazonaws.com
-
-# ─────────────────────────────────────────────────────────────────────────────
-# PART 2 — EC2 SERVER SETUP (run once, SSH in as ec2-user)
-# ─────────────────────────────────────────────────────────────────────────────
-
-# SSH in:
-ssh -i your-key.pem ec2-user@<ELASTIC_IP>
-
-# Install Docker and Docker Compose
+# 1a. System update + swap (512 MB RAM needs swap for Docker builds)
 sudo dnf update -y
+sudo dd if=/dev/zero of=/swapfile bs=128M count=16
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile swap swap defaults 0 0' | sudo tee -a /etc/fstab
+
+# 1b. Docker
 sudo dnf install -y docker git
 sudo systemctl enable --now docker
 sudo usermod -aG docker ec2-user
-newgrp docker  # apply group without re-login
+# Log out and back in for group to take effect
 
-# Install Docker Compose plugin
+# 1c. Docker Compose (manual install — dnf package not available on AL2023)
 sudo mkdir -p /usr/local/lib/docker/cli-plugins
-sudo curl -SL https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64 \
+sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-x86_64 \
      -o /usr/local/lib/docker/cli-plugins/docker-compose
 sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 docker compose version   # verify
 
-# ─────────────────────────────────────────────────────────────────────────────
-# PART 3 — DEPLOY THE APP
-# ─────────────────────────────────────────────────────────────────────────────
+# 1d. Docker Buildx (required by newer docker compose build)
+BUILDX_VERSION=$(curl -s https://api.github.com/repos/docker/buildx/releases/latest \
+  | grep '"tag_name"' | cut -d'"' -f4)
+sudo curl -SL "https://github.com/docker/buildx/releases/download/${BUILDX_VERSION}/buildx-${BUILDX_VERSION}.linux-amd64" \
+  -o /usr/local/lib/docker/cli-plugins/docker-buildx
+sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
+docker buildx version
 
-# Copy code to server (from your local machine):
-scp -i your-key.pem -r ./field_service ec2-user@<ELASTIC_IP>:~/servicedesk
-
-# OR clone from your git repository:
-git clone https://github.com/YOUR_ORG/servicedesk.git ~/servicedesk
-
-# Set up environment:
+# 1e. Clone the repo
+git clone https://github.com/terry-flander/service_manager.git ~/servicedesk
 cd ~/servicedesk
+
+# 1f. Environment
 cp .env.example .env
 nano .env
-#   Set SECRET_KEY to a long random string:
-#   python3 -c "import secrets; print(secrets.token_hex(32))"
-#   Set GOOGLE_MAPS_API_KEY if used
+# Set: SECRET_KEY, GMAIL_USER, Gmail/GCal/Xero OAuth credentials, BIKES_FOR_SALE_URL
 
-# Build and start:
+# 1g. Lightsail firewall — open port 80 in the Lightsail console:
+#   Instance → Networking → Add rule → HTTP (port 80)
+
+# 1h. Build and start
 docker compose up -d --build
-
-# Check it's running:
-docker compose ps
-docker compose logs -f
-
-# The app is now accessible at http://<ELASTIC_IP>
-# And at https://yourdomain.com once DNS propagates
+docker compose ps    # both flask and nginx should be Up
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PART 4 — ONGOING OPERATIONS
+# PART 2 — NGINX CONFIG (HTTP only — Cloudflare handles SSL)
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Deploy an update:
-cd ~/servicedesk
-git pull                          # or re-upload changed files
-docker compose up -d --build      # rebuilds only changed layers, zero downtime
-                                  # (nginx keeps serving while flask restarts)
+# nginx/nginx.conf uses a single HTTP server block.
+# Cloudflare sits in front and terminates HTTPS — nginx never sees TLS.
+# server_name includes the Lightsail IP for direct testing + the domain once
+# Cloudflare A record is updated.
+#
+# No SSL certificates needed on the server.
+# Set Cloudflare SSL mode to "Flexible" (Cloudflare ↔ server is plain HTTP).
 
-# View logs:
-docker compose logs flask         # app logs
-docker compose logs nginx         # access/error logs
-docker compose logs -f --tail=50  # live tail
+# ─────────────────────────────────────────────────────────────────────────────
+# PART 3 — DATABASE COPY FROM EC2
+# ─────────────────────────────────────────────────────────────────────────────
 
-# Backup the database:
-docker compose exec flask \
-  cp /data/field_service.db /data/backup_$(date +%Y%m%d).db
-# Copy backup to your machine:
-scp -i your-key.pem ec2-user@<IP>:/var/lib/docker/volumes/servicedesk_app_data/_data/field_service.db ./
+# Find the volume mount point:
+docker volume inspect $(docker volume ls -q | grep data) | grep Mountpoint
 
-# Restore from backup:
-docker compose down
-sudo cp field_service.db /var/lib/docker/volumes/servicedesk_app_data/_data/
-docker compose up -d
+# Copy DB from EC2 to local:
+scp -i ec2-key.pem \
+  ec2-user@<EC2-IP>:/var/lib/docker/volumes/servicedesk_app_data/_data/field_service.db \
+  /tmp/field_service.db
 
-# Run DB migrations (ALTER TABLE commands):
-docker compose exec flask python3 -c "
-from models import get_db
-with get_db() as conn:
-    conn.execute('ALTER TABLE ...')
-    conn.commit()
-"
+# Copy DB from local to Lightsail:
+scp -i lightsail-key.pem /tmp/field_service.db ec2-user@13.210.197.67:/tmp/
 
-# Restart the app only (no rebuild):
+# On Lightsail — copy into volume and fix permissions:
+MOUNTPOINT=$(docker volume inspect $(docker volume ls -q | grep data) \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)[0]['Mountpoint'])")
+sudo cp /tmp/field_service.db $MOUNTPOINT/field_service.db
+sudo chown 1000:1000 $MOUNTPOINT/field_service.db
+
+# Run migrations (always inside the container, after DB is in place):
+docker compose run --rm flask python3 /app/migrate.py
+
 docker compose restart flask
 
-# Stop everything:
-docker compose down
-
 # ─────────────────────────────────────────────────────────────────────────────
-# PART 5 — AUTO-START ON REBOOT
+# PART 4 — CODE UPDATES (ongoing)
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Create a systemd service so Docker Compose starts on boot:
-sudo tee /etc/systemd/system/servicedesk.service << 'EOF'
+cd ~/servicedesk
+git pull origin main
+find . -name "*.pyc" -delete 2>/dev/null
+
+# If schema changes (new columns / tables):
+docker compose run --rm flask python3 /app/migrate.py
+
+docker compose restart flask
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PART 5 — BIKE PHOTO SYNC (EC2 → Lightsail)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Run from local machine:
+EC2_KEY=~/.ssh/ec2-key.pem
+LS_KEY=~/.ssh/lightsail-key.pem
+EC2_HOST=ec2-user@<EC2-IP>
+LS_HOST=ec2-user@13.210.197.67
+DATA_PATH=/var/lib/docker/volumes/servicedesk_app_data/_data/attachments
+
+rsync -avz -e "ssh -i $EC2_KEY" "$EC2_HOST:$DATA_PATH/" /tmp/bike-images/
+rsync -avz -e "ssh -i $LS_KEY"  /tmp/bike-images/ "$LS_HOST:$DATA_PATH/"
+ssh -i $LS_KEY $LS_HOST "sudo chown -R 1000:1000 $DATA_PATH"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PART 6 — CLOUDFLARE CUTOVER (once Lightsail validated)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# 1. Validate app works at http://13.210.197.67
+# 2. In Cloudflare DNS for each domain:
+#      A record → update IP from EC2 IP to 13.210.197.67
+#      Proxy: ON (orange cloud) — Cloudflare handles SSL
+# 3. Domains to update:
+#      app.theflyingbike.com.au         (after domain recovered from hostile party)
+#      melbournebikeeducationandhire.com.au  (already on Cloudflare NS — just update A)
+#      pistabikes.com.au                (after domain transfer from Melbourne IT)
+# 4. Decommission EC2 instance once traffic confirmed on Lightsail
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PART 7 — AUTO-START ON REBOOT
+# ─────────────────────────────────────────────────────────────────────────────
+
+sudo tee /etc/systemd/system/servicedesk.service << 'SVCEOF'
 [Unit]
 Description=ServiceDesk Docker Compose
 Requires=docker.service
@@ -159,47 +165,67 @@ User=ec2-user
 
 [Install]
 WantedBy=multi-user.target
-EOF
+SVCEOF
 
 sudo systemctl enable servicedesk
 sudo systemctl start servicedesk
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PART 6 — ESTIMATED COSTS (ap-southeast-2 Sydney, March 2026)
+# PART 8 — DIAGNOSTICS
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Container status:
+docker compose ps
+
+# Logs:
+docker compose logs flask --tail 50
+docker compose logs nginx --tail 20
+docker compose logs flask 2>&1 | grep -A 10 "Traceback\|ERROR"
+
+# App won't start — test imports directly:
+docker compose run --rm flask python3 -c "import app; print('OK')"
+
+# DB access:
+docker compose exec flask python3 -c "
+from models import get_db
+with get_db() as c:
+    print(c.execute('SELECT COUNT(*) FROM jobs').fetchone()[0], 'jobs')
+"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PART 9 — COSTS (ap-southeast-2 Sydney, 2026)
 # ─────────────────────────────────────────────────────────────────────────────
 #
-#   EC2 t3.small (on-demand):    ~$18/month
-#   EBS gp3 20GB:                 ~$2/month
-#   Elastic IP (attached):         free
-#   ALB:                          ~$18/month  (LCU-based pricing)
-#   ACM certificate:                free
-#   Route 53 hosted zone:          ~$0.50/month
-#   Data transfer (low volume):    ~$1-2/month
-#                                  ──────────
-#   Total:                        ~$40/month
+#   Lightsail 512MB plan:    ~$5/month   (company AWS account)
+#   Lightsail static IP:      free while attached
+#   Cloudflare Free plan:     $0          (DNS, SSL, CDN, DMARC reports)
+#   Domain (if .com.au):     ~$20/year
+#                             ─────────
+#   Total:                   ~$5/month
 #
-#   To reduce costs:
-#   - Use a t4g.small (ARM) instead of t3.small: ~$13/month
-#   - Skip the ALB and use nginx to terminate SSL directly: saves ~$18/month
-#     (requires copying the ACM cert or using Let's Encrypt/Certbot)
-#
+#   (EC2 + ALB was ~$40/month on personal account — now decommissioned)
+
 # ─────────────────────────────────────────────────────────────────────────────
-# PART 7 — SECURITY CHECKLIST
+# PART 10 — EC2 LEGACY (personal account — being decommissioned)
 # ─────────────────────────────────────────────────────────────────────────────
+
+# EC2 instance: t3.small, Amazon Linux 2023
+# SSH: ssh -i ec2-key.pem ec2-user@<EC2-ELASTIC-IP>
+# App dir: ~/servicedesk
+# Promote script: ~/promote.sh <relative-path>
 #
-#   ✓ HTTPS enforced (ALB redirects HTTP → HTTPS)
-#   ✓ Flask SECRET_KEY is a long random value in .env (not in git)
-#   ✓ SQLite DB in a Docker volume (not in the container layer)
-#   ✓ App runs as non-root user (uid 1000) inside container
-#   ✓ Security headers set by nginx (X-Frame-Options, CSP, etc.)
-#   ✓ SSH access locked to your IP only
-#   ✓ Flask debug mode off (gunicorn in production)
-#   ✓ Session auth + 2FA for all users
+# The promote.sh script copies files from local to ~/servicedesk on EC2.
+# After promoting files:
+#   docker compose restart flask
 #
-#   Recommended additions:
-#   - Enable AWS CloudWatch for logs and alerts
-#   - Enable EC2 automatic security patches (AWS Systems Manager Patch Manager)
-#   - Schedule daily DB backups to S3:
-#       aws s3 cp /var/lib/docker/volumes/servicedesk_app_data/_data/field_service.db \
-#                 s3://your-backup-bucket/servicedesk/$(date +%Y/%m/%d)/field_service.db
-#   - Add to crontab: 0 2 * * * /home/ec2-user/backup.sh
+# After schema changes:
+#   docker compose run --rm flask python3 /app/migrate.py
+#   docker compose restart flask
+#
+# Decommission checklist:
+#   ✓ DB copied to Lightsail
+#   ✓ Cloudflare A records updated to Lightsail IP
+#   ✓ Traffic confirmed on Lightsail
+#   □ Stop EC2 instance
+#   □ Release Elastic IP
+#   □ Terminate instance + delete EBS volume

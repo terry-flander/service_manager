@@ -125,14 +125,13 @@ def bike_edit(bike_id):
         data = request.get_json() or {}
         conn.execute("""
             UPDATE bikes_for_sale
-            SET short_desc=?, specs=?, description_html=?,
+            SET short_desc=?, description_html=?,
                 condition_grade=?, frame_size=?, colour=?,
                 year_est=?, asking_price=?, min_price=?, status=?,
                 updated_at=datetime('now')
             WHERE id=?
         """, (
             (data.get('short_desc') or '').strip(),
-            (data.get('specs') or '').strip(),
             (data.get('description_html') or '').strip(),
             (data.get('condition_grade') or '').strip(),
             (data.get('frame_size') or '').strip(),
@@ -298,7 +297,7 @@ def public_bikes():
         cutoff    = (date.today() - timedelta(days=sold_days)).isoformat()
 
         rows = conn.execute("""
-            SELECT b.id, b.short_desc, b.specs, b.description_html,
+            SELECT b.id, b.short_desc, b.description_html,
                    b.year_est, b.asking_price, b.status, b.updated_at,
                    b.condition_grade, b.frame_size, b.colour,
                    j.status as job_status, j.bike_description
@@ -317,7 +316,6 @@ def public_bikes():
             result.append({
                 'id':               r['id'],
                 'short_desc':       r['short_desc'],
-                'specs':            r['specs'],
                 'description_html': r['description_html'] or '',
                 'year_est':         r['year_est'],
                 'asking_price':     r['asking_price'],

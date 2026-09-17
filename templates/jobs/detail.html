@@ -1782,14 +1782,13 @@ function openBikeDetailsModal(jobId) {
       document.getElementById('bm-year').value       = b.year_est || '';
       document.getElementById('bm-asking').value     = b.asking_price || '';
       document.getElementById('bm-min').value        = b.min_price || '';
-      document.getElementById('bm-specs').value      = b.specs || '';
       document.getElementById('bm-condition').value  = b.condition_grade || '';
       document.getElementById('bm-frame-size').value = b.frame_size || '';
       document.getElementById('bm-colour').value     = b.colour || '';
       document.getElementById('bm-status').value     = b.status || 'preparing';
       document.getElementById('bm-desc-html').value  = b.description_html || '';
       if (!window._bmRte) {
-        window._bmRte = initRichTextEditor('bm-desc-html-editor', {minHeight:'120px'});
+        window._bmRte = initRichTextEditor('bm-desc-html-editor', {minHeight:'240px'});
       }
       if (window._bmRte) window._bmRte.setContent(b.description_html || '');
       var sel = document.getElementById('bm-spec-tmpl');
@@ -1826,7 +1825,11 @@ function renderBikeDetailImages(images) {
 function applyBikeSpecTemplate() {
   var sel = document.getElementById('bm-spec-tmpl');
   var body = _bikeSpecTemplates[sel.value];
-  if (body) { document.getElementById('bm-specs').value = body; sel.value = ''; }
+  if (body) {
+    if (window._bmRte) window._bmRte.setContent(body);
+    else document.getElementById('bm-desc-html').value = body;
+    sel.value = '';
+  }
 }
 
 function uploadBikeDetailImage(input) {
@@ -1865,7 +1868,6 @@ function saveBikeDetails() {
       year_est:         document.getElementById('bm-year').value || null,
       asking_price:     document.getElementById('bm-asking').value || null,
       min_price:        document.getElementById('bm-min').value || null,
-      specs:            document.getElementById('bm-specs').value,
       condition_grade:  document.getElementById('bm-condition').value,
       frame_size:       document.getElementById('bm-frame-size').value,
       colour:           document.getElementById('bm-colour').value,
@@ -1937,15 +1939,14 @@ function _doSyncShortDesc(val) {
       </div>
       <div style="margin-bottom:1rem;">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.4rem;">
-          <label class="sd-label" style="margin:0;">Specifications</label>
+          <label class="sd-label" style="margin:0;">Website Description <span style="font-size:0.7rem;color:var(--sd-muted);">(shown in bike popup)</span></label>
           <select id="bm-spec-tmpl" class="sd-input" style="width:auto; font-size:0.75rem; padding:0.2rem 0.5rem;"
                   onchange="applyBikeSpecTemplate()">
             <option value="">Load template…</option>
           </select>
         </div>
-        <textarea id="bm-specs" class="sd-input" rows="12"
-                  style="font-family:monospace; font-size:0.8rem; resize:vertical;"
-                  placeholder="Enter specifications…"></textarea>
+        <div id="bm-desc-html-editor" style="min-height:240px; border:1px solid var(--sd-border); border-radius:5px;"></div>
+        <textarea id="bm-desc-html" style="display:none;"></textarea>
       </div>
       <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:1rem; margin-bottom:1rem;">
         <div>
@@ -1965,11 +1966,6 @@ function _doSyncShortDesc(val) {
           <label class="sd-label">Colour</label>
           <input type="text" id="bm-colour" class="sd-input" placeholder="e.g. Matte Black">
         </div>
-      </div>
-      <div style="margin-bottom:1rem;">
-        <label class="sd-label">Website Description <span style="font-size:0.7rem;color:var(--sd-muted);">(shown in bike popup)</span></label>
-        <div id="bm-desc-html-editor" style="min-height:120px; border:1px solid var(--sd-border); border-radius:5px;"></div>
-        <textarea id="bm-desc-html" style="display:none;"></textarea>
       </div>
       <div style="margin-bottom:1rem;">
         <label class="sd-label">Status</label>

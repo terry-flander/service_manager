@@ -41,7 +41,6 @@
       </td>
       <td>
         <div style="font-weight:600;">{{ b.short_desc or b.bike_description or '—' }}</div>
-        {% if b.specs %}<div style="font-size:0.72rem; color:var(--sd-muted);">{{ b.specs[:60] }}…</div>{% endif %}
       </td>
       <td>{{ b.year_est or '—' }}</td>
       <td>{% if b.asking_price %}<strong>${{ '%.2f'|format(b.asking_price) }}</strong>{% else %}—{% endif %}</td>
@@ -126,17 +125,16 @@
       </div>
       <div style="margin-bottom:1rem;">
         <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.4rem;">
-          <label class="sd-label" style="margin:0;">Specifications</label>
+          <label class="sd-label" style="margin:0;">Website Description <span style="font-size:0.7rem;color:var(--sd-muted);">(shown in bike popup)</span></label>
           <select id="bm-spec-tmpl" class="sd-input" style="width:auto; font-size:0.75rem; padding:0.2rem 0.5rem;"
                   onchange="applySpecTemplate()">
             <option value="">Load template…</option>
           </select>
         </div>
-        <textarea id="bm-specs" class="sd-input" rows="12"
-                  style="font-family:monospace; font-size:0.8rem; resize:vertical;"
-                  placeholder="Enter specifications…"></textarea>
+        <div id="bm-desc-html-editor" style="min-height:240px; border:1px solid var(--sd-border); border-radius:5px;"></div>
+        <textarea id="bm-desc-html" name="description_html" style="display:none;"></textarea>
       </div>
-      <!-- New fields row -->
+      <!-- Condition / Frame / Colour row -->
       <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:1rem; margin-bottom:1rem;">
         <div>
           <label class="sd-label">Condition</label>
@@ -155,11 +153,6 @@
           <label class="sd-label">Colour</label>
           <input type="text" id="bm-colour" class="sd-input" placeholder="e.g. Matte Black">
         </div>
-      </div>
-      <div style="margin-bottom:1rem;">
-        <label class="sd-label">Website Description <span style="font-size:0.7rem;color:var(--sd-muted);">(shown in bike popup)</span></label>
-        <div id="bm-desc-html-editor" style="min-height:120px; border:1px solid var(--sd-border); border-radius:5px;"></div>
-        <textarea id="bm-desc-html" name="description_html" style="display:none;"></textarea>
       </div>
       <div style="margin-bottom:1rem;">
         <label class="sd-label">Status</label>
@@ -267,7 +260,6 @@ function openBikeModal(bikeId) {
       document.getElementById('bm-year').value       = b.year_est || '';
       document.getElementById('bm-asking').value     = b.asking_price || '';
       document.getElementById('bm-min').value        = b.min_price || '';
-      document.getElementById('bm-specs').value      = b.specs || '';
       document.getElementById('bm-condition').value  = b.condition_grade || '';
       document.getElementById('bm-frame-size').value = b.frame_size || '';
       document.getElementById('bm-colour').value     = b.colour || '';
@@ -317,7 +309,8 @@ function applySpecTemplate() {
   var sel = document.getElementById('bm-spec-tmpl');
   var body = _specTemplates[sel.value];
   if (body) {
-    document.getElementById('bm-specs').value = body;
+    if (window._bmRte) window._bmRte.setContent(body);
+    else document.getElementById('bm-desc-html').value = body;
     sel.value = '';
   }
 }
@@ -358,7 +351,6 @@ function saveBike() {
       year_est:         document.getElementById('bm-year').value || null,
       asking_price:     document.getElementById('bm-asking').value || null,
       min_price:        document.getElementById('bm-min').value || null,
-      specs:            document.getElementById('bm-specs').value,
       condition_grade:  document.getElementById('bm-condition').value,
       frame_size:       document.getElementById('bm-frame-size').value,
       colour:           document.getElementById('bm-colour').value,

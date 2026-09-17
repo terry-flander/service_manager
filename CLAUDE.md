@@ -1,195 +1,160 @@
-# CLAUDE.md
+# CLAUDE.md — AI Assistant Context for ServiceDesk
 
-Guidance for Claude Code when working with this repository.
+This file gives Claude (or any AI assistant) the context needed to work
+effectively on this codebase without re-explaining conventions each session.
 
-## Development Commands
+---
 
-```bash
-# Setup
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env   # fill in SECRET_KEY at minimum
+## Project
 
-# Run (debug mode — http://localhost:5000)
-python app.py
+**Flying Bike ServiceDesk** — Flask/SQLite PWA for field service management.
+Three job types across three brands; email threading; GCal/Xero integration.
+Version: `1.5.0`  (see `version.py`)
 
-# Default login: admin@flyingbike.com.au / changeme123
+---
 
-# Run DB migrations (after pulling schema changes)
-python3 migrate.py
+## Critical Conventions
+
+### SQLite rows — ALWAYS bracket access
+```python
+# CORRECT
+row['column_name']
+row['job_type'] or ''
+
+# WRONG — will throw AttributeError at runtime
+row.get('column_name')
+row.get('job_type', '')
+```
+`sqlite3.Row` objects do NOT have `.get()`. This is a recurring bug source.
+
+### Jinja2 — tojson in onclick attributes
+```html
+<!-- WRONG — double quotes break the HTML attribute -->
+<button onclick="fn({{ value|tojson }})">
+
+<!-- CORRECT — assign to a JS variable in a script block -->
+<script>var VALUE = {{ value|tojson }};</script>
+<button onclick="fn(VALUE)">
 ```
 
-No test suite. No lint/format tooling.
+### Email addresses
+- System customers use `@flyingbike.internal` suffix (Counter Sales, Bikes for Sale).
+- `email_sender.is_sendable_email(addr)` guards all outbound sends — returns `False`
+  for empty, `@unknown.local`, or missing `@`. Call this before any `send_reply()`.
 
-## Architecture
+### Coordinates / URLs — ASCII hyphens only
+When writing latitude/longitude in URLs, query strings, or any text that will
+be parsed as code or a URL, always use ASCII hyphen `-` (U+002D) for negative
+values. Never use em dash `—`, en dash `–`, or Unicode minus `−` — they look
+identical in some editors but break URL parsers.
 
-Flask field-service management app for a mobile bicycle repair business (The Flying Bike). Entry point `app.py` (`create_app()`), WSGI entry `wsgi.py` (gunicorn in production). Deployed via Docker Compose + nginx on AWS EC2.
+### pyc / bytecode cache
+Stale `.pyc` files are a recurring source of "code change not taking effect"
+bugs. After any significant file promotion, clear them:
+```bash
+find ~/servicedesk -name "*.pyc" -delete 2>/dev/null
+```
 
-### Blueprints (`routes/`)
+### version.py
+Never edit with a Python one-liner `open(...,'w')` — if interrupted it leaves
+an empty file that crashes startup. Use `echo` or `promote.sh`:
+```bash
+echo 'VERSION = "1.5.0"' > version.py
+```
 
-| Blueprint | Prefix | Purpose |
-|---|---|---|
-| `auth` | `/login`, `/logout` | Login, TOTP 2FA, user management |
-| `jobs` | `/`, `/jobs/` | Job CRUD, status, parts, email imports |
-| `customers` | `/customers/` | Customer list, edit, merge, import |
-| `regions` | `/regions/` | Region/suburb management, region dates |
-| `calendar` | `/calendar/` | FullCalendar view, event CRUD |
-| `invoice` | `/jobs/<id>/invoice` | HTML + PDF invoice, shop ticket |
-| `parts` | `/parts/` | Parts catalogue |
-| `reports` | `/reports/` | Sales report |
-| `email_replies` | `/jobs/<id>/email-*` | Compose/send email replies |
-| `import_jobs` | `/admin/import-jobs` | CSV job import |
-| `import_customers` | `/admin/import-customers` | CSV customer import |
+---
 
-### Database
-
-SQLite via raw `sqlite3` (no ORM). Schema in `models.py:init_db()` — runs every startup with `CREATE TABLE IF NOT EXISTS`, safe to re-run. One-off changes go in `migrate.py`.
-
-DB path: `field_service.db` locally, `/data/field_service.db` in Docker (`DATA_DIR` env var).
+## DB Patterns
 
 ```python
-from models import get_db
+# Always use context manager
 with get_db() as conn:
-    rows = conn.execute("SELECT * FROM jobs WHERE status=?", ('pending',)).fetchall()
-    conn.execute("UPDATE jobs SET status=? WHERE id=?", ('complete', job_id))
-    conn.commit()
-# Rows are sqlite3.Row — use row['column'] syntax
-# PRAGMA foreign_keys = ON is set on every connection
+    rows = conn.execute("SELECT * FROM jobs WHERE id=?", (job_id,)).fetchall()
+
+# Bracket access on results
+job['customer_name']   # correct
+job.get('customer_name')  # WRONG
 ```
 
-### Key Tables
+### Migrations
+- `models.py` — `CREATE TABLE IF NOT EXISTS` (startup, idempotent)
+- `migrate.py` — `ALTER TABLE ... ADD COLUMN` (run manually after deploy)
+- Always run migrate **inside the container**:
+  ```bash
+  docker compose run --rm flask python3 /app/migrate.py
+  ```
 
-**`jobs`**: `id`, `reference`, `job_type`, `customer_id`, `customer_name`, `customer_email`, `customer_phone`, `suburb`, `address`, `description`, `bike_description`, `service_types`, `region_id`, `tax_inclusive`, `scheduled_date`, `scheduled_time`, `end_time`, `end_date`, `invoice_number`, `status`, `paid_date`, `amount_paid`, `payment_type`, `notes`
+---
 
-**`customers`**: `id`, `name`, `email` UNIQUE, `phone`, `suburb`, `address`
-
-**`regions`** / **`suburbs`**: regions have a `visit_day`; suburbs have `region_id` FK
-
-**`region_dates`**: `id`, `region_id`, `date`, `status` (open/pending/closed) — bookable dates per region. Auto-closed when calendar loads if date has passed.
-
-**`job_parts`**: `job_id`, `part_id`, `description`, `part_number`, `quantity`, `unit_cost`
-
-**`email_imports`** / **`email_replies`**: inbound/outbound email thread per job
-
-**`settings`**: key/value store for per-user prefs (filters, report prefs, cal view), status colours, etc.
-
-## Job Types
-
-Three types, each with its own reference prefix:
-
-| Type | Prefix | Scheduling | Visible Fields |
-|---|---|---|---|
-| `booking` | `FB-NNNN` | region + date select + start/end time | all fields |
-| `workshop` | `PB-NNNN` | plain date input (default today) | no region/suburb/address/service_types; bike_description shown |
-| `rental` | `RB-NNNN` | start date + end date | no region/suburb/time/bike_description/service_types |
-
-`generate_reference(job_type, conn)` in `routes/jobs.py` creates the reference. Retried up to 5× on UNIQUE collision. `change_type` route re-numbers with new prefix.
-
-## Tax Treatment
-
-`jobs.tax_inclusive` is an integer with three values:
-
-| Value | Label | Behaviour |
-|---|---|---|
-| `1` | Tax Inclusive | Prices include GST. Back-calc: `gst = total / 11` |
-| `0` | Tax Exclusive | Prices ex-GST. `total = subtotal × 1.1` |
-| `2` | GST Exempt | No GST. `gst = 0`, `total = raw sum`. Displays "nil" on invoice. |
-
-Cash `payment_type` always zeros GST regardless of tax_inclusive. All three cases handled in `calc_totals()` in `routes/invoice.py`.
-
-## Auth
-
-Global `@before_request` in `app.py` redirects unauthenticated users to `/login`. Only `auth.login`, `auth.totp_verify`, and `static` are public. `g.user` attached on every request, available in templates. Optional TOTP 2FA per user (`totp.py`).
-
-## Templates
-
-All extend `templates/base.html`. Bootstrap 5.3 + Bootstrap Icons from CDN. Two themes (dark/light) stored per user in DB, cached in session. Every template receives `current_user`, `theme`, `status_colors`, `google_maps_api_key`, `JOB_TYPES`, `TIME_LABELS`, `TIME_SLOTS` via `@app.context_processor`.
-
-**Custom Jinja filter `fmt_date`:**
-```jinja
-{{ value|fmt_date }}          {# "Tuesday 1 April 2025" #}
-{{ value|fmt_date('short') }} {# "Tue 1 Apr 2025" #}
-{{ value|fmt_date('dmy') }}   {# "01/04/2025" #}
-```
-
-**Fixed-position dropdowns**: Any `<select>` or custom dropdown inside a card with `overflow:hidden` must use `position:fixed` + `getBoundingClientRect()` to avoid rendering at offset 0,0. See customer search, part search, merge customer, and suburb pickers for the pattern.
-
-## Job Detail Page (`/jobs/<id>`)
-
-The detail page is merged with editing — no separate edit page. `GET /jobs/<id>` renders the full detail. `POST /jobs/<id>` saves the editable fields: `description`, `address`, `bike_description` (workshop only), scheduling fields, `tax_inclusive`, `notes`. The `update_status` form (`POST /jobs/<id>/status`) saves status, payment fields, and `invoice_number` separately.
-
-`edit_job` route redirects to `job_detail` for backwards compatibility.
-
-## Customer Upsert
-
-`upsert_customer(conn, name, email, phone, suburb, address)` in `routes/jobs.py`:
-1. Matches on `email` first (case-insensitive)
-2. If no email: tries `LOWER(name)=LOWER(?)`, then `phone=?`
-3. Falls back to synthetic email `unknown_<name>@unknown.local` if no match
-
-Jobs store denormalised customer fields (`customer_name`, `customer_email`, etc.) in addition to `customer_id` FK. Keep both in sync when updating.
-
-## Email System
-
-**Poller** (`email_poller.py`): Background thread started at startup if `GMAIL_USER` + `GMAIL_REFRESH_TOKEN` are set. Polls Gmail via IMAP+OAuth2. New booking emails → jobs. Replies threaded via `In-Reply-To`/`References` headers, then subject match, then customer email match. UNSEEN fallback: `SINCE 2-days-ago` when Gmail marks messages read externally. Run `gmail_oauth_setup.py` once to get the refresh token.
-
-**Replies** (`routes/email_replies.py`): Template-based with substitutions (`{{first_name}}`, `{{reference}}`, `{{invoice_pdf}}`, etc.). `{{invoice_pdf}}` attaches a generated PDF.
-
-**Environment vars**: `GMAIL_USER`, `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`, `GMAIL_LABEL` (default: `Booking Email/Open Bookings`), `GMAIL_POLL_MINUTES` (default: 5).
-
-## Invoice & PDF
-
-`routes/invoice.py` serves HTML invoice (`/jobs/<id>/invoice`) and PDF (`/jobs/<id>/invoice/pdf/file`). PDF generated with ReportLab in `invoice_pdf.py` — not a template engine. Shop ticket at `/jobs/<id>/shop-ticket/file`.
-
-GST Exempt jobs show "nil" in the HTML invoice totals section and omit the GST row in the PDF.
-
-## Reports
-
-Sales report (`/reports/sales`) supports filtering by date range, job type (booking/workshop/rental), and status. Selections persist per user in `settings`. Workshop jobs with NULL `scheduled_date` match on `paid_date` instead. Grand total row is a table row aligned to the same columns as the month rows.
-
-## Calendar
-
-FullCalendar 6 (`/calendar`). Three event types:
-- **Job events**: coloured by status, link to job detail
-- **Region date events** (canary yellow `#FFEF00`): all-day, one per open region date. Click → Delete Region Date dialog. Click empty all-day area → Add Region Date dialog.
-- **Custom events**: created via the event modal (timed slot click)
-
-Region dates auto-close (status → `closed`) when their date has passed, on each calendar load.
-
-Routes: `POST /regions/add-date`, `POST /regions/delete-date/<id>`, `GET /regions/<id>/open-dates`.
-
-`window.calendar` and `window.showToast` are exposed globally so dialog `onclick` handlers can call `calendar.refetchEvents()` after mutations.
-
-## Seed Data
-
-`seed.py` called on every startup:
-- Parts always upserted from `parts.csv` (authoritative — DB edits overwritten on restart)
-- Regions/suburbs loaded from `regions_suburbs.csv` only once (skipped if any regions exist)
-- Default admin created only if `admin@flyingbike.com.au` doesn't exist
-
-## Deployment
+## Promote Workflow
 
 ```bash
-# EC2 — Docker Compose
-docker compose up -d
-docker compose exec -w /app flask python3 migrate.py   # run after schema changes
-
-# DB backup
-GET /admin/backup-db   # admin only, downloads live SQLite file
-
-# Poll log
-GET /admin/poll-log    # admin only, returns plain text email poll log
+# From local repo root
+../promote.sh routes/jobs.py
+../promote.sh templates/jobs/detail.html
 ```
 
-DB volume: `servicedesk_app_data` mounted at `/data/`.
+```bash
+# Separately on the server
+docker compose restart flask
+```
 
-## Non-Obvious Details
+**Never mix promote.sh and docker commands in the same shell block.**
+They run in different places — promote.sh is local, docker commands are on server.
 
-- `jobs.tax_inclusive` is `INTEGER` (0, 1, or 2) — never cast to `bool` in Python; pass the raw int to `calc_totals()`.
-- `email_imports.body` differs by source: extracted `message` field for new bookings, full raw body for thread replies.
-- Status colours stored in `settings` table as `status_color_<status>` with hardcoded fallbacks in `app.py`.
-- `parts.csv` is authoritative — DB part edits are overwritten on next startup.
-- `regions_suburbs.csv` loaded once only — changes require manual DB edits or full reset.
-- `job_filter_{user_id}` and `customer_search_{user_id}` in `settings` persist list filters per user; cleared via dedicated POST routes.
-- All three job types share the same `jobs` table — fields not applicable to a type are stored as NULL (e.g. `scheduled_time` for workshop/rental, `suburb` for rental).
-- `invoice_number` is user-entered (e.g. `INV-0042`), not auto-generated.
+---
+
+## Key Files
+
+| File | Purpose |
+|---|---|
+| `models.py` | Full DB schema |
+| `migrate.py` | Schema migrations (append-only, safe to re-run) |
+| `seed.py` | Reference data — system customers, spec templates, parts |
+| `routes/jobs.py` | Core job CRUD, JOB_TYPES dict, add_part |
+| `routes/bikes.py` | Bikes for Sale CRUD + public JSON endpoint |
+| `routes/email_replies.py` | Email compose, templates, thread view |
+| `routes/calendar.py` | FullCalendar feed, GCal drag/drop sync |
+| `routes/invoice.py` | Invoice PDF generation route |
+| `invoice_pdf.py` | PDF layout |
+| `xero_sync.py` | Xero invoice push |
+| `gcal_sync.py` | Google Calendar event create/update/delete |
+| `email_poller.py` | Background IMAP poller |
+| `email_sender.py` | Gmail OAuth2 SMTP + `is_sendable_email()` |
+| `templates/base.html` | Shared layout, sidebar, reply modal, `initRichTextEditor()` |
+| `templates/jobs/detail.html` | Job edit form (the main working screen) |
+| `static/pistabikes.html` | Pista Bikes public website |
+| `static/pistabikes-bikes.html` | Second-hand bikes gallery (calls `/bikes-for-sale` API) |
+
+---
+
+## Job Type Routing Logic
+
+`sale_bike` jobs behave like `workshop` in most places:
+- No suburb, address, region, service types, phone, portal link
+- Not on calendar or GCal
+- Always tax inclusive
+- Auto-assigned to "Bikes for Sale" internal customer
+- Invoice: single line from `bikes_for_sale.short_desc`, no parts lines
+- Xero: single line, `OUTPUT/Inclusive` tax type
+
+---
+
+## Public Endpoints (no auth required)
+```
+GET  /bikes-for-sale          JSON feed for pistabikes-bikes.html
+GET  /bikes/images/<id>       Bike photo serving
+POST /booking/submit          Booking form submission
+```
+
+---
+
+## Environment Variables (.env)
+```
+SECRET_KEY
+GMAIL_USER
+GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET / GMAIL_REFRESH_TOKEN
+GCAL_CLIENT_ID / GCAL_CLIENT_SECRET / GCAL_REFRESH_TOKEN / GCAL_CALENDAR_ID
+XERO_CLIENT_ID / XERO_CLIENT_SECRET / XERO_REFRESH_TOKEN / XERO_TENANT_ID
+BIKES_FOR_SALE_URL   (default: https://app.theflyingbike.com.au)
+```

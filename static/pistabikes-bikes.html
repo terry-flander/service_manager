@@ -529,8 +529,6 @@ function openModal(bikeId) {
   var descEl = document.getElementById('modal-desc');
   if (b.description_html && b.description_html.trim()) {
     descEl.innerHTML = b.description_html;
-  } else if (b.specs && b.specs.trim()) {
-    descEl.innerHTML = `<pre class="modal-specs-plain">${esc(b.specs)}</pre>`;
   } else {
     descEl.innerHTML = '<p style="color:var(--muted);">Contact us for full specifications.</p>';
   }

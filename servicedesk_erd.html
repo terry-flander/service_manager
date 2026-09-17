@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ServiceDesk ERD — Flying Bike Group v1.5.0</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a;
+  --border: #2e3347; --text: #e2e5f0; --muted: #6b7394;
+  --pk: #f59e0b; --fk: #60a5fa; --col: #94a3b8;
+  --jobs: #7c3aed; --customer: #0891b2; --email: #059669;
+  --inventory: #d97706; --calendar: #db2777; --bikes: #16a34a;
+  --admin: #6366f1;
+}
+body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif;
+       font-size: 13px; line-height: 1.4; padding: 2rem; }
+h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 0.25rem; }
+.subtitle { color: var(--muted); font-size: 0.82rem; margin-bottom: 2rem; }
+.legend { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 2rem; }
+.leg { display: flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; }
+.leg-dot { width: 10px; height: 10px; border-radius: 2px; }
+.erd { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; }
+@media (max-width: 1200px) { .erd { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 800px)  { .erd { grid-template-columns: repeat(2, 1fr); } }
+.tbl { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.tbl-head { padding: 0.55rem 0.75rem; font-size: 0.78rem; font-weight: 700;
+            letter-spacing: 0.04em; text-transform: uppercase; color: #fff;
+            display: flex; align-items: center; gap: 0.4rem; }
+.tbl-body { padding: 0.2rem 0; }
+.col-row { display: flex; align-items: baseline; gap: 0.35rem; padding: 0.22rem 0.75rem; font-size: 0.75rem; }
+.col-row:nth-child(even) { background: rgba(255,255,255,0.02); }
+.col-name { color: var(--col); min-width: 130px; flex-shrink: 0; }
+.col-name.pk { color: var(--pk); font-weight: 600; }
+.col-name.fk { color: var(--fk); }
+.col-type { color: var(--muted); font-size: 0.68rem; font-style: italic; }
+.col-ref  { color: var(--fk); font-size: 0.65rem; margin-left: auto; flex-shrink: 0; }
+.note { color: var(--muted); font-size: 0.68rem; padding-top: 0.3rem; font-style: italic; }
+.section-title { grid-column: 1/-1; font-size: 0.7rem; font-weight: 700;
+                 letter-spacing: 0.12em; text-transform: uppercase;
+                 color: var(--muted); padding-bottom: 0.4rem;
+                 border-bottom: 1px solid var(--border); margin-top: 0.5rem; }
+.fk-section { margin-top: 2rem; background: var(--surface); border: 1px solid var(--border);
+              border-radius: 8px; padding: 1rem 1.25rem; }
+.fk-section h3 { font-size: 0.8rem; font-weight: 700; text-transform: uppercase;
+                 letter-spacing: 0.08em; color: var(--muted); margin-bottom: 0.75rem; }
+.fk-list { display: grid; grid-template-columns: repeat(3,1fr); gap: 0.4rem; }
+.fk-item { font-size: 0.72rem; color: var(--col); }
+.fk-item span { color: var(--fk); }
+</style>
+</head>
+<body>
+<h1>ServiceDesk — Entity Relationship Diagram</h1>
+<div class="subtitle">Flying Bike Group · v1.5.0 · September 2026 · 25 tables</div>
+<div class="legend">
+  <div class="leg"><div class="leg-dot" style="background:var(--pk)"></div> PK</div>
+  <div class="leg"><div class="leg-dot" style="background:var(--fk)"></div> FK</div>
+  <div class="leg"><div class="leg-dot" style="background:var(--jobs)"></div> Jobs</div>
+  <div class="leg"><div class="leg-dot" style="background:var(--customer)"></div> Customers</div>
+  <div class="leg"><div class="leg-dot" style="background:var(--email)"></div> Email</div>
+  <div class="leg"><div class="leg-dot" style="background:var(--inventory)"></div> Inventory</div>
+  <div class="leg"><div class="leg-dot" style="background:var(--bikes)"></div> Bikes for Sale</div>
+  <div class="leg"><div class="leg-dot" style="background:var(--calendar)"></div> Calendar/Regions</div>
+  <div class="leg"><div class="leg-dot" style="background:var(--admin)"></div> Admin/Config</div>
+</div>
+<div class="erd">
+
+<div class="section-title">Customers</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--customer)">customers</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name">name</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">email</span><span class="col-type">TEXT UNIQUE</span></div>
+    <div class="col-row"><span class="col-name">phone</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">suburb</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">address</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">created_at</span><span class="col-type">TEXT</span></div>
+    <div class="col-row note">System: counter.sales@, bikes.for.sale@ .flyingbike.internal</div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--customer)">customer_contacts</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name fk">customer_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ customers</span></div>
+    <div class="col-row"><span class="col-name">name</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">role</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">email</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">phone</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">is_primary</span><span class="col-type">INTEGER</span></div>
+  </div>
+</div>
+
+<div class="section-title">Jobs</div>
+
+<div class="tbl" style="grid-column:span 2">
+  <div class="tbl-head" style="background:var(--jobs)">jobs</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name">reference</span><span class="col-type">TEXT UNIQUE</span><span class="col-ref">FB-|PB-|RB-|CS-|BK-</span></div>
+    <div class="col-row"><span class="col-name">job_type</span><span class="col-type">TEXT</span><span class="col-ref">booking|workshop|rental|sale|sale_bike</span></div>
+    <div class="col-row"><span class="col-name fk">customer_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ customers</span></div>
+    <div class="col-row"><span class="col-name">customer_name</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">customer_email</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">customer_phone</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">status</span><span class="col-type">TEXT</span><span class="col-ref">pending|scheduled|in_progress|complete|invoiced|paid|lost</span></div>
+    <div class="col-row"><span class="col-name">suburb / address</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">description</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">bike_description</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">service_types</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name fk">region_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ regions</span></div>
+    <div class="col-row"><span class="col-name">scheduled_date</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">scheduled_time / end_time</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">end_date</span><span class="col-type">TEXT</span><span class="col-ref">rental only</span></div>
+    <div class="col-row"><span class="col-name">tax_inclusive</span><span class="col-type">INTEGER</span><span class="col-ref">0|1|2(exempt)</span></div>
+    <div class="col-row"><span class="col-name">subtotal / gst / total</span><span class="col-type">REAL</span></div>
+    <div class="col-row"><span class="col-name">payment_type / paid_date</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">amount_paid</span><span class="col-type">REAL</span></div>
+    <div class="col-row"><span class="col-name">invoice_number</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">xero_invoice_id</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">gcal_event_id</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">add_to_calendar</span><span class="col-type">INTEGER</span></div>
+    <div class="col-row"><span class="col-name">portal_token</span><span class="col-type">TEXT UNIQUE</span></div>
+    <div class="col-row"><span class="col-name">notes / referral_source</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">created_at / updated_at</span><span class="col-type">TEXT</span></div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--jobs)">job_parts</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name fk">job_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ jobs</span></div>
+    <div class="col-row"><span class="col-name fk">part_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ parts</span></div>
+    <div class="col-row"><span class="col-name">description</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">part_number</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">quantity</span><span class="col-type">REAL</span></div>
+    <div class="col-row"><span class="col-name">unit_cost</span><span class="col-type">REAL</span></div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--jobs)">job_status_triggers</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name">job_type</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">trigger_status</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name fk">template_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ email_templates</span></div>
+    <div class="col-row"><span class="col-name">send_auto</span><span class="col-type">INTEGER</span></div>
+  </div>
+</div>
+
+<div class="section-title">Bikes for Sale (NEW v1.5.0)</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--bikes)">bikes_for_sale</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name fk">job_id</span><span class="col-type">INTEGER UNIQUE</span><span class="col-ref">→ jobs (1:1)</span></div>
+    <div class="col-row"><span class="col-name">short_desc</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">specs</span><span class="col-type">TEXT</span><span class="col-ref">internal tech ref</span></div>
+    <div class="col-row"><span class="col-name">description_html</span><span class="col-type">TEXT</span><span class="col-ref">website rich text</span></div>
+    <div class="col-row"><span class="col-name">condition_grade</span><span class="col-type">TEXT</span><span class="col-ref">Good|Very Good|Excellent</span></div>
+    <div class="col-row"><span class="col-name">frame_size</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">colour</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">year_est</span><span class="col-type">INTEGER</span></div>
+    <div class="col-row"><span class="col-name">asking_price</span><span class="col-type">REAL</span></div>
+    <div class="col-row"><span class="col-name">min_price</span><span class="col-type">REAL</span></div>
+    <div class="col-row"><span class="col-name">status</span><span class="col-type">TEXT</span><span class="col-ref">preparing|available|sold|n/a</span></div>
+    <div class="col-row"><span class="col-name">created_at / updated_at</span><span class="col-type">TEXT</span></div>
+    <div class="col-row note">Public API: GET /bikes-for-sale (job.status=complete)</div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--bikes)">bike_images</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name fk">bike_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ bikes_for_sale</span></div>
+    <div class="col-row"><span class="col-name">filename</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">filepath</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">sort_order</span><span class="col-type">INTEGER</span></div>
+    <div class="col-row"><span class="col-name">created_at</span><span class="col-type">TEXT</span></div>
+    <div class="col-row note">Files: /data/attachments/bike_&lt;id&gt;/</div>
+  </div>
+</div>
+
+<div class="section-title">Email</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--email)">email_imports</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name fk">job_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ jobs</span></div>
+    <div class="col-row"><span class="col-name">message_id</span><span class="col-type">TEXT UNIQUE</span></div>
+    <div class="col-row"><span class="col-name">thread_id</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">sender / subject / body</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">status / read</span><span class="col-type">TEXT/INTEGER</span></div>
+    <div class="col-row"><span class="col-name">imported_at</span><span class="col-type">TEXT</span></div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--email)">email_import_attachments</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name fk">email_import_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ email_imports</span></div>
+    <div class="col-row"><span class="col-name">filename / filepath</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">mime_type</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">size_bytes</span><span class="col-type">INTEGER</span></div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--email)">email_replies</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name fk">job_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ jobs</span></div>
+    <div class="col-row"><span class="col-name">message_id</span><span class="col-type">TEXT UNIQUE</span></div>
+    <div class="col-row"><span class="col-name">subject / to_address / body</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">sent_at</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name fk">sent_by</span><span class="col-type">INTEGER</span><span class="col-ref">→ users</span></div>
+    <div class="col-row"><span class="col-name fk">template_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ email_templates</span></div>
+    <div class="col-row"><span class="col-name fk">contact_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ customer_contacts</span></div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--email)">email_templates</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name">name</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">subject / body</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">grp</span><span class="col-type">TEXT</span><span class="col-ref">booking|shop|bike|rental|misc</span></div>
+    <div class="col-row"><span class="col-name">created_at / updated_at</span><span class="col-type">TEXT</span></div>
+  </div>
+</div>
+
+<div class="section-title">Inventory</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--inventory)">parts</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name">name</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">part_number</span><span class="col-type">TEXT UNIQUE</span></div>
+    <div class="col-row"><span class="col-name">unit_cost</span><span class="col-type">REAL</span></div>
+    <div class="col-row"><span class="col-name">unit / active</span><span class="col-type">TEXT/INTEGER</span></div>
+    <div class="col-row"><span class="col-name">part_type</span><span class="col-type">TEXT</span><span class="col-ref">stock|ad_hoc</span></div>
+    <div class="col-row"><span class="col-name">avg_cost_inc_gst</span><span class="col-type">REAL</span></div>
+    <div class="col-row"><span class="col-name">reorder_point / reorder_qty</span><span class="col-type">REAL</span></div>
+    <div class="col-row"><span class="col-name fk">supplier_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ suppliers</span></div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--inventory)">suppliers</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name">name / email / phone</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">website / notes</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">active</span><span class="col-type">INTEGER</span></div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--inventory)">supplier_parts</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name fk">supplier_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ suppliers</span></div>
+    <div class="col-row"><span class="col-name fk">part_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ parts</span></div>
+    <div class="col-row"><span class="col-name">supplier_sku / description</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">last_price_inc_gst</span><span class="col-type">REAL</span></div>
+    <div class="col-row"><span class="col-name">last_ordered_at</span><span class="col-type">TEXT</span></div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--inventory)">purchase_orders</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name fk">supplier_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ suppliers</span></div>
+    <div class="col-row"><span class="col-name">order_date / reference</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">status</span><span class="col-type">TEXT</span><span class="col-ref">open|received|closed</span></div>
+    <div class="col-row"><span class="col-name">freight_inc_gst</span><span class="col-type">REAL</span></div>
+    <div class="col-row"><span class="col-name fk">created_by</span><span class="col-type">INTEGER</span><span class="col-ref">→ users</span></div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--inventory)">purchase_order_lines</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name fk">order_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ purchase_orders</span></div>
+    <div class="col-row"><span class="col-name fk">part_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ parts</span></div>
+    <div class="col-row"><span class="col-name">supplier_sku / desc</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">qty_ordered / qty_received</span><span class="col-type">REAL</span></div>
+    <div class="col-row"><span class="col-name">price_inc_gst</span><span class="col-type">REAL</span></div>
+    <div class="col-row"><span class="col-name fk">location_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ locations</span></div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--inventory)">locations</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name">name</span><span class="col-type">TEXT UNIQUE</span></div>
+    <div class="col-row"><span class="col-name">job_type / active</span><span class="col-type">TEXT/INTEGER</span></div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--inventory)">part_location_stock</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk fk">part_id</span><span class="col-type">INTEGER PK</span><span class="col-ref">→ parts</span></div>
+    <div class="col-row"><span class="col-name pk fk">location_id</span><span class="col-type">INTEGER PK</span><span class="col-ref">→ locations</span></div>
+    <div class="col-row"><span class="col-name">qty_on_hand</span><span class="col-type">REAL</span></div>
+    <div class="col-row note">Composite PK</div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--inventory)">inventory_transactions</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name fk">part_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ parts</span></div>
+    <div class="col-row"><span class="col-name">type</span><span class="col-type">TEXT</span><span class="col-ref">receive|take|adjust|count</span></div>
+    <div class="col-row"><span class="col-name">quantity / transaction_date</span><span class="col-type">REAL/TEXT</span></div>
+    <div class="col-row"><span class="col-name fk">location_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ locations</span></div>
+    <div class="col-row"><span class="col-name fk">created_by</span><span class="col-type">INTEGER</span><span class="col-ref">→ users</span></div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--inventory)">inventory_counts</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name">count_date</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name fk">location_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ locations</span></div>
+    <div class="col-row"><span class="col-name">status</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name fk">created_by</span><span class="col-type">INTEGER</span><span class="col-ref">→ users</span></div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--inventory)">inventory_count_lines</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name fk">count_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ inventory_counts</span></div>
+    <div class="col-row"><span class="col-name fk">part_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ parts</span></div>
+    <div class="col-row"><span class="col-name">qty_system / qty_counted / adjustment</span><span class="col-type">REAL</span></div>
+  </div>
+</div>
+
+<div class="section-title">Calendar &amp; Regions</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--calendar)">regions</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name">name</span><span class="col-type">TEXT UNIQUE</span></div>
+    <div class="col-row"><span class="col-name">visit_day</span><span class="col-type">TEXT</span></div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--calendar)">suburbs</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name fk">region_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ regions</span></div>
+    <div class="col-row"><span class="col-name">name</span><span class="col-type">TEXT UNIQUE</span></div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--calendar)">region_dates</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name fk">region_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ regions</span></div>
+    <div class="col-row"><span class="col-name">date</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">status</span><span class="col-type">TEXT</span><span class="col-ref">open|closed</span></div>
+    <div class="col-row"><span class="col-name">gcal_event_id</span><span class="col-type">TEXT</span></div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--calendar)">calendar_events</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name">title</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">start_date / start_time</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">end_date / end_time</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">description / color</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">gcal_event_id</span><span class="col-type">TEXT</span></div>
+  </div>
+</div>
+
+<div class="section-title">Admin &amp; Configuration</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--admin)">users</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name">name</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">email</span><span class="col-type">TEXT UNIQUE</span></div>
+    <div class="col-row"><span class="col-name">password_hash</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">role</span><span class="col-type">TEXT</span><span class="col-ref">admin|mechanic</span></div>
+    <div class="col-row"><span class="col-name">totp_secret / totp_enabled</span><span class="col-type">TEXT/INTEGER</span></div>
+    <div class="col-row"><span class="col-name">must_change_pw / active</span><span class="col-type">INTEGER</span></div>
+    <div class="col-row"><span class="col-name">theme</span><span class="col-type">TEXT</span><span class="col-ref">dark|light</span></div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--admin)">settings</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">key</span><span class="col-type">TEXT PK</span></div>
+    <div class="col-row"><span class="col-name">value</span><span class="col-type">TEXT</span></div>
+    <div class="col-row note">gcal_enabled · bikes_sold_days · BIKES_FOR_SALE_URL</div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--admin)">service_types</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name">code</span><span class="col-type">TEXT UNIQUE</span></div>
+    <div class="col-row"><span class="col-name">label / description / keywords</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name fk">part_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ parts</span></div>
+    <div class="col-row"><span class="col-name">job_group</span><span class="col-type">TEXT</span><span class="col-ref">booking|workshop</span></div>
+    <div class="col-row"><span class="col-name">active / sort_order</span><span class="col-type">INTEGER</span></div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--admin)">eftpos_transactions</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name">transaction_date / amount</span><span class="col-type">TEXT/REAL</span></div>
+    <div class="col-row"><span class="col-name">card_type / reference</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">reconciled</span><span class="col-type">INTEGER</span></div>
+    <div class="col-row"><span class="col-name fk">job_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ jobs</span></div>
+    <div class="col-row"><span class="col-name fk">reconciled_by</span><span class="col-type">INTEGER</span><span class="col-ref">→ users</span></div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--admin)">job_queries</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name">name</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">job_types / statuses</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">date_from / date_to</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">sort_col / sort_dir</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name fk">column_visibility_id</span><span class="col-type">INTEGER</span><span class="col-ref">→ column_visibility_sets</span></div>
+  </div>
+</div>
+
+<div class="tbl">
+  <div class="tbl-head" style="background:var(--admin)">column_visibility_sets</div>
+  <div class="tbl-body">
+    <div class="col-row"><span class="col-name pk">id</span><span class="col-type">INTEGER PK</span></div>
+    <div class="col-row"><span class="col-name">name</span><span class="col-type">TEXT</span></div>
+    <div class="col-row"><span class="col-name">columns</span><span class="col-type">TEXT</span><span class="col-ref">JSON array</span></div>
+    <div class="col-row"><span class="col-name">created_at</span><span class="col-type">TEXT</span></div>
+  </div>
+</div>
+
+</div>
+
+<div class="fk-section">
+  <h3>Key Relationships</h3>
+  <div class="fk-list">
+    <div class="fk-item">jobs <span>→</span> customers (customer_id)</div>
+    <div class="fk-item">jobs <span>→</span> regions (region_id)</div>
+    <div class="fk-item">job_parts <span>→</span> jobs, parts (CASCADE)</div>
+    <div class="fk-item">bikes_for_sale <span>→</span> jobs (1:1 UNIQUE, CASCADE)</div>
+    <div class="fk-item">bike_images <span>→</span> bikes_for_sale (CASCADE)</div>
+    <div class="fk-item">email_imports <span>→</span> jobs</div>
+    <div class="fk-item">email_import_attachments <span>→</span> email_imports (CASCADE)</div>
+    <div class="fk-item">email_replies <span>→</span> jobs, users, email_templates</div>
+    <div class="fk-item">job_status_triggers <span>→</span> email_templates</div>
+    <div class="fk-item">customer_contacts <span>→</span> customers (CASCADE)</div>
+    <div class="fk-item">suburbs <span>→</span> regions (CASCADE)</div>
+    <div class="fk-item">region_dates <span>→</span> regions (CASCADE)</div>
+    <div class="fk-item">supplier_parts <span>→</span> suppliers, parts (CASCADE)</div>
+    <div class="fk-item">purchase_orders <span>→</span> suppliers, users</div>
+    <div class="fk-item">purchase_order_lines <span>→</span> purchase_orders, parts, locations</div>
+    <div class="fk-item">part_location_stock <span>→</span> parts, locations (composite PK)</div>
+    <div class="fk-item">inventory_transactions <span>→</span> parts, locations, users</div>
+    <div class="fk-item">inventory_count_lines <span>→</span> inventory_counts, parts</div>
+    <div class="fk-item">service_types <span>→</span> parts</div>
+    <div class="fk-item">eftpos_transactions <span>→</span> jobs, users</div>
+    <div class="fk-item">job_queries <span>→</span> column_visibility_sets</div>
+  </div>
+</div>
+
+<div style="margin-top:1.5rem;font-size:0.72rem;color:var(--muted);text-align:center;">
+  Flying Bike ServiceDesk v1.5.0 · September 2026 · 25 tables · SQLite 3
+</div>
+</body>
+</html>

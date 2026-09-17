@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ServiceDesk ERD v1.5.0</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; margin: 0; padding: 0; }
+  body { background: #1a1f2e; font-family: 'Segoe UI', system-ui, sans-serif; overflow: hidden; }
+
+  #toolbar {
+    position: fixed; top: 0; left: 0; right: 0; height: 44px;
+    background: #111827; border-bottom: 1px solid #2d3748;
+    display: flex; align-items: center; padding: 0 1rem; gap: 1rem;
+    z-index: 100;
+  }
+  #toolbar h1 { font-size: 0.82rem; font-weight: 600; color: #94a3b8; letter-spacing: 0.06em; text-transform: uppercase; }
+  .tb-sep { width: 1px; height: 20px; background: #2d3748; }
+  .tb-btn {
+    background: #1e293b; border: 1px solid #334155; color: #94a3b8;
+    border-radius: 5px; padding: 0.25rem 0.7rem; font-size: 0.75rem;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .tb-btn:hover { background: #334155; color: #e2e8f0; }
+  .tb-label { font-size: 0.72rem; color: #64748b; }
+  #search {
+    background: #1e293b; border: 1px solid #334155; color: #e2e8f0;
+    border-radius: 5px; padding: 0.25rem 0.6rem; font-size: 0.75rem;
+    width: 160px; outline: none;
+  }
+  #search:focus { border-color: #6366f1; }
+  #search::placeholder { color: #475569; }
+  .tb-right { margin-left: auto; display: flex; align-items: center; gap: 0.5rem; }
+  #hint { font-size: 0.68rem; color: #475569; }
+
+  #canvas {
+    position: fixed; top: 44px; left: 0; right: 0; bottom: 0;
+    width: 100%; height: calc(100vh - 44px);
+    display: block;
+  }
+
+  /* Nodes */
+  .node-group { cursor: grab; }
+  .node-group:active { cursor: grabbing; }
+  .node-box {
+    rx: 6; ry: 6;
+    stroke-width: 1.5;
+    filter: drop-shadow(0 2px 8px rgba(0,0,0,0.4));
+  }
+  .node-header { rx: 6; ry: 6; }
+  .node-title { font-size: 11px; font-weight: 700; fill: #fff; letter-spacing: 0.04em; }
+  .node-field { font-size: 10px; fill: #94a3b8; }
+  .node-field-pk { fill: #fbbf24; }
+  .node-field-fk { fill: #818cf8; }
+  .node-divider { stroke: rgba(255,255,255,0.08); stroke-width: 1; }
+
+  /* Links */
+  .link { stroke-width: 1.5; fill: none; opacity: 0.5; }
+  .link-label { font-size: 9px; fill: #64748b; }
+
+  /* Highlighted */
+  .node-group.highlighted .node-box { stroke-width: 2.5; }
+  .node-group.dimmed { opacity: 0.2; }
+  .link.dimmed { opacity: 0.05; }
+  .link.highlighted { opacity: 1; stroke-width: 2; }
+
+  /* Legend */
+  #legend {
+    position: fixed; bottom: 1rem; left: 1rem;
+    background: #111827; border: 1px solid #1e293b;
+    border-radius: 8px; padding: 0.6rem 0.85rem;
+    font-size: 0.68rem; color: #64748b; z-index: 50;
+  }
+  #legend div { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.3rem; }
+  #legend div:last-child { margin-bottom: 0; }
+  .leg-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<div id="toolbar">
+  <h1>ServiceDesk ERD <span style="font-size:0.65em;font-weight:400;opacity:0.6;">v1.5.0</span></h1>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" onclick="resetLayout()">↺ Reset</button>
+  <button class="tb-btn" onclick="toggleForce()">⏸ Pause</button>
+  <button class="tb-btn" onclick="fitView()">⊡ Fit</button>
+  <div class="tb-sep"></div>
+  <span class="tb-label">Search:</span>
+  <input id="search" type="text" placeholder="table or field…" oninput="doSearch(this.value)">
+  <div class="tb-right">
+    <span id="hint">Drag tables · Scroll to zoom · Click to highlight</span>
+  </div>
+</div>
+
+<svg id="canvas" width="100%" height="100%"></svg>
+
+<div id="legend">
+  <div><div class="leg-dot" style="background:#fbbf24"></div> Primary Key</div>
+  <div><div class="leg-dot" style="background:#818cf8"></div> Foreign Key</div>
+  <div><div class="leg-dot" style="background:#94a3b8"></div> Column</div>
+  <div><div class="leg-dot" style="background:#16a34a"></div> Bikes for Sale <span style="font-size:0.72em;opacity:0.6;">new v1.5</span></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+// ── Schema ────────────────────────────────────────────────────────────────────
+const tables = [
+  { id:'users', color:'#6366f1', fields:[
+    {n:'id',pk:true},{n:'name'},{n:'email'},{n:'role'},{n:'active'} ]},
+  { id:'regions', color:'#0ea5e9', fields:[
+    {n:'id',pk:true},{n:'name'},{n:'visit_day'} ]},
+  { id:'suburbs', color:'#0ea5e9', fields:[
+    {n:'id',pk:true},{n:'region_id',fk:true},{n:'name'} ]},
+  { id:'region_dates', color:'#0ea5e9', fields:[
+    {n:'id',pk:true},{n:'region_id',fk:true},{n:'date'},{n:'status'},{n:'gcal_event_id'} ]},
+  { id:'customers', color:'#10b981', fields:[
+    {n:'id',pk:true},{n:'email'},{n:'name'},{n:'phone'},{n:'suburb'},{n:'address'} ]},
+  { id:'customer_contacts', color:'#10b981', fields:[
+    {n:'id',pk:true},{n:'customer_id',fk:true},{n:'name'},{n:'phone'},{n:'email'} ]},
+  { id:'jobs', color:'#f59e0b', fields:[
+    {n:'id',pk:true},{n:'reference'},{n:'customer_id',fk:true},{n:'region_id',fk:true},
+    {n:'job_type'},{n:'status'},{n:'scheduled_date'},{n:'bike_description'},
+    {n:'invoice_number'},{n:'total'},{n:'gcal_event_id'},{n:'portal_token'} ]},
+  { id:'job_parts', color:'#f59e0b', fields:[
+    {n:'id',pk:true},{n:'job_id',fk:true},{n:'part_id',fk:true},
+    {n:'description'},{n:'quantity'},{n:'unit_cost'} ]},
+  { id:'eftpos_transactions', color:'#f59e0b', fields:[
+    {n:'id',pk:true},{n:'reference_number'},{n:'job_id',fk:true},
+    {n:'amount'},{n:'pay_status'} ]},
+  { id:'email_imports', color:'#ec4899', fields:[
+    {n:'id',pk:true},{n:'message_id'},{n:'job_id',fk:true},{n:'sender'},{n:'subject'} ]},
+  { id:'email_import_attachments', color:'#ec4899', fields:[
+    {n:'id',pk:true},{n:'email_import_id',fk:true},{n:'filename'},{n:'filepath'},{n:'mime_type'},{n:'size_bytes'} ]},
+  { id:'email_replies', color:'#ec4899', fields:[
+    {n:'id',pk:true},{n:'job_id',fk:true},{n:'sent_by',fk:true},
+    {n:'template_id',fk:true},{n:'to_address'} ]},
+  { id:'email_templates', color:'#ec4899', fields:[
+    {n:'id',pk:true},{n:'name'},{n:'subject'},{n:'grp'} ]},
+  { id:'job_status_triggers', color:'#f59e0b', fields:[
+    {n:'id',pk:true},{n:'job_type'},{n:'trigger_status'},{n:'template_id',fk:true} ]},
+  { id:'calendar_events', color:'#0ea5e9', fields:[
+    {n:'id',pk:true},{n:'date'},{n:'title'},{n:'color'} ]},
+  { id:'parts', color:'#8b5cf6', fields:[
+    {n:'id',pk:true},{n:'name'},{n:'part_number'},{n:'part_type'},
+    {n:'unit_cost'},{n:'avg_cost_inc_gst'},{n:'supplier_id',fk:true} ]},
+  { id:'service_types', color:'#8b5cf6', fields:[
+    {n:'id',pk:true},{n:'code'},{n:'label'},{n:'job_group'},{n:'part_id',fk:true} ]},
+  { id:'suppliers', color:'#8b5cf6', fields:[
+    {n:'id',pk:true},{n:'name'},{n:'email'},{n:'phone'},{n:'active'} ]},
+  { id:'supplier_parts', color:'#8b5cf6', fields:[
+    {n:'id',pk:true},{n:'supplier_id',fk:true},{n:'part_id',fk:true},
+    {n:'supplier_sku'},{n:'last_price_inc_gst'} ]},
+  { id:'purchase_orders', color:'#8b5cf6', fields:[
+    {n:'id',pk:true},{n:'supplier_id',fk:true},{n:'order_date'},
+    {n:'status'},{n:'created_by',fk:true} ]},
+  { id:'purchase_order_lines', color:'#8b5cf6', fields:[
+    {n:'id',pk:true},{n:'order_id',fk:true},{n:'part_id',fk:true},
+    {n:'supplier_sku'},{n:'qty_ordered'},{n:'qty_received'},{n:'price_inc_gst'} ]},
+  { id:'locations', color:'#14b8a6', fields:[
+    {n:'id',pk:true},{n:'name'},{n:'active'} ]},
+  { id:'part_location_stock', color:'#14b8a6', fields:[
+    {n:'part_id',fk:true},{n:'location_id',fk:true},{n:'qty_on_hand'} ]},
+  { id:'inventory_transactions', color:'#14b8a6', fields:[
+    {n:'id',pk:true},{n:'part_id',fk:true},{n:'transaction_date'},{n:'type'},
+    {n:'quantity'},{n:'location_id',fk:true},{n:'source_type'},{n:'created_by',fk:true} ]},
+  { id:'inventory_counts', color:'#14b8a6', fields:[
+    {n:'id',pk:true},{n:'count_date'},{n:'location_id',fk:true},
+    {n:'status'},{n:'created_by',fk:true} ]},
+  { id:'inventory_count_lines', color:'#14b8a6', fields:[
+    {n:'id',pk:true},{n:'count_id',fk:true},{n:'part_id',fk:true},
+    {n:'location_id',fk:true},{n:'qty_system'},{n:'qty_counted'},{n:'adjustment'} ]},
+  { id:'bikes_for_sale', color:'#16a34a', fields:[
+    {n:'id',pk:true},{n:'job_id',fk:true},{n:'short_desc'},
+    {n:'description_html'},{n:'condition_grade'},{n:'frame_size'},{n:'colour'},
+    {n:'year_est'},{n:'asking_price'},{n:'min_price'},{n:'status'} ]},
+  { id:'bike_images', color:'#16a34a', fields:[
+    {n:'id',pk:true},{n:'bike_id',fk:true},{n:'filename'},{n:'filepath'},{n:'sort_order'} ]},
+  { id:'settings', color:'#475569', fields:[
+    {n:'key',pk:true},{n:'value'} ]},
+  { id:'column_visibility_sets', color:'#475569', fields:[
+    {n:'id',pk:true},{n:'name'},{n:'page'} ]},
+  { id:'job_queries', color:'#475569', fields:[
+    {n:'id',pk:true},{n:'name'},{n:'column_visibility_id',fk:true} ]},
+];
+
+const links = [
+  {s:'suburbs', t:'regions'}, {s:'region_dates', t:'regions'},
+  {s:'jobs', t:'regions'}, {s:'jobs', t:'customers'},
+  {s:'customer_contacts', t:'customers'},
+  {s:'job_parts', t:'jobs'}, {s:'job_parts', t:'parts'},
+  {s:'email_imports', t:'jobs'}, {s:'email_replies', t:'jobs'},
+  {s:'email_import_attachments', t:'email_imports'},
+  {s:'eftpos_transactions', t:'jobs'},
+  {s:'email_replies', t:'email_templates'}, {s:'email_replies', t:'users'},
+  {s:'job_status_triggers', t:'email_templates'},
+  {s:'parts', t:'suppliers'},
+  {s:'supplier_parts', t:'suppliers'}, {s:'supplier_parts', t:'parts'},
+  {s:'purchase_orders', t:'suppliers'}, {s:'purchase_orders', t:'users'},
+  {s:'purchase_order_lines', t:'purchase_orders'}, {s:'purchase_order_lines', t:'parts'},
+  {s:'part_location_stock', t:'parts'}, {s:'part_location_stock', t:'locations'},
+  {s:'inventory_transactions', t:'parts'}, {s:'inventory_transactions', t:'locations'},
+  {s:'inventory_transactions', t:'users'},
+  {s:'inventory_counts', t:'locations'}, {s:'inventory_counts', t:'users'},
+  {s:'inventory_count_lines', t:'inventory_counts'},
+  {s:'inventory_count_lines', t:'parts'}, {s:'inventory_count_lines', t:'locations'},
+  {s:'service_types', t:'parts'},
+  {s:'bikes_for_sale', t:'jobs'},
+  {s:'bike_images', t:'bikes_for_sale'},
+  {s:'job_queries', t:'column_visibility_sets'},
+];
+
+// ── Layout constants ──────────────────────────────────────────────────────────
+const ROW_H = 16, HDR_H = 28, PAD = 10, MIN_W = 160;
+
+function nodeHeight(t) { return HDR_H + t.fields.length * ROW_H + PAD; }
+function nodeWidth(t) {
+  const max = Math.max(t.id.length * 7.5, ...t.fields.map(f => f.n.length * 6.5 + 20));
+  return Math.max(MIN_W, max + 24);
+}
+
+// ── D3 setup ──────────────────────────────────────────────────────────────────
+const svg = d3.select('#canvas');
+const g   = svg.append('g');
+
+// Zoom
+// Make SVG respond to window resize
+window.addEventListener('resize', () => {
+  const svgEl = document.getElementById('canvas');
+  d3.select(svgEl)
+    .attr('width', svgEl.parentElement.clientWidth)
+    .attr('height', window.innerHeight - 44);
+});
+
+const zoom = d3.zoom().scaleExtent([0.15, 2.5])
+  .on('zoom', e => g.attr('transform', e.transform));
+svg.call(zoom);
+
+// Node data
+const nodes = tables.map(t => ({
+  ...t, w: nodeWidth(t), h: nodeHeight(t)
+}));
+
+// Link data using references
+const linkData = links.map(l => ({
+  source: l.s, target: l.t
+}));
+
+// ── Force simulation ──────────────────────────────────────────────────────────
+let simRunning = true;
+const sim = d3.forceSimulation(nodes)
+  .force('link', d3.forceLink(linkData).id(d => d.id).distance(200).strength(0.3))
+  .force('charge', d3.forceManyBody().strength(-800))
+  .force('collide', d3.forceCollide().radius(d => Math.max(d.w, d.h) / 2 + 20))
+  .force('x', d3.forceX(0).strength(0.03))
+  .force('y', d3.forceY(0).strength(0.03))
+  .on('tick', ticked);
+
+// ── Draw links ────────────────────────────────────────────────────────────────
+const linkSel = g.append('g').attr('class','links')
+  .selectAll('path')
+  .data(linkData)
+  .join('path')
+  .attr('class','link')
+  .attr('stroke', d => {
+    const tn = nodes.find(n => n.id === (d.target.id || d.target));
+    return tn ? tn.color : '#475569';
+  });
+
+// ── Draw nodes ────────────────────────────────────────────────────────────────
+const nodeSel = g.append('g').attr('class','nodes')
+  .selectAll('g')
+  .data(nodes)
+  .join('g')
+  .attr('class','node-group')
+  .attr('data-id', d => d.id)
+  .call(d3.drag()
+    .on('start', dragStart)
+    .on('drag',  dragged)
+    .on('end',   dragEnd))
+  .on('click', (e, d) => { e.stopPropagation(); highlight(d.id); });
+
+svg.on('click', () => clearHighlight());
+
+nodeSel.each(function(d) {
+  const sel = d3.select(this);
+  const w = d.w, h = d.h;
+  const col = d.color;
+
+  // Shadow box
+  sel.append('rect')
+    .attr('class','node-box')
+    .attr('width', w).attr('height', h)
+    .attr('fill', '#1e293b')
+    .attr('stroke', col)
+    .attr('rx', 7).attr('ry', 7);
+
+  // Header bg
+  sel.append('rect')
+    .attr('class','node-header')
+    .attr('width', w).attr('height', HDR_H)
+    .attr('fill', col)
+    .attr('fill-opacity', 0.85)
+    .attr('rx', 7).attr('ry', 7);
+  // Square off bottom of header
+  sel.append('rect')
+    .attr('width', w).attr('height', 8)
+    .attr('y', HDR_H - 8)
+    .attr('fill', col)
+    .attr('fill-opacity', 0.85);
+
+  // Title
+  sel.append('text')
+    .attr('class','node-title')
+    .attr('x', w / 2).attr('y', HDR_H / 2 + 4)
+    .attr('text-anchor','middle')
+    .text(d.id);
+
+  // Fields
+  d.fields.forEach((f, i) => {
+    const y = HDR_H + i * ROW_H + ROW_H * 0.72;
+    if (i > 0) {
+      sel.append('line')
+        .attr('class','node-divider')
+        .attr('x1', 0).attr('x2', w)
+        .attr('y1', HDR_H + i * ROW_H).attr('y2', HDR_H + i * ROW_H);
+    }
+    const cls = f.pk ? 'node-field node-field-pk' : f.fk ? 'node-field node-field-fk' : 'node-field';
+    sel.append('text')
+      .attr('class', cls)
+      .attr('x', 10).attr('y', y)
+      .text((f.pk ? '🔑 ' : f.fk ? '⬡ ' : '  ') + f.n);
+    if (f.pk || f.fk) {
+      sel.append('text')
+        .attr('class','node-field')
+        .attr('x', w - 8).attr('y', y)
+        .attr('text-anchor','end')
+        .attr('fill', f.pk ? '#fbbf2466' : '#818cf866')
+        .text(f.pk ? 'PK' : 'FK');
+    }
+  });
+});
+
+// ── Tick ──────────────────────────────────────────────────────────────────────
+function ticked() {
+  nodeSel.attr('transform', d => `translate(${d.x - d.w/2},${d.y - d.h/2})`);
+  linkSel.attr('d', linkPath);
+}
+
+function linkPath(d) {
+  const sx = d.source.x, sy = d.source.y;
+  const tx = d.target.x, ty = d.target.y;
+  const dx = tx - sx, dy = ty - sy;
+  const mx = sx + dx * 0.5, my = sy + dy * 0.5;
+  // Bezier with slight curve
+  return `M${sx},${sy} C${mx},${sy} ${mx},${ty} ${tx},${ty}`;
+}
+
+// ── Drag ──────────────────────────────────────────────────────────────────────
+function dragStart(e, d) {
+  if (!e.active) sim.alphaTarget(0.1).restart();
+  d.fx = d.x; d.fy = d.y;
+}
+function dragged(e, d) { d.fx = e.x; d.fy = e.y; }
+function dragEnd(e, d) {
+  if (!e.active) sim.alphaTarget(0);
+  d.fx = null; d.fy = null;
+}
+
+// ── Highlight ─────────────────────────────────────────────────────────────────
+let highlighted = null;
+function highlight(id) {
+  if (highlighted === id) { clearHighlight(); return; }
+  highlighted = id;
+  const connected = new Set([id]);
+  linkData.forEach(l => {
+    const s = l.source.id || l.source, t = l.target.id || l.target;
+    if (s === id) connected.add(t);
+    if (t === id) connected.add(s);
+  });
+  nodeSel.classed('dimmed', d => !connected.has(d.id))
+         .classed('highlighted', d => d.id === id);
+  linkSel.classed('dimmed', d => {
+    const s = d.source.id || d.source, t = d.target.id || d.target;
+    return !(connected.has(s) && connected.has(t));
+  }).classed('highlighted', d => {
+    const s = d.source.id || d.source, t = d.target.id || d.target;
+    return s === id || t === id;
+  });
+}
+function clearHighlight() {
+  highlighted = null;
+  nodeSel.classed('dimmed', false).classed('highlighted', false);
+  linkSel.classed('dimmed', false).classed('highlighted', false);
+}
+
+// ── Search ────────────────────────────────────────────────────────────────────
+function doSearch(q) {
+  if (!q) { clearHighlight(); return; }
+  q = q.toLowerCase();
+  const match = nodes.find(n =>
+    n.id.toLowerCase().includes(q) ||
+    n.fields.some(f => f.n.toLowerCase().includes(q))
+  );
+  if (match) highlight(match.id);
+}
+
+// ── Controls ──────────────────────────────────────────────────────────────────
+function resetLayout() {
+  nodes.forEach(d => { d.x = 0; d.y = 0; d.fx = null; d.fy = null; });
+  sim.alpha(1).restart();
+}
+
+const pauseBtn = document.querySelector('.tb-btn:nth-child(3)');
+function toggleForce() {
+  simRunning = !simRunning;
+  if (simRunning) { sim.alpha(0.3).restart(); pauseBtn.textContent = '⏸ Pause'; }
+  else            { sim.stop(); pauseBtn.textContent = '▶ Resume'; }
+}
+
+function fitView() {
+  const svgEl = document.getElementById('canvas');
+  const W = svgEl.clientWidth || window.innerWidth;
+  const H = svgEl.clientHeight || (window.innerHeight - 44);
+  const xs = nodes.map(d => d.x), ys = nodes.map(d => d.y);
+  const x0 = Math.min(...xs) - 100, x1 = Math.max(...xs) + 100;
+  const y0 = Math.min(...ys) - 100, y1 = Math.max(...ys) + 100;
+  const scale = Math.min(0.9, Math.min(W / (x1-x0), H / (y1-y0)));
+  const tx = W/2 - scale * (x0+x1)/2;
+  const ty = H/2 - scale * (y0+y1)/2 + 22;
+  svg.transition().duration(600)
+    .call(zoom.transform, d3.zoomIdentity.translate(tx,ty).scale(scale));
+}
+
+// Initial fit after simulation settles
+setTimeout(fitView, 2500);
+</script>
+</body>
+</html>
