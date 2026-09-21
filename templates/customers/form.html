@@ -12,7 +12,7 @@
     <i class="bi bi-person-dash"></i> Merge
   </a>
 
-  {% if (job_count is defined and job_count == 0) and 'flyingbike.internal' not in (customer['email'] or '') %}
+  {% if (job_count is defined and job_count == 0) and settings.internal_email_domain not in (customer['email'] or '') %}
   <form method="post" action="{{ url_for('customers.delete_customer', customer_id=customer['id']) }}"
         onsubmit="return confirm('Permanently delete {{ customer['name']|e }}? This cannot be undone.');"
         style="display:inline;">

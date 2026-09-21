@@ -199,7 +199,9 @@ def pdf_invoice_file(job_id):
         gst      = round(total - subtotal, 2)
 
     from invoice_pdf import generate_invoice_pdf
-    buf = generate_invoice_pdf(job, job_parts, tax_inclusive, subtotal, gst, total)
+    from models import get_settings
+    buf = generate_invoice_pdf(job, job_parts, tax_inclusive, subtotal, gst, total,
+                               settings=get_settings(conn))
 
     inv_num = f"INV-{job['reference'].lower()}"
     return send_file(buf, mimetype='application/pdf',

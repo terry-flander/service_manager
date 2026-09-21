@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Link Not Found — The Flying Bike</title>
+  <title>Link Not Found — {{ settings.business_name }}</title>
   <style>
     body { background:#f8fafc; color:#1e293b; font-family:system-ui,sans-serif;
            display:flex; align-items:center; justify-content:center; min-height:100vh; padding:1rem; }
@@ -19,7 +19,7 @@
     <h1>Link not found or expired</h1>
     <p>This job status link is invalid or has expired.<br>
        Please check your email for the correct link,
-       or contact The Flying Bike for assistance.</p>
+       or contact {{ settings.business_name }} for assistance.</p>
     <p style="margin-top:1.5rem;"><strong>0412 345 678</strong></p>
   </div>
 </body>

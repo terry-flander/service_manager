@@ -24,7 +24,10 @@ log      = logging.getLogger('app')
 ATTACHMENT_BASE  = '/data/attachments'
 ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
 MAX_IMAGE_SIZE   = 5 * 1024 * 1024
-BIKES_FOR_SALE_EMAIL = 'bikes.for.sale@flyingbike.internal'
+def _bikes_for_sale_email():
+    from models import get_settings
+    d = get_settings().get('internal_email_domain', 'app.internal')
+    return f'bikes.for.sale@{d}'
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────

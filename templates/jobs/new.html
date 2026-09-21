@@ -270,7 +270,7 @@
     <div style="font-size:1.05rem; font-weight:700; margin-bottom:1.25rem;
                 color:var(--sd-text);">Select Job Type</div>
     <div style="display:flex; flex-direction:column; gap:0.75rem;">
-      {% for key, info in JOB_TYPES.items() %}
+      {% for key, info in JOB_TYPES.items() if info.get('show_in_new_job', 1) %}
       <button type="button"
               onclick="selectType('{{ key }}', '{{ info.label }}', '{{ info.prefix }}')"
               style="text-align:left; background:var(--sd-navy);
@@ -280,7 +280,7 @@
                      transition:border-color 0.15s;"
               onmouseover="this.style.borderColor='var(--sd-accent)'"
               onmouseout="this.style.borderColor='var(--sd-border)'">
-        <i class="bi bi-{% if key == 'booking' %}calendar-check{% elif key == 'workshop' %}tools{% elif key == 'sale_bike' %}bicycle{% elif key == 'sale' %}cash-coin{% else %}bicycle{% endif %}"
+        <i class="bi bi-{% if info.use_calendar %}calendar-check{% elif info.has_service_types %}tools{% elif info.has_bike_listing %}bicycle{% elif key == 'sale' %}cash-coin{% else %}clipboard{% endif %}"
            style="font-size:1.3rem; color:var(--sd-accent); flex-shrink:0;"></i>
         <span>
           <strong>{{ info.label }}</strong>
@@ -321,13 +321,15 @@ TYPE_MODAL.addEventListener('click', function(e) {
   if (e.target === TYPE_MODAL) TYPE_MODAL.style.display = 'none';
 });
 
+// Job type config passed from server
+const JOB_TYPES_JS = {{ JOB_TYPES|tojson }};
+
 // Open modal immediately on page load — type is required
 window.addEventListener('DOMContentLoaded', function() {
   const preType = {{ (request.args.get('type', '') or '')|tojson }};
-  if (preType && ['booking','workshop','rental','sale_bike'].includes(preType)) {
-    selectType(preType,
-      {'booking':'Booking','workshop':'Workshop','rental':'Rental','sale_bike':'Bike for Sale'}[preType],
-      {'booking':'FB','workshop':'PB','rental':'RB','sale_bike':'BK'}[preType]);
+  if (preType && JOB_TYPES_JS[preType]) {
+    const cfg = JOB_TYPES_JS[preType];
+    selectType(preType, cfg.label, cfg.prefix);
   } else {
     TYPE_MODAL.style.display = 'flex';
   }
@@ -519,10 +521,13 @@ function regionChanged(regionId) {
 
 // ── Job type field visibility ─────────────────────────────────────────────────
 function updateJobType(type) {
-  const isBooking  = type === 'booking';
-  const isWorkshop = type === 'workshop';
-  const isRental   = type === 'rental';
-  const isSaleBike = type === 'sale_bike';
+  const cfg        = JOB_TYPES_JS[type] || {};
+  const isBooking  = !!cfg.use_region;       // booking uses region/suburb
+  const isWorkshop = !!cfg.has_service_types;
+  const isRental   = !!cfg.has_end_date;
+  const isSaleBike = !!cfg.has_bike_listing;
+  const hideCustomer = !!cfg.hide_customer;
+  const hideAddress  = !!cfg.hide_address;
 
   // Booking date mode row
   const modeRow = document.getElementById('booking-mode-row');
@@ -532,24 +537,23 @@ function updateJobType(type) {
   const srCol = document.getElementById('sr-types-col');
   if (srCol) srCol.style.display = isWorkshop ? '' : 'none';
 
-  // Customer section — hidden for sale_bike (auto-assigned)
+  // Customer section — hidden when hide_customer flag set
   const custHeader     = document.getElementById('customer-header');
   const custSearchRow  = document.getElementById('customer-search-row');
   const custFieldsRow  = document.getElementById('customer-fields-row');
   const custNameInput  = document.getElementById('f_name');
   const custEmailInput = document.getElementById('f_email');
   [custHeader, custSearchRow, custFieldsRow].forEach(function(el) {
-    if (el) el.style.display = isSaleBike ? 'none' : '';
+    if (el) el.style.display = hideCustomer ? 'none' : '';
   });
-  // Disable required on hidden fields so form can submit
-  if (custNameInput)  custNameInput.required  = !isSaleBike;
-  if (custEmailInput) custEmailInput.required = !isSaleBike;
+  if (custNameInput)  custNameInput.required  = !hideCustomer;
+  if (custEmailInput) custEmailInput.required = !hideCustomer;
 
-  // Tax treatment — hidden for sale_bike (always inclusive)
+  // Tax treatment — hidden when tax_inclusive_default forced
   const taxRow = document.getElementById('tax-select');
   if (taxRow && taxRow.parentElement) {
-    taxRow.parentElement.style.display = isSaleBike ? 'none' : '';
-    if (isSaleBike) taxRow.value = '1';  // force inclusive
+    taxRow.parentElement.style.display = (isSaleBike || cfg.tax_inclusive_default) ? 'none' : '';
+    if (cfg.tax_inclusive_default) taxRow.value = '1';
   }
 
   // Region + suburb + time slots: booking only
@@ -560,13 +564,17 @@ function updateJobType(type) {
     if (el) el.style.display = isBooking ? '' : 'none';
   });
 
-  // Address + service types: hide for workshop, rental, sale_bike
-  [document.getElementById('address-col'),
-   document.getElementById('service-types-col')].forEach(function(el) {
-    if (el) el.style.display = (isWorkshop || isRental || isSaleBike) ? 'none' : '';
-  });
+  // Address: hide when hide_address set
+  const addrCol = document.getElementById('address-col');
+  if (addrCol) addrCol.style.display = hideAddress ? 'none' : '';
+
+  // Service types col: workshop only
+  const svcCol = document.getElementById('service-types-col');
+  if (svcCol) svcCol.style.display = isWorkshop ? '' : 'none';
+
+  // Bike description col: hide for rental (no bike)
   const bikeCol = document.getElementById('bike-desc-col');
-  if (bikeCol) bikeCol.style.display = isRental ? 'none' : '';
+  if (bikeCol) bikeCol.style.display = (cfg.has_bike_description === 0 || isRental) ? 'none' : '';
 
   // Date inputs
   const dateSel    = document.getElementById('date-select');
@@ -576,7 +584,6 @@ function updateJobType(type) {
                      document.getElementById('mode-manual').checked;
 
   if (isBooking) {
-    // Show region date select OR manual date input based on mode
     if (dateSel)    { dateSel.style.display    = isManual ? 'none' : ''; dateSel.disabled    = isManual; }
     if (manualDate) { manualDate.style.display  = isManual ? ''     : 'none'; manualDate.disabled = !isManual; }
     if (nonbkDate)  { nonbkDate.style.display   = 'none'; nonbkDate.disabled  = true; }
@@ -586,13 +593,12 @@ function updateJobType(type) {
     if (nonbkDate) {
       nonbkDate.style.display = '';
       nonbkDate.disabled      = false;
-      if (isWorkshop && !nonbkDate.value) nonbkDate.value = new Date().toISOString().slice(0,10);
-      if (isSaleBike && !nonbkDate.value) nonbkDate.value = new Date().toISOString().slice(0,10);
+      if (!isRental && !nonbkDate.value) nonbkDate.value = new Date().toISOString().slice(0,10);
       if (isRental) nonbkDate.value = '';
     }
   }
 
-  // End date col: rental only
+  // End date col: rental (has_end_date) only
   const rentalEndCol = document.getElementById('rental-end-date-col');
   const rentalEndDt  = document.getElementById('rental-end-date');
   if (rentalEndCol) rentalEndCol.style.display = isRental ? '' : 'none';

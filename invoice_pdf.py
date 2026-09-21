@@ -1,6 +1,7 @@
 """
-PDF Invoice generator for The Flying Bike.
+PDF Invoice generator for ServiceDesk.
 Layout: TAX INVOICE section only — no tearoff or payment advice.
+Business details are read from the settings table at runtime.
 """
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
@@ -12,17 +13,30 @@ from reportlab.pdfbase import pdfmetrics
 from datetime import date, timedelta
 import io, os
 
-# ── Business constants ────────────────────────────────────────────────────────
-BUSINESS_NAME  = "Elad Shelzer T/As The Flying Bike"
-BUSINESS_ADDR  = ["255 Hawthorn Rd", "CAULFIELD NORTH VIC 3161", "AUSTRALIA"]
-BUSINESS_ABN   = "56 361 357 249"
-BUSINESS_BSB   = "013 304"
-BUSINESS_ACCT  = "401523996"
-BUSINESS_BANK  = "The Flying Bike Australia"
-PAYMENT_DAYS   = 14
+PAYMENT_DAYS = 14
 
 PAGE_W, PAGE_H = A4          # 595.27 x 841.89 pts
 M              = 20 * mm     # left/right margin
+
+
+def _biz(settings):
+    """Build business block lines from settings dict."""
+    name  = settings.get('business_name', 'My Business')
+    abn   = settings.get('business_abn', '')
+    addr  = settings.get('business_address', '')
+    sub   = settings.get('business_suburb', '')
+    state = settings.get('business_state', '')
+    pc    = settings.get('business_postcode', '')
+    bank  = settings.get('business_bank_name', '')
+    lines = [name]
+    if addr:
+        lines.append(addr)
+    loc = ' '.join(filter(None, [sub, state, pc]))
+    if loc:
+        lines.append(loc.upper())
+    if abn:
+        lines.append(f'ABN: {abn}')
+    return lines, bank or name
 
 
 def _fmt(val):
@@ -45,7 +59,15 @@ def _reg(c, size=9):
     c.setFont("Helvetica", size)
 
 
-def generate_invoice_pdf(job, job_parts, tax_inclusive, subtotal, gst, total):
+def generate_invoice_pdf(job, job_parts, tax_inclusive, subtotal, gst, total, settings=None):
+    """Generate a TAX INVOICE PDF. Returns a BytesIO buffer.
+    settings: dict from get_settings() — if None, loads from DB.
+    """
+    if settings is None:
+        from models import get_settings
+        settings = get_settings()
+
+    biz_lines, bank_name = _biz(settings)
     """
     Returns a BytesIO containing the PDF.
     job         — sqlite3.Row with all job fields + customer_name etc.
@@ -113,8 +135,10 @@ def generate_invoice_pdf(job, job_parts, tax_inclusive, subtotal, gst, total):
     fields = [
         ("Invoice Date",   inv_date.strftime("%-d %b %Y")),
         ("Invoice Number", inv_num),
-        ("ABN",            BUSINESS_ABN),
     ]
+    abn = settings.get('business_abn', '')
+    if abn:
+        fields.append(("ABN", abn))
     for label, value in fields:
         _bold(c, lbl_size); c.drawString(meta_x, meta_y, label)
         meta_y -= 4.5*mm
@@ -124,7 +148,7 @@ def generate_invoice_pdf(job, job_parts, tax_inclusive, subtotal, gst, total):
     # RIGHT: Business name + address — 8pt, top = header_top
     biz_y = header_top - lbl_size * CAP
     _reg(c, lbl_size)
-    for line in [BUSINESS_NAME] + BUSINESS_ADDR:
+    for line in biz_lines:
         c.drawString(biz_x, biz_y, line)
         biz_y -= 4.5*mm
 
@@ -268,14 +292,19 @@ def generate_invoice_pdf(job, job_parts, tax_inclusive, subtotal, gst, total):
         c.drawString(M, terms_y, f"Due Date: {due_date.strftime('%-d %b %Y')}")
         terms_y -= 5*mm
         _reg(c, 8.5)
-        for line in [
+        payment_lines = [
             f"Payment must be made within {PAYMENT_DAYS} days of issue",
             "We accept payment via direct deposit into the following account:",
-            BUSINESS_BANK,
-            f"BSB: {BUSINESS_BSB}",
-            f"Account: {BUSINESS_ACCT}",
-            "*please state this invoice number when making a payment",
-        ]:
+            bank_name,
+        ]
+        bsb  = settings.get('business_bsb', '')
+        acct = settings.get('business_account', '')
+        if bsb:
+            payment_lines.append(f"BSB: {bsb}")
+        if acct:
+            payment_lines.append(f"Account: {acct}")
+        payment_lines.append("*please state this invoice number when making a payment")
+        for line in payment_lines:
             c.drawString(M, terms_y, line)
             terms_y -= 4.5*mm
 

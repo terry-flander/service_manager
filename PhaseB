@@ -1,0 +1,8 @@
+../promote.sh models.py
+../promote.sh migrate.py
+../promote.sh routes/jobs.py
+../promote.sh routes/reports.py
+../promote.sh templates/base.html
+../promote.sh templates/jobs/new.html
+../promote.sh templates/jobs/settings_job_types.html
+../promote.sh app.py

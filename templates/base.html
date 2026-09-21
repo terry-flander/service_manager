@@ -633,7 +633,7 @@
 <nav id="sidebar">
   <div class="sidebar-brand">
     <img src="{{ url_for('static', filename='img/branding.png') }}"
-         alt="The Flying Bike" style="width:100%; display:block;">
+         alt="{{ settings.business_name }}" style="width:100%; display:block;">
   </div>
   <div class="sidebar-nav">
     <div class="nav-section-label">Jobs</div>
@@ -758,6 +758,12 @@
         </a>
         <a href="{{ url_for('jobs.status_colors') }}" data-label="Status Colours" class="sidebar-link {% if request.endpoint == 'jobs.status_colors' %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
           <i class="bi bi-palette"></i> Status Colours
+        </a>
+        <a href="{{ url_for('jobs.settings_business') }}" data-label="Business Settings" class="sidebar-link {% if request.endpoint == 'jobs.settings_business' %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
+          <i class="bi bi-building"></i> Business Settings
+        </a>
+        <a href="{{ url_for('jobs.settings_job_types') }}" data-label="Job Types" class="sidebar-link {% if request.endpoint == 'jobs.settings_job_types' %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
+          <i class="bi bi-diagram-3"></i> Job Types
         </a>
         <a href="{{ url_for('jobs.calendar_settings') }}" data-label="Calendar Sync" class="sidebar-link {% if request.endpoint == 'jobs.calendar_settings' %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
           <i class="bi bi-calendar-check"></i> Calendar Sync
@@ -1931,13 +1937,11 @@ function initRichTextEditor(textareaId, options) {
 // plus implement window.onQuerySelected(queryId) to actually re-run their
 // list/report with the chosen query.
 
-const JOB_TYPE_CHOICES = [
-  ['booking',   'Booking'],
-  ['rental',    'Rental'],
-  ['workshop',  'Workshop'],
-  ['sale',      'Counter Sale'],
-  ['sale_bike', 'Bike for Sale'],
-];
+const JOB_TYPE_CHOICES = {{ (JOB_TYPES or {})|tojson }};
+// Convert {key: {label:...}} dict to [[key, label], ...] pairs for checkbox group
+const _JOB_TYPE_PAIRS = Object.entries(JOB_TYPE_CHOICES).map(function(e) {
+  return [e[0], (e[1] && e[1].label) ? e[1].label : e[0]];
+});
 const STATUS_CHOICES = [
   ['pending',     'Pending'],
   ['scheduled',   'Scheduled'],
@@ -2002,7 +2006,7 @@ function openQueryBuilder(queryId) {
   document.getElementById('qb-form').dataset.editingId = queryId || '';
 
   function populateChoicesAndShow(query) {
-    _qbCheckboxGroup('qb-job-types', JOB_TYPE_CHOICES, (query && query.job_types) || []);
+    _qbCheckboxGroup('qb-job-types', _JOB_TYPE_PAIRS, (query && query.job_types) || []);
     _qbCheckboxGroup('qb-statuses', STATUS_CHOICES, (query && query.statuses) || []);
     _qbCheckboxGroup('qb-payment-types', PAYMENT_TYPE_CHOICES, (query && query.payment_types) || []);
 

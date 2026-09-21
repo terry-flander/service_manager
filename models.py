@@ -412,6 +412,27 @@ def init_db():
                 quantity    REAL NOT NULL DEFAULT 1,
                 unit_cost   REAL NOT NULL DEFAULT 0.0
             );
+
+            CREATE TABLE IF NOT EXISTS job_type_config (
+                key                   TEXT PRIMARY KEY,
+                label                 TEXT NOT NULL,
+                prefix                TEXT NOT NULL,
+                hide_customer         INTEGER NOT NULL DEFAULT 0,
+                hide_address          INTEGER NOT NULL DEFAULT 0,
+                hide_phone            INTEGER NOT NULL DEFAULT 0,
+                hide_portal           INTEGER NOT NULL DEFAULT 0,
+                has_service_types     INTEGER NOT NULL DEFAULT 0,
+                has_bike_description  INTEGER NOT NULL DEFAULT 1,
+                has_bike_listing      INTEGER NOT NULL DEFAULT 0,
+                has_end_date          INTEGER NOT NULL DEFAULT 0,
+                use_calendar          INTEGER NOT NULL DEFAULT 0,
+                use_region            INTEGER NOT NULL DEFAULT 0,
+                tax_inclusive_default INTEGER NOT NULL DEFAULT 0,
+                internal_customer     TEXT,
+                sort_order            INTEGER NOT NULL DEFAULT 0,
+                active                INTEGER NOT NULL DEFAULT 1,
+                show_in_new_job       INTEGER NOT NULL DEFAULT 1
+            );
         """)
 
         # Migration: populate customers from existing jobs if customers table is empty
@@ -439,3 +460,90 @@ def init_db():
                 WHERE customer_id IS NULL
             """)
             conn.commit()
+
+
+def get_settings(conn=None):
+    """Return all settings as a dict. Provides defaults for all business identity keys."""
+    _defaults = {
+        'business_name':         'ServiceDesk',
+        'business_tagline':      '',
+        'business_abn':          '',
+        'business_phone':        '',
+        'business_email':        '',
+        'business_address':      '',
+        'business_suburb':       '',
+        'business_state':        '',
+        'business_postcode':     '',
+        'business_website':      '',
+        'business_instagram':    '',
+        'business_bank_name':    '',
+        'app_url':               'http://localhost:5000',
+        'booking_secret':        'change-me',
+        'booking_cors_origins':  '',
+        'internal_email_domain': 'app.internal',
+        'setup_complete':        '0',
+        'gcal_enabled':          '0',
+        'bikes_sold_days':       '30',
+        'email_polling':         'on',
+    }
+
+    def _fetch(c):
+        rows = c.execute("SELECT key, value FROM settings").fetchall()
+        result = dict(_defaults)
+        result.update({r['key']: r['value'] for r in rows})
+        return result
+
+    if conn is not None:
+        return _fetch(conn)
+    with get_db() as c:
+        return _fetch(c)
+
+
+# ── Job type config ───────────────────────────────────────────────────────────
+_JOB_TYPE_DEFAULTS = [
+    # key, label, prefix, hide_cust, hide_addr, hide_phone, hide_portal,
+    # has_svc, has_bike_desc, has_bike_listing, has_end_date,
+    # use_cal, use_region, tax_incl, internal_customer, sort, show_in_new_job
+    ('booking',   'Booking',       'FB', 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, None,                          0, 1),
+    ('workshop',  'Workshop',      'PB', 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, None,                          1, 1),
+    ('rental',    'Rental',        'RB', 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, None,                          2, 1),
+    ('sale',      'Sale',          'CS', 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 'counter.sales@app.internal',  3, 0),
+    ('sale_bike', 'Bike for Sale', 'BK', 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 1, 'bikes.for.sale@app.internal', 4, 1),
+]
+
+
+def get_job_types(conn=None):
+    """Return job type config as dict keyed by job type key.
+    Reads from job_type_config table; falls back to defaults if table empty.
+    Each value is a dict with all config fields plus convenience booleans.
+    """
+    def _load(c):
+        rows = c.execute(
+            "SELECT * FROM job_type_config WHERE active=1 ORDER BY sort_order"
+        ).fetchall()
+        if not rows:
+            return None
+        result = {}
+        for r in rows:
+            result[r['key']] = dict(r)
+        return result
+
+    def _defaults():
+        result = {}
+        cols = ['key','label','prefix','hide_customer','hide_address','hide_phone',
+                'hide_portal','has_service_types','has_bike_description',
+                'has_bike_listing','has_end_date','use_calendar','use_region',
+                'tax_inclusive_default','internal_customer','sort_order','show_in_new_job']
+        for row in _JOB_TYPE_DEFAULTS:
+            d = dict(zip(cols, row))
+            d['active'] = 1
+            result[d['key']] = d
+        return result
+
+    try:
+        if conn is not None:
+            return _load(conn) or _defaults()
+        with get_db() as c:
+            return _load(c) or _defaults()
+    except Exception:
+        return _defaults()

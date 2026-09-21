@@ -1,12 +1,9 @@
 """
 routes/booking.py — Public booking form submission endpoint.
 
-Receives JSON from the static booking form (index.html), creates a job
-directly in the DB, sends a Gmail notification to info@ and an HTML
-acknowledgement to the customer. No PHP, no wp_mail, no Bluehost mail.
-
-CORS is allowed from theflyingbike.com.au and pistabikes.com.au so the
-static form can POST from any hosting (Bluehost, Cloudflare Pages, etc.)
+Receives JSON from the static booking form, creates a job directly in the DB,
+sends a Gmail notification and an HTML acknowledgement to the customer.
+CORS origins and booking secret are configurable via settings / .env.
 """
 import os
 import re
@@ -17,27 +14,34 @@ from flask import Blueprint, request, jsonify, make_response
 booking_bp = Blueprint('booking', __name__)
 log = logging.getLogger('app')
 
-ALLOWED_ORIGINS = {
-    'https://theflyingbike.com.au',
-    'https://www.theflyingbike.com.au',
-    'https://pistabikes.com.au',
-    'https://www.pistabikes.com.au',
-}
-TFB_SECRET = os.environ.get('TFB_BOOKING_SECRET', 'tfb-flyingbike-2026')
-NOTIFY_TO  = os.environ.get('GMAIL_USER', 'info@theflyingbike.com.au')
+# These can be overridden by env vars; booking_cors_origins setting supplements them
+TFB_SECRET = os.environ.get('TFB_BOOKING_SECRET', 'change-me')
+NOTIFY_TO  = os.environ.get('GMAIL_USER', '')
+
+
+def _get_allowed_origins():
+    """Return set of allowed CORS origins from settings + hardcoded fallback."""
+    from models import get_settings
+    s = get_settings()
+    origins = set()
+    # From settings: comma-separated list
+    extra = s.get('booking_cors_origins', '')
+    if extra:
+        for o in extra.split(','):
+            o = o.strip()
+            if o:
+                origins.add(o)
+    # App URL always allowed
+    app_url = s.get('app_url', '').rstrip('/')
+    if app_url:
+        origins.add(app_url)
+    return origins
 
 
 def _cors_headers(origin):
     """Return CORS headers if origin is allowed, else empty dict."""
-    allowed = (
-        origin in ALLOWED_ORIGINS
-        or origin.endswith('.theflyingbike.com.au')
-        or origin.endswith('.pistabikes.com.au')
-        or origin in {
-            'http://theflyingbike.com.au',
-            'http://www.theflyingbike.com.au',
-        }
-    )
+    allowed_origins = _get_allowed_origins()
+    allowed = origin in allowed_origins
     if allowed:
         return {
             'Access-Control-Allow-Origin':  origin,
@@ -160,7 +164,7 @@ def submit():
             # the email log and thread, and triggers the unread indicator
             import uuid as _uuid
             synthetic_id = (
-                f"<booking-{ref}-{_uuid.uuid4().hex[:8]}@theflyingbike.com.au>")
+                f"<booking-{ref}-{_uuid.uuid4().hex[:8]}@{__import__('models').get_settings().get('app_url','localhost').replace('https://','').replace('http://','').split('/')[0]}>")
             body_for_log = _notification_text(
                 name, email, phone, suburb, services, bike_description, message)
             conn.execute("""
@@ -210,21 +214,24 @@ def submit():
     # Send acknowledgement to customer and store in email_replies for thread
     try:
         from email_sender import send_reply, is_sendable_email
+        from models import get_settings as _gs
+        _s = _gs()
+        biz = _s.get('business_name', 'us')
         if not is_sendable_email(email):
             log.warning(f"Booking ack skipped — no valid email for {ref}")
         else:
-            ack_html = _acknowledgement_html(name, services)
-        ack_text = _acknowledgement_text(name, services)
-        ack_subject = "Your booking with The Flying Bike"
-        ack_msg_id  = send_reply(
-            to_address=email,
-            subject=ack_subject,
-            body_text=ack_text,
-            body_html=ack_html,
-            extra_headers={'Auto-Submitted': 'auto-replied',
-                           'X-TFB-Type': 'booking-ack'},
-        )
-        log.info(f"Booking acknowledgement sent to {email}")
+            ack_html = _acknowledgement_html(name, services, _s)
+            ack_text = _acknowledgement_text(name, services, _s)
+            ack_subject = f"Your booking with {biz}"
+            ack_msg_id  = send_reply(
+                to_address=email,
+                subject=ack_subject,
+                body_text=ack_text,
+                body_html=ack_html,
+                extra_headers={'Auto-Submitted': 'auto-replied',
+                               'X-TFB-Type': 'booking-ack'},
+            )
+            log.info(f"Booking acknowledgement sent to {email}")
     except Exception as e:
         log.error(f"Booking acknowledgement send failed for {ref}: {e}")
         # Don't fail — job is created
@@ -253,34 +260,70 @@ def _notification_text(name, email, phone, suburb, services,
     )
 
 
-def _acknowledgement_text(name, services):
-    first = name.split()[0] if name else name
-    return (
-        f"Hi {first},\n\n"
+def _acknowledgement_text(name, services, settings=None):
+    if settings is None:
+        from models import get_settings
+        settings = get_settings()
+    first   = name.split()[0] if name else name
+    biz     = settings.get('business_name', 'us')
+    phone   = settings.get('business_phone', '')
+    email   = settings.get('business_email', '')
+    website = settings.get('business_website', '')
+    tagline = settings.get('business_tagline', '')
+    lines = [
+        f"Hi {first},\n",
         f"Thanks for your booking request! We've received it and will be "
-        f"in touch shortly to confirm a time.\n\n"
-        f"What you requested:\n{services}\n\n"
-        f"Need to reach us?\n"
-        f"Phone: 0403 225 135\n"
-        f"Email: info@theflyingbike.com.au\n\n"
-        f"The Flying Bike — Melbourne's Mobile Bicycle Workshop\n"
-        f"https://theflyingbike.com.au\n"
-    )
+        f"in touch shortly to confirm a time.\n",
+        f"What you requested:\n{services}\n",
+        "Need to reach us?",
+    ]
+    if phone:   lines.append(f"Phone: {phone}")
+    if email:   lines.append(f"Email: {email}")
+    lines.append("")
+    footer = biz
+    if tagline: footer += f" — {tagline}"
+    lines.append(footer)
+    if website: lines.append(website)
+    return "\n".join(lines) + "\n"
 
 
-def _acknowledgement_html(name, services):
+def _acknowledgement_html(name, services, settings=None):
+    if settings is None:
+        from models import get_settings
+        settings = get_settings()
     import html as _html
     from datetime import date as _date
-    first = _html.escape(name.split()[0] if name else name)
-    svc   = _html.escape(services)
-    year  = _date.today().year
+    first   = _html.escape(name.split()[0] if name else name)
+    svc     = _html.escape(services)
+    year    = _date.today().year
+    biz     = _html.escape(settings.get('business_name', 'us'))
+    tagline = _html.escape(settings.get('business_tagline', ''))
+    phone   = _html.escape(settings.get('business_phone', ''))
+    email_a = _html.escape(settings.get('business_email', ''))
+    website = _html.escape(settings.get('business_website', ''))
+    insta   = _html.escape(settings.get('business_instagram', ''))
+    phone_row = (f"""<table cellpadding="0" cellspacing="0" style="margin-bottom:10px;">
+    <tr><td style="font-size:18px;padding-right:12px;vertical-align:top;padding-top:2px;">📞</td>
+    <td><p style="margin:0;font-size:13px;color:#888;">Phone</p>
+    <a href="tel:{phone.replace(' ','')}" style="font-size:15px;font-weight:700;color:#2d6a35;text-decoration:none;">{phone}</a></td></tr>
+  </table>""") if phone else ''
+    email_row = (f"""<table cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
+    <tr><td style="font-size:18px;padding-right:12px;vertical-align:top;padding-top:2px;">✉️</td>
+    <td><p style="margin:0;font-size:13px;color:#888;">Email</p>
+    <a href="mailto:{email_a}" style="font-size:15px;font-weight:700;color:#2d6a35;text-decoration:none;">{email_a}</a></td></tr>
+  </table>""") if email_a else ''
+    website_btn = (f"""<div style="text-align:center;">
+    <a href="{website}" style="display:inline-block;background:#e8a020;color:#0f1710;padding:14px 36px;border-radius:6px;font-weight:700;font-size:14px;letter-spacing:.08em;text-transform:uppercase;text-decoration:none;">Visit Our Website</a>
+  </div>""") if website else ''
+    insta_row = (f'<a href="{insta}" style="color:#e8a020;text-decoration:none;font-size:13px;margin:0 8px;">Instagram</a>') if insta else ''
+
     return f"""<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"></head>
 <body style="margin:0;padding:0;background:#f0f4f0;font-family:Helvetica Neue,Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f4f0;padding:32px 0;">
 <tr><td align="center"><table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
 <tr><td style="background:#0f1710;border-radius:10px 10px 0 0;padding:32px 36px;text-align:center;">
-  <p style="margin:0;font-size:26px;font-weight:900;color:#f5f7f2;">🚲 The Flying Bike</p>
-  <p style="margin:8px 0 0;font-size:13px;color:#8fa88a;letter-spacing:.15em;text-transform:uppercase;">Melbourne's Mobile Bicycle Workshop</p>
+  <p style="margin:0;font-size:26px;font-weight:900;color:#f5f7f2;">🚲 {biz}</p>
+  {f'<p style="margin:8px 0 0;font-size:13px;color:#8fa88a;letter-spacing:.15em;text-transform:uppercase;">{tagline}</p>' if tagline else ''}
 </td></tr>
 <tr><td style="background:linear-gradient(90deg,#2d6a35,#3d8f47);height:4px;"></td></tr>
 <tr><td style="background:#fff;padding:40px 36px;">
@@ -291,29 +334,20 @@ def _acknowledgement_html(name, services):
     <tr><td style="padding:16px 20px;"><p style="margin:0;font-size:14px;color:#1a1a1a;line-height:1.6;">{svc}</p></td></tr>
   </table>
   <p style="margin:0 0 16px;font-size:15px;color:#444;line-height:1.7;">If you need to reach us in the meantime:</p>
-  <table cellpadding="0" cellspacing="0" style="margin-bottom:10px;">
-    <tr><td style="font-size:18px;padding-right:12px;vertical-align:top;padding-top:2px;">📞</td>
-    <td><p style="margin:0;font-size:13px;color:#888;">Phone</p><a href="tel:0403225135" style="font-size:15px;font-weight:700;color:#2d6a35;text-decoration:none;">0403 225 135</a></td></tr>
-  </table>
-  <table cellpadding="0" cellspacing="0" style="margin-bottom:32px;">
-    <tr><td style="font-size:18px;padding-right:12px;vertical-align:top;padding-top:2px;">✉️</td>
-    <td><p style="margin:0;font-size:13px;color:#888;">Email</p><a href="mailto:info@theflyingbike.com.au" style="font-size:15px;font-weight:700;color:#2d6a35;text-decoration:none;">info@theflyingbike.com.au</a></td></tr>
-  </table>
-  <div style="text-align:center;">
-    <a href="https://theflyingbike.com.au" style="display:inline-block;background:#e8a020;color:#0f1710;padding:14px 36px;border-radius:6px;font-weight:700;font-size:14px;letter-spacing:.08em;text-transform:uppercase;text-decoration:none;">Visit Our Website</a>
-  </div>
+  {phone_row}
+  {email_row}
+  {website_btn}
 </td></tr>
 <tr><td style="background:#0f1710;border-radius:0 0 10px 10px;padding:24px 36px;">
-  <p style="margin:0 0 8px;text-align:center;font-size:13px;color:#8fa88a;">Follow us for cycling tips and updates</p>
-  <p style="margin:0;text-align:center;">
-    <a href="https://www.instagram.com/theflyingbike/" style="color:#e8a020;text-decoration:none;font-size:13px;margin:0 8px;">Instagram</a>
-    &nbsp;·&nbsp;
-    <a href="https://www.facebook.com/The-Flying-Bike-393907894145951/" style="color:#e8a020;text-decoration:none;font-size:13px;margin:0 8px;">Facebook</a>
-  </p>
+  {f'<p style="margin:0 0 8px;text-align:center;font-size:13px;color:#8fa88a;">Follow us for updates</p><p style="margin:0;text-align:center;">{insta_row}</p>' if insta else ''}
   <p style="margin:16px 0 0;text-align:center;font-size:11px;color:#4a5e4b;">
-    © {year} The Flying Bike · Melbourne, Australia ·
-    <a href="https://theflyingbike.com.au/contact-us/" style="color:#4a5e4b;">Terms &amp; Conditions</a>
+    © {year} {biz}
+    {f'&nbsp;·&nbsp;<a href="{website}/contact-us/" style="color:#4a5e4b;">Terms &amp; Conditions</a>' if website else ''}
   </p>
 </td></tr>
 </table></td></tr></table>
 </body></html>"""
+
+
+
+

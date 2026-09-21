@@ -363,7 +363,7 @@ def delete_customer(customer_id):
             return redirect(url_for('customers.index'))
 
         # Block deletion of internal pseudo-customers
-        if customer['email'] and 'flyingbike.internal' in customer['email']:
+        if customer['email'] and _internal_domain() in customer['email']:
             flash('Internal customers cannot be deleted.', 'danger')
             return redirect(url_for('customers.edit_customer', customer_id=customer_id))
 

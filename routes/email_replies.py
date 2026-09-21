@@ -333,7 +333,7 @@ def compose_reply(job_id):
     def _thread_subject(subj):
         """Ensure subject starts with Re: for thread continuation."""
         if not subj:
-            return 'Re: Your booking with The Flying Bike'
+            from models import get_settings as _gs; return f"Re: Your booking with {_gs().get('business_name','us')}"
         return subj if subj.lower().startswith('re:') else f"Re: {subj}"
 
     thread_subject = _thread_subject(original_subject)
@@ -501,7 +501,7 @@ def compose_template_fetch(job_id, tmpl_id):
 
     original_subject = orig['subject'] if orig else ''
     def _thread_subject(s):
-        if not s: return 'Re: Your booking with The Flying Bike'
+        if not s: from models import get_settings as _gs; return f"Re: Your booking with {_gs().get('business_name','us')}"
         return s if s.lower().startswith('re:') else f'Re: {s}'
 
     subject_val = _substitute(tmpl['subject'], job)

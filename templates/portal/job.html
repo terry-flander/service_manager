@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Job {{ job['reference'] }} — The Flying Bike</title>
+  <title>Job {{ job['reference'] }} — {{ settings.business_name }}</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -188,7 +188,7 @@
 <div class="header">
   <span class="header-logo">🚲</span>
   <div>
-    <div class="header-name">The Flying Bike</div>
+    <div class="header-name">{{ settings.business_name }}</div>
     <div class="header-sub">Mobile Bicycle Repair</div>
   </div>
 </div>
@@ -318,8 +318,8 @@
   {% endif %}
 
   <div class="footer">
-    <p>Questions? Reply to your booking email or call <strong>0403 225 135</strong></p>
-    <p style="margin-top:0.4rem;">The Flying Bike — Mobile Bicycle Repair, Melbourne</p>
+    <p>Questions? Reply to your booking email or call <strong>{{ settings.business_phone }}</strong></p>
+    <p style="margin-top:0.4rem;">{{ settings.business_name }}{% if settings.business_tagline %} — {{ settings.business_tagline }}{% endif %}</p>
   </div>
 
 </div>

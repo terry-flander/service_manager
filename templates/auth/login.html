@@ -36,7 +36,7 @@
 <body>
   <div class="login-card">
     <div class="logo-wrap">
-      <img src="{{ url_for('static', filename='img/branding.png') }}" alt="The Flying Bike">
+      <img src="{{ url_for('static', filename='img/branding.png') }}" alt="{{ settings.business_name }}">
     </div>
 
     {% with messages = get_flashed_messages(with_categories=true) %}

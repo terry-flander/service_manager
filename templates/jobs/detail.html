@@ -100,8 +100,9 @@ function silentSave(callback) {
 {% endblock %}
 
 {% block content %}
+{% set _jtc        = JOB_TYPES.get(job['job_type'], {}) %}
 {% set is_workshop  = job['job_type'] == 'workshop' %}
-{% set is_sale_bike = job['job_type'] == 'sale_bike' %}
+{% set is_sale_bike = _jtc.get('has_bike_listing', 0) %}
 {% set is_sale     = job['job_type'] == 'sale' %}
 
 <!-- ── Save form wraps ALL editable content ──────────────────────────────── -->
@@ -253,7 +254,7 @@ function silentSave(callback) {
       <div class="sd-card mb-3">
         <div class="sd-card-header">
           <span>Customer</span>
-          <span style="font-size:0.7rem; color:var(--sd-muted);"><i class="bi bi-globe2"></i> theflyingbike.com.au</span>
+          <span style="font-size:0.7rem; color:var(--sd-muted);"><i class="bi bi-globe2"></i> {{ settings.app_url or 'app' }}</span>
         </div>
         <div style="padding:1.25rem;">
           <table style="width:100%; font-size:0.875rem; border-collapse:collapse;">
@@ -986,7 +987,7 @@ var JOB_CUST_NAME  = {{ (job['customer_name']  or '')|tojson }};
     <div style="font-size:0.8rem; color:var(--sd-muted); margin-bottom:1.25rem;">
       Current:
       <strong style="color:var(--sd-accent);">
-        {{ JOB_TYPES[job['job_type']].label if job['job_type'] in JOB_TYPES else job['job_type']|title }}
+        {{ JOB_TYPES.get(job['job_type'], {}).get('label', job['job_type']|title) }}
       </strong>
       ({{ job['reference'] }})
     </div>

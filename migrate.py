@@ -524,3 +524,71 @@ for col, defn in [
         print(f"bikes_for_sale.{col} added.")
     except Exception as e:
         print(f"bikes_for_sale.{col} skipped: {e}")
+
+# ── Business identity settings ────────────────────────────────────────────────
+_biz_settings = [
+    ('business_name',         'My Business'),
+    ('business_tagline',      'Field Service Management'),
+    ('business_abn',          ''),
+    ('business_phone',        ''),
+    ('business_email',        ''),
+    ('business_address',      ''),
+    ('business_suburb',       ''),
+    ('business_state',        ''),
+    ('business_postcode',     ''),
+    ('business_website',      ''),
+    ('business_instagram',    ''),
+    ('business_bank_name',    ''),
+    ('app_url',               'http://localhost:5000'),
+    ('booking_secret',        'change-me'),
+    ('booking_cors_origins',  ''),
+    ('business_bsb',           ''),
+    ('business_account',       ''),
+    ('internal_email_domain', 'app.internal'),
+    ('setup_complete',        '0'),
+]
+for key, default in _biz_settings:
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
+            (key, default))
+    except Exception:
+        pass
+conn.commit()
+print("Business identity settings seeded.")
+
+# ── job_type_config table seed ────────────────────────────────────────────────
+# Only inserts rows that don't already exist (INSERT OR IGNORE on PK)
+# Uses internal_email_domain from settings for internal customer emails
+_idom_row = conn.execute(
+    "SELECT value FROM settings WHERE key='internal_email_domain'").fetchone()
+_idom = _idom_row['value'] if _idom_row else 'app.internal'
+
+_jtc_rows = [
+    ('booking',   'Booking',       'FB', 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, None,                                  0),
+    ('workshop',  'Workshop',      'PB', 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 0, None,                                  1),
+    ('rental',    'Rental',        'RB', 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, None,                                  2),
+    ('sale',      'Sale',          'CS', 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, f'counter.sales@{_idom}',             3),
+    ('sale_bike', 'Bike for Sale', 'BK', 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 1, f'bikes.for.sale@{_idom}',           4),
+]
+for row in _jtc_rows:
+    try:
+        conn.execute("""
+            INSERT OR IGNORE INTO job_type_config
+            (key, label, prefix, hide_customer, hide_address, hide_phone, hide_portal,
+             has_service_types, has_bike_description, has_bike_listing, has_end_date,
+             use_calendar, use_region, tax_inclusive_default, internal_customer, sort_order)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """, row)
+    except Exception:
+        pass
+conn.commit()
+print("job_type_config seeded.")
+
+# ── Add show_in_new_job column to job_type_config ────────────────────────────
+try:
+    conn.execute("ALTER TABLE job_type_config ADD COLUMN show_in_new_job INTEGER NOT NULL DEFAULT 1")
+    conn.commit()
+    print("Added show_in_new_job to job_type_config.")
+except Exception:
+    pass  # already exists

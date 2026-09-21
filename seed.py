@@ -20,6 +20,11 @@ REGIONS_CSV       = os.path.join(BASE_DIR, 'regions_suburbs.csv')
 
 # ── Parts ─────────────────────────────────────────────────────────────────────
 
+def _internal_domain(conn):
+    row = conn.execute("SELECT value FROM settings WHERE key='internal_email_domain'").fetchone()
+    return row['value'] if row else 'app.internal'
+
+
 def _load_parts_from_csv():
     parts = []
     with open(PARTS_CSV, newline='', encoding='utf-8-sig') as f:
@@ -101,40 +106,41 @@ def _seed_regions(conn):
 
 def _seed_cash_sales_customer(conn):
     """Ensure the locked Counter Sales customer record exists (migrates legacy email)."""
+    dom = _internal_domain(conn)
+    cs_email   = f'counter.sales@{dom}'
+    cash_email = f'cash.sales@{dom}'
     existing = conn.execute(
-        "SELECT id FROM customers WHERE email='counter.sales@flyingbike.internal'"
+        "SELECT id FROM customers WHERE email=?", (cs_email,)
     ).fetchone()
     if existing:
         return
     legacy = conn.execute(
-        "SELECT id FROM customers WHERE email='cash.sales@flyingbike.internal'"
+        "SELECT id FROM customers WHERE email=?", (cash_email,)
     ).fetchone()
     if legacy:
-        conn.execute(
-            "UPDATE customers SET email='counter.sales@flyingbike.internal' WHERE id=?",
-            (legacy['id'],))
+        conn.execute("UPDATE customers SET email=? WHERE id=?", (cs_email, legacy['id']))
         conn.commit()
         print("  Counter Sales customer migrated from legacy email")
         return
-    conn.execute("""
-        INSERT INTO customers (name, email, phone, suburb, address)
-        VALUES ('Counter Sales', 'counter.sales@flyingbike.internal', '', '', '')
-    """)
+    conn.execute(
+        "INSERT INTO customers (name, email, phone, suburb, address) VALUES (?,?,?,?,?)",
+        ('Counter Sales', cs_email, '', '', ''))
     conn.commit()
     print("  Counter Sales customer created")
 
 
 def _seed_bikes_for_sale_customer(conn):
     """Ensure the locked Bikes for Sale internal customer exists."""
+    dom = _internal_domain(conn)
+    bfs_email = f'bikes.for.sale@{dom}'
     existing = conn.execute(
-        "SELECT id FROM customers WHERE email='bikes.for.sale@flyingbike.internal'"
+        "SELECT id FROM customers WHERE email=?", (bfs_email,)
     ).fetchone()
     if existing:
         return
-    conn.execute("""
-        INSERT INTO customers (name, email, phone, suburb, address)
-        VALUES ('Bikes for Sale', 'bikes.for.sale@flyingbike.internal', '', '', '')
-    """)
+    conn.execute(
+        "INSERT INTO customers (name, email, phone, suburb, address) VALUES (?,?,?,?,?)",
+        ('Bikes for Sale', bfs_email, '', '', ''))
     conn.commit()
     print("  Bikes for Sale customer created")
 

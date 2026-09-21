@@ -160,6 +160,15 @@ def create_app():
         except Exception:
             status_colors = dict(_defaults)
             unread_email_count = 0
+        from models import get_settings as _get_settings, get_job_types as _get_job_types
+        try:
+            biz_settings = _get_settings()
+        except Exception:
+            biz_settings = {}
+        try:
+            job_types = _get_job_types()
+        except Exception:
+            job_types = {}
         return {
             'google_maps_api_key': app.config['GOOGLE_MAPS_API_KEY'],
             'current_user': g.get('user'),
@@ -167,6 +176,8 @@ def create_app():
             'status_colors': status_colors,
             'unread_email_count': unread_email_count,
             'app_version': __import__('version').VERSION,
+            'settings': biz_settings,
+            'JOB_TYPES': job_types,
         }
 
     # ── DB init + seed ────────────────────────────────────────────────────────
@@ -193,16 +204,15 @@ def _seed_admin():
     from models import get_db
     from werkzeug.security import generate_password_hash
     with get_db() as conn:
-        existing = conn.execute(
-            "SELECT id FROM users WHERE email='admin@flyingbike.com.au'").fetchone()
+        existing = conn.execute("SELECT id FROM users LIMIT 1").fetchone()
         if not existing:
             conn.execute("""
                 INSERT INTO users (name, email, password_hash, role, must_change_pw)
                 VALUES (?, ?, ?, 'admin', 1)
-            """, ('Admin', 'admin@flyingbike.com.au',
+            """, ('Admin', 'admin@localhost',
                   generate_password_hash('changeme123')))
             conn.commit()
-            print('✓ Default admin created: admin@flyingbike.com.au / changeme123')
+            print('✓ Default admin created: admin@localhost / changeme123')
 
 
 if __name__ == '__main__':

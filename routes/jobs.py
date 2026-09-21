@@ -82,13 +82,15 @@ def _load_service_types(conn, job_group=None):
             for l in ['General Service', 'eBike Service',
                       'Tribe/Cargo Bike Service', '3 or More Bikes', 'Other']]
 
-JOB_TYPES = {
-    'booking':   {'label': 'Booking',       'prefix': 'FB'},
-    'workshop':  {'label': 'Workshop',      'prefix': 'PB'},
-    'rental':    {'label': 'Rental',        'prefix': 'RB'},
-    'sale':      {'label': 'Sale',          'prefix': 'CS'},
-    'sale_bike': {'label': 'Bike for Sale', 'prefix': 'BK'},
-}
+from models import get_job_types as _get_job_types
+
+def _job_types(conn=None):
+    """Return job type config dict — reads from DB, falls back to defaults."""
+    return _get_job_types(conn)
+
+# Backwards-compatible alias used throughout this module
+def _JT(conn=None):
+    return _job_types(conn)
 
 
 def generate_reference(job_type, conn):
@@ -96,7 +98,7 @@ def generate_reference(job_type, conn):
     Scans ALL references with this prefix (regardless of job_type column)
     to guarantee no collision even if job_type is ever mismatched.
     """
-    prefix = JOB_TYPES[job_type]['prefix']
+    prefix = _JT(conn).get(job_type, {}).get('prefix', job_type[:2].upper())
     # Match prefix + hyphen at start of reference string
     like = f'{prefix}-%'
     row = conn.execute(
@@ -122,7 +124,7 @@ def upsert_customer(conn, name, email, phone, suburb, address=''):
             existing = conn.execute(
                 "SELECT id, address FROM customers "
                 "WHERE LOWER(name)=LOWER(?) "
-                "AND email NOT LIKE '%flyingbike.internal%'",
+                "AND email NOT LIKE '%' + _internal_domain() + '%'",
                 (name,)).fetchone()
         if not existing and phone:
             existing = conn.execute(
@@ -175,20 +177,20 @@ def new_sale():
             if cust_id_field and cust_id_field.isdigit():
                 named_cust = conn.execute(
                     "SELECT id, name, email, phone FROM customers WHERE id=? "
-                    "AND email NOT LIKE '%flyingbike.internal%'",
+                    "AND email NOT LIKE '%' + _internal_domain() + '%'",
                     (int(cust_id_field),)).fetchone()
             elif cust_name_field:
                 # Fallback: try exact then partial name match
                 named_cust = conn.execute(
                     "SELECT id, name, email, phone FROM customers "
                     "WHERE LOWER(name)=LOWER(?) "
-                    "AND email NOT LIKE '%flyingbike.internal%' LIMIT 1",
+                    "AND email NOT LIKE '%' + _internal_domain() + '%' LIMIT 1",
                     (cust_name_field,)).fetchone()
                 if not named_cust:
                     named_cust = conn.execute(
                         "SELECT id, name, email, phone FROM customers "
                         "WHERE LOWER(name) LIKE LOWER(?) "
-                        "AND email NOT LIKE '%flyingbike.internal%' LIMIT 1",
+                        "AND email NOT LIKE '%' + _internal_domain() + '%' LIMIT 1",
                         (f'%{cust_name_field}%',)).fetchone()
 
             if named_cust:
@@ -198,31 +200,33 @@ def new_sale():
                 cust_phone = named_cust['phone'] or ''
             else:
                 # Get or create the generic Counter Sales customer
+                _dom     = _internal_domain()
+                _cs_em   = f'counter.sales@{_dom}'
+                _cash_em = f'cash.sales@{_dom}'
                 cust = conn.execute(
-                    "SELECT id FROM customers WHERE email='counter.sales@flyingbike.internal'"
+                    "SELECT id FROM customers WHERE email=?", (_cs_em,)
                 ).fetchone()
                 if not cust:
                     legacy = conn.execute(
-                        "SELECT id FROM customers WHERE email='cash.sales@flyingbike.internal'"
+                        "SELECT id FROM customers WHERE email=?", (_cash_em,)
                     ).fetchone()
                     if legacy:
                         conn.execute(
-                            "UPDATE customers SET email='counter.sales@flyingbike.internal' WHERE id=?",
-                            (legacy['id'],))
+                            "UPDATE customers SET email=? WHERE id=?",
+                            (_cs_em, legacy['id']))
                         conn.commit()
                         cust = legacy
                     else:
-                        conn.execute("""
-                            INSERT INTO customers (name, email, phone, suburb, address)
-                            VALUES ('Counter Sales','counter.sales@flyingbike.internal','','','')
-                        """)
+                        conn.execute(
+                            "INSERT INTO customers (name,email,phone,suburb,address) VALUES (?,?,?,?,?)",
+                            ('Counter Sales', _cs_em, '', '', ''))
                         conn.commit()
                         cust = conn.execute(
-                            "SELECT id FROM customers WHERE email='counter.sales@flyingbike.internal'"
+                            "SELECT id FROM customers WHERE email=?", (_cs_em,)
                         ).fetchone()
                 cust_id    = cust['id']
                 cust_name  = cust_name_field or 'Counter Sales'
-                cust_email = 'counter.sales@flyingbike.internal'
+                cust_email = _cs_em
                 cust_phone = ''
 
             ref = generate_reference('sale', conn)
@@ -495,7 +499,7 @@ def index():
                            columns_landscape=columns_landscape,
                            columns_portrait=columns_portrait,
                            COLUMN_CATALOG=COLUMN_CATALOG,
-                           TIME_LABELS=TIME_LABELS, JOB_TYPES=JOB_TYPES)
+                           TIME_LABELS=TIME_LABELS, JOB_TYPES=_JT())
 
 
 @jobs_bp.route('/jobs/new', methods=['GET', 'POST'])
@@ -524,7 +528,7 @@ def new_job():
         # sale_bike: auto-assign Bikes for Sale internal customer
         if job_type == 'sale_bike':
             cust_name  = 'Bikes for Sale'
-            cust_email = 'bikes.for.sale@flyingbike.internal'
+            cust_email = f"bikes.for.sale@{_internal_domain()}"
             cust_phone = ''
         else:
             cust_name  = request.form['customer_name']
@@ -616,7 +620,7 @@ def new_job():
                         continue  # retry with next sequence number
                     raise
 
-        msg = f'{JOB_TYPES[job_type]["label"]} {ref} created'
+        msg = f'{_JT(conn).get(job_type, {}).get("label", job_type.title())} {ref} created'
         if sched_date:
             msg += f', scheduled for {sched_date}'
             if sched_time:
@@ -643,7 +647,7 @@ def new_job():
         workshop_types = _load_service_types(conn, 'workshop')
     return render_template('jobs/new.html', regions=regions,
                            TIME_SLOTS=TIME_SLOTS, TIME_LABELS=TIME_LABELS,
-                           JOB_TYPES={k:v for k,v in JOB_TYPES.items() if k != 'sale'},
+                           JOB_TYPES={k:v for k,v in _JT().items() if k != 'sale'},
                            BOOKING_TYPES=booking_types,
                            WORKSHOP_TYPES=workshop_types,
                            suburbs_list=suburbs_list,
@@ -962,7 +966,7 @@ def job_detail(job_id):
                            portal_url=portal_url,
                            pending_trigger=pending_trigger,
                            TIME_SLOTS=TIME_SLOTS, TIME_LABELS=TIME_LABELS,
-                           JOB_TYPES=JOB_TYPES)
+                           JOB_TYPES=_JT(conn))
 
 
 @jobs_bp.route('/jobs/<int:job_id>/edit', methods=['GET', 'POST'])
@@ -1060,7 +1064,7 @@ def edit_job_legacy(job_id):
         """).fetchall()
     return render_template('jobs/edit.html', job=job, regions=regions,
                            TIME_SLOTS=TIME_SLOTS, TIME_LABELS=TIME_LABELS,
-                           JOB_TYPES=JOB_TYPES,
+                           JOB_TYPES=_JT(),
                            BOOKING_TYPES=_load_service_types(conn, 'booking'),
                            WORKSHOP_TYPES=_load_service_types(conn, 'workshop'),
                            suburbs_list=suburbs_list)
@@ -1255,9 +1259,11 @@ def send_trigger_email(job_id):
         body_text = _html_to_plain_fallback(body_clean)
 
         if has_invoice and job_parts:
+            from models import get_settings as _gs
             buf = generate_invoice_pdf(
                 job, job_parts, bool(job['tax_inclusive']),
-                job['subtotal'] or 0.0, job['gst'] or 0.0, job['total'] or 0.0)
+                job['subtotal'] or 0.0, job['gst'] or 0.0, job['total'] or 0.0,
+                settings=_gs())
             from email_sender import send_reply_with_attachment
             msg_id = send_reply_with_attachment(
                 to_address=job['customer_email'],
@@ -1733,6 +1739,111 @@ def poll_log():
 
 
 
+@jobs_bp.route('/settings/job-types/add', methods=['POST'])
+def settings_job_types_add():
+    """Create a new job type config row."""
+    import re
+    key    = re.sub(r'[^a-z_]', '', request.form.get('key', '').strip().lower())
+    label  = request.form.get('label', '').strip()
+    prefix = request.form.get('prefix', '').strip().upper()
+    if not key or not label or not prefix:
+        flash('Key, label and prefix are all required.', 'danger')
+        return redirect(url_for('jobs.settings_job_types'))
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT key FROM job_type_config WHERE key=?", (key,)).fetchone()
+        if existing:
+            flash(f'Job type key "{key}" already exists.', 'danger')
+            return redirect(url_for('jobs.settings_job_types'))
+        # Get next sort_order
+        max_sort = conn.execute(
+            "SELECT MAX(sort_order) FROM job_type_config").fetchone()[0] or 0
+        conn.execute("""
+            INSERT INTO job_type_config
+            (key, label, prefix, sort_order, active, show_in_new_job,
+             has_bike_description)
+            VALUES (?,?,?,?,1,1,1)
+        """, (key, label, prefix, max_sort + 1))
+        conn.commit()
+    flash(f'Job type "{label}" added. Configure its behaviour flags below.', 'success')
+    return redirect(url_for('jobs.settings_job_types'))
+
+
+@jobs_bp.route('/settings/job-types', methods=['GET', 'POST'])
+def settings_job_types():
+    """Admin page to configure job type labels, prefixes and behaviour flags."""
+    from models import get_job_types as _gjt
+    FLAG_COLS = [
+        'hide_customer', 'hide_address', 'hide_phone', 'hide_portal',
+        'has_service_types', 'has_bike_description', 'has_bike_listing',
+        'has_end_date', 'use_calendar', 'use_region', 'tax_inclusive_default',
+        'show_in_new_job',
+    ]
+    with get_db() as conn:
+        if request.method == 'POST':
+            key = request.form.get('key', '').strip()
+            if key:
+                label    = request.form.get('label', '').strip() or key.title()
+                prefix   = request.form.get('prefix', '').strip().upper() or key[:2].upper()
+                active   = 1 if request.form.get('active') else 0
+                int_cust = request.form.get('internal_customer', '').strip() or None
+                flags    = {f: 1 if request.form.get(f) else 0 for f in FLAG_COLS}
+                conn.execute("""
+                    UPDATE job_type_config
+                    SET label=?, prefix=?, active=?, internal_customer=?,
+                        hide_customer=?, hide_address=?, hide_phone=?, hide_portal=?,
+                        has_service_types=?, has_bike_description=?, has_bike_listing=?,
+                        has_end_date=?, use_calendar=?, use_region=?, tax_inclusive_default=?,
+                        show_in_new_job=?
+                    WHERE key=?
+                """, (label, prefix, active, int_cust,
+                      flags['hide_customer'], flags['hide_address'],
+                      flags['hide_phone'], flags['hide_portal'],
+                      flags['has_service_types'], flags['has_bike_description'],
+                      flags['has_bike_listing'], flags['has_end_date'],
+                      flags['use_calendar'], flags['use_region'],
+                      flags['tax_inclusive_default'], flags['show_in_new_job'],
+                      key))
+                conn.commit()
+                flash(f'{label} saved.', 'success')
+            return redirect(url_for('jobs.settings_job_types'))
+        jt_dict = _gjt(conn)
+        # Get ALL rows including inactive for the admin view
+        all_rows = conn.execute(
+            "SELECT * FROM job_type_config ORDER BY sort_order"
+        ).fetchall()
+        job_types = [dict(r) for r in all_rows]
+        if not job_types:
+            job_types = list(jt_dict.values())
+    return render_template('jobs/settings_job_types.html', job_types=job_types)
+
+
+@jobs_bp.route('/settings/business', methods=['GET', 'POST'])
+def settings_business():
+    """Admin page to configure business identity settings."""
+    from models import get_settings
+    KEYS = [
+        'business_name', 'business_tagline', 'business_abn',
+        'business_phone', 'business_email', 'business_website',
+        'business_instagram', 'business_address', 'business_suburb',
+        'business_state', 'business_postcode',
+        'business_bank_name', 'business_bsb', 'business_account',
+        'app_url', 'booking_cors_origins', 'internal_email_domain',
+    ]
+    with get_db() as conn:
+        if request.method == 'POST':
+            for key in KEYS:
+                val = request.form.get(key, '').strip()
+                conn.execute(
+                    "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                    (key, val))
+            conn.commit()
+            flash('Business settings saved.', 'success')
+            return redirect(url_for('jobs.settings_business'))
+        s = get_settings(conn)
+    return render_template('jobs/settings_business.html', s=s, keys=KEYS)
+
+
 @jobs_bp.route('/settings/status-colors', methods=['GET', 'POST'])
 def status_colors():
     """Admin page to configure per-status badge colours."""
@@ -1974,7 +2085,7 @@ def xero_check_payments():
 @jobs_bp.route('/settings/status-triggers', methods=['GET', 'POST'])
 def status_triggers():
     """Admin page to configure automatic email triggers per job type and status."""
-    JOB_TYPES_LIST  = ['booking', 'rental', 'workshop', 'sale', 'sale_bike']
+    JOB_TYPES_LIST  = list(_JT().keys())
     STATUS_LIST = ['pending', 'scheduled', 'in_progress', 'quote',
                    'complete', 'invoiced', 'paid', 'lost']
     with get_db() as conn:
@@ -2080,7 +2191,7 @@ def change_type(job_id):
     from flask import jsonify
     data     = request.get_json()
     new_type = data.get('job_type', '').strip()
-    if new_type not in JOB_TYPES:
+    if new_type not in _JT():
         return jsonify({'ok': False, 'error': 'Invalid job type'}), 400
 
     import sqlite3 as _sqlite3

@@ -1,0 +1,168 @@
+{% extends 'base.html' %}
+{% block title %}Business Settings{% endblock %}
+{% block content %}
+<div class="sd-card" style="max-width:760px; margin:2rem auto;">
+  <div class="sd-card-header">
+    <span><i class="bi bi-building" style="color:var(--sd-accent);"></i> Business Identity</span>
+  </div>
+  <form method="post" style="padding:1.5rem;">
+
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in msgs %}
+        <div class="alert alert-{{ cat }}" style="margin-bottom:1rem;">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <p style="font-size:0.82rem; color:var(--sd-muted); margin-bottom:1.5rem;">
+      These values appear on invoices, shop tickets, portal pages and outgoing emails.
+      Save and <strong>restart the app</strong> for changes to take full effect.
+    </p>
+
+    <!-- ── Business name ─────────────────────────────────────────────── -->
+    <h3 style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.1em;
+               color:var(--sd-muted); margin-bottom:1rem; padding-bottom:0.4rem;
+               border-bottom:1px solid var(--sd-border);">Identity</h3>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
+      <div>
+        <label class="sd-label">Business Name <span style="color:var(--sd-danger);">*</span></label>
+        <input type="text" name="business_name" class="sd-input" required
+               value="{{ s.business_name }}"
+               placeholder="e.g. Acme Bicycle Services">
+      </div>
+      <div>
+        <label class="sd-label">Tagline</label>
+        <input type="text" name="business_tagline" class="sd-input"
+               value="{{ s.business_tagline }}"
+               placeholder="e.g. Melbourne's Mobile Bicycle Workshop">
+      </div>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:1rem; margin-bottom:1.5rem;">
+      <div>
+        <label class="sd-label">ABN</label>
+        <input type="text" name="business_abn" class="sd-input"
+               value="{{ s.business_abn }}"
+               placeholder="e.g. 12 345 678 901">
+      </div>
+      <div>
+        <label class="sd-label">Phone</label>
+        <input type="text" name="business_phone" class="sd-input"
+               value="{{ s.business_phone }}"
+               placeholder="e.g. 0400 000 000">
+      </div>
+      <div>
+        <label class="sd-label">Email</label>
+        <input type="email" name="business_email" class="sd-input"
+               value="{{ s.business_email }}"
+               placeholder="e.g. info@yourbusiness.com.au">
+      </div>
+    </div>
+
+    <!-- ── Address ───────────────────────────────────────────────────── -->
+    <h3 style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.1em;
+               color:var(--sd-muted); margin-bottom:1rem; padding-bottom:0.4rem;
+               border-bottom:1px solid var(--sd-border);">Address</h3>
+    <div style="margin-bottom:1rem;">
+      <label class="sd-label">Street Address</label>
+      <input type="text" name="business_address" class="sd-input"
+             value="{{ s.business_address }}"
+             placeholder="e.g. 123 Main Street">
+    </div>
+    <div style="display:grid; grid-template-columns:2fr 1fr 1fr; gap:1rem; margin-bottom:1.5rem;">
+      <div>
+        <label class="sd-label">Suburb</label>
+        <input type="text" name="business_suburb" class="sd-input"
+               value="{{ s.business_suburb }}"
+               placeholder="e.g. Caulfield North">
+      </div>
+      <div>
+        <label class="sd-label">State</label>
+        <input type="text" name="business_state" class="sd-input"
+               value="{{ s.business_state }}"
+               placeholder="VIC">
+      </div>
+      <div>
+        <label class="sd-label">Postcode</label>
+        <input type="text" name="business_postcode" class="sd-input"
+               value="{{ s.business_postcode }}"
+               placeholder="3161">
+      </div>
+    </div>
+
+    <!-- ── Online presence ───────────────────────────────────────────── -->
+    <h3 style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.1em;
+               color:var(--sd-muted); margin-bottom:1rem; padding-bottom:0.4rem;
+               border-bottom:1px solid var(--sd-border);">Online</h3>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1.5rem;">
+      <div>
+        <label class="sd-label">Website</label>
+        <input type="url" name="business_website" class="sd-input"
+               value="{{ s.business_website }}"
+               placeholder="https://yourbusiness.com.au">
+      </div>
+      <div>
+        <label class="sd-label">Instagram URL</label>
+        <input type="url" name="business_instagram" class="sd-input"
+               value="{{ s.business_instagram }}"
+               placeholder="https://instagram.com/yourbusiness">
+      </div>
+    </div>
+
+    <!-- ── Banking ───────────────────────────────────────────────────── -->
+    <h3 style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.1em;
+               color:var(--sd-muted); margin-bottom:1rem; padding-bottom:0.4rem;
+               border-bottom:1px solid var(--sd-border);">Banking (shown on invoices)</h3>
+    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:1rem; margin-bottom:1.5rem;">
+      <div>
+        <label class="sd-label">Bank Account Name</label>
+        <input type="text" name="business_bank_name" class="sd-input"
+               value="{{ s.business_bank_name }}"
+               placeholder="e.g. Acme Bikes Australia">
+      </div>
+      <div>
+        <label class="sd-label">BSB</label>
+        <input type="text" name="business_bsb" class="sd-input"
+               value="{{ s.business_bsb }}"
+               placeholder="000-000">
+      </div>
+      <div>
+        <label class="sd-label">Account Number</label>
+        <input type="text" name="business_account" class="sd-input"
+               value="{{ s.business_account }}"
+               placeholder="123456789">
+      </div>
+    </div>
+
+    <!-- ── App / integration ─────────────────────────────────────────── -->
+    <h3 style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.1em;
+               color:var(--sd-muted); margin-bottom:1rem; padding-bottom:0.4rem;
+               border-bottom:1px solid var(--sd-border);">App &amp; Integration</h3>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
+      <div>
+        <label class="sd-label">App URL <span style="font-size:0.7rem;color:var(--sd-muted);">(public base URL, no trailing slash)</span></label>
+        <input type="url" name="app_url" class="sd-input"
+               value="{{ s.app_url }}"
+               placeholder="https://app.yourbusiness.com.au">
+      </div>
+      <div>
+        <label class="sd-label">Internal Email Domain <span style="font-size:0.7rem;color:var(--sd-muted);">(system customers)</span></label>
+        <input type="text" name="internal_email_domain" class="sd-input"
+               value="{{ s.internal_email_domain }}"
+               placeholder="app.internal">
+      </div>
+    </div>
+    <div style="margin-bottom:1.5rem;">
+      <label class="sd-label">Booking Form CORS Origins <span style="font-size:0.7rem;color:var(--sd-muted);">(comma-separated — domains that can POST to /booking/submit)</span></label>
+      <input type="text" name="booking_cors_origins" class="sd-input"
+             value="{{ s.booking_cors_origins }}"
+             placeholder="https://yourbusiness.com.au, https://www.yourbusiness.com.au">
+    </div>
+
+    <div style="display:flex; justify-content:flex-end; gap:0.75rem; padding-top:0.5rem; border-top:1px solid var(--sd-border);">
+      <a href="{{ url_for('jobs.index') }}" class="btn-ghost">Cancel</a>
+      <button type="submit" class="btn-accent">
+        <i class="bi bi-check-lg"></i> Save Business Settings
+      </button>
+    </div>
+  </form>
+</div>
+{% endblock %}

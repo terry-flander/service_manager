@@ -78,7 +78,7 @@ def create_booking():
         f"Message:\n{message}"
     )
     # Synthetic message ID — unique, won't collide with real email message IDs
-    message_id = f"<api-{secrets.token_hex(16)}@theflyingbike.com.au>"
+    message_id = f"<api-{secrets.token_hex(16)}@{__import__('models').get_settings().get('app_url','localhost').replace('https://','').replace('http://','').split('/')[0]}>"
     received_at = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
 
     try:

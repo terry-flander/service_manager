@@ -1,0 +1,140 @@
+{% extends 'base.html' %}
+{% block title %}Job Type Configuration{% endblock %}
+{% block content %}
+<div class="sd-card" style="max-width:900px; margin:2rem auto;">
+  <div class="sd-card-header">
+    <span><i class="bi bi-diagram-3" style="color:var(--sd-accent);"></i> Job Types</span>
+    <span style="font-size:0.78rem; color:var(--sd-muted);">
+      Changes affect how new jobs are created. Existing jobs are unaffected.
+    </span>
+  </div>
+  <div style="padding:1.5rem;">
+
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in msgs %}
+        <div class="alert alert-{{ cat }}" style="margin-bottom:1rem;">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <p style="font-size:0.82rem; color:var(--sd-muted); margin-bottom:1.5rem;">
+      Edit the <strong>label</strong> and <strong>prefix</strong> for each job type.
+      The <strong>key</strong> (internal code) is stored on every job record and cannot be changed.
+    </p>
+
+    {% for jt in job_types %}
+    <form method="post" action="{{ url_for('jobs.settings_job_types') }}"
+          style="background:var(--sd-surface2); border:1px solid var(--sd-border);
+                 border-radius:8px; padding:1.25rem; margin-bottom:1rem;">
+      <input type="hidden" name="key" value="{{ jt.key }}">
+
+      <div style="display:flex; align-items:center; gap:1rem; margin-bottom:1rem;">
+        <code style="background:var(--sd-surface); border:1px solid var(--sd-border);
+                     padding:0.2rem 0.5rem; border-radius:4px; font-size:0.8rem;
+                     color:var(--sd-accent); flex-shrink:0;">{{ jt.key }}</code>
+        <div style="flex:1; display:grid; grid-template-columns:1fr 120px; gap:0.75rem;">
+          <div>
+            <label class="sd-label">Label</label>
+            <input type="text" name="label" class="sd-input" required value="{{ jt.label }}">
+          </div>
+          <div>
+            <label class="sd-label">Prefix</label>
+            <input type="text" name="prefix" class="sd-input" required maxlength="4"
+                   value="{{ jt.prefix }}" oninput="this.value=this.value.toUpperCase()">
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:0.5rem; flex-shrink:0; padding-top:1.2rem;">
+          <label style="font-size:0.8rem; color:var(--sd-muted);">Active</label>
+          <input type="checkbox" name="active" value="1"
+                 {% if jt.active %}checked{% endif %}
+                 style="width:1.1rem; height:1.1rem; accent-color:var(--sd-accent);">
+        </div>
+      </div>
+
+      <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:0.5rem 1rem;
+                  padding:0.75rem; background:var(--sd-surface); border-radius:6px;
+                  margin-bottom:0.75rem;">
+        {% for fname, flabel in [
+          ('hide_customer','Hide customer panel'),
+          ('hide_address','Hide address/suburb'),
+          ('hide_phone','Hide phone'),
+          ('hide_portal','Hide portal link'),
+          ('has_service_types','Workshop service types'),
+          ('has_bike_description','Bike description field'),
+          ('has_bike_listing','Bikes for Sale listing'),
+          ('has_end_date','End date (rental)'),
+          ('use_calendar','Show on calendar'),
+          ('use_region','Region/suburb selector'),
+          ('tax_inclusive_default','Always tax inclusive'),
+          ('show_in_new_job','Show in New Job picker'),
+        ] %}
+        <label style="display:flex; align-items:center; gap:0.4rem; font-size:0.78rem; cursor:pointer;">
+          <input type="checkbox" name="{{ fname }}" value="1"
+                 {% if jt[fname] %}checked{% endif %}
+                 style="accent-color:var(--sd-accent);">
+          {{ flabel }}
+        </label>
+        {% endfor %}
+      </div>
+
+      <div style="display:flex; align-items:center; gap:1rem;">
+        <div style="flex:1;">
+          <label class="sd-label">Internal Customer Email
+            <span style="font-size:0.7rem;color:var(--sd-muted);">(auto-assigned; blank = normal customer lookup)</span>
+          </label>
+          <input type="text" name="internal_customer" class="sd-input"
+                 value="{{ jt.internal_customer or '' }}"
+                 placeholder="e.g. bikes.for.sale@app.internal">
+        </div>
+        <div style="padding-top:1.4rem; flex-shrink:0;">
+          <button type="submit" class="btn-accent">
+            <i class="bi bi-check-lg"></i> Save
+          </button>
+        </div>
+      </div>
+    </form>
+    {% endfor %}
+
+
+    <hr style="border-color:var(--sd-border); margin:1.5rem 0;">
+    <h3 style="font-size:0.78rem; text-transform:uppercase; letter-spacing:0.1em;
+               color:var(--sd-muted); margin-bottom:1rem;">Add New Job Type</h3>
+    <form method="post" action="{{ url_for('jobs.settings_job_types_add') }}"
+          style="background:var(--sd-surface2); border:1px solid var(--sd-accent);
+                 border-radius:8px; padding:1.25rem; margin-bottom:1rem;">
+      <div style="display:grid; grid-template-columns:1fr 160px 120px; gap:0.75rem; margin-bottom:1rem;">
+        <div>
+          <label class="sd-label">Key <span style="font-size:0.7rem;color:var(--sd-muted);">(unique internal code — lowercase, no spaces)</span></label>
+          <input type="text" name="key" class="sd-input" required
+                 pattern="[a-z_]+" title="Lowercase letters and underscores only"
+                 placeholder="e.g. mobile_repair">
+        </div>
+        <div>
+          <label class="sd-label">Label</label>
+          <input type="text" name="label" class="sd-input" required placeholder="e.g. Mobile Repair">
+        </div>
+        <div>
+          <label class="sd-label">Prefix</label>
+          <input type="text" name="prefix" class="sd-input" required maxlength="4"
+                 placeholder="e.g. MR" oninput="this.value=this.value.toUpperCase()">
+        </div>
+      </div>
+      <p style="font-size:0.78rem; color:var(--sd-muted); margin-bottom:0.75rem;">
+        After adding, configure the behaviour flags for the new type above.
+        The new type will appear in the New Job picker if "Show in New Job picker" is checked.
+      </p>
+      <div style="display:flex; justify-content:flex-end;">
+        <button type="submit" class="btn-accent">
+          <i class="bi bi-plus-lg"></i> Add Job Type
+        </button>
+      </div>
+    </form>
+    <div style="margin-top:1rem; padding:1rem; background:var(--sd-surface2);
+                border:1px solid var(--sd-border); border-radius:8px;
+                font-size:0.8rem; color:var(--sd-muted);">
+      <strong style="color:var(--sd-text);">Note:</strong>
+      Changing a prefix only affects new jobs. The Bikes for Sale listing flag should
+      only be enabled on one job type. After saving, restart the app for changes to take full effect.
+    </div>
+  </div>
+</div>
+{% endblock %}
