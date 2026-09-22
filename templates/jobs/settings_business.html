@@ -157,6 +157,38 @@
              placeholder="https://yourbusiness.com.au, https://www.yourbusiness.com.au">
     </div>
 
+    <!-- ── SMS ──────────────────────────────────────────────────────────── -->
+    <h3 style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.1em;
+               color:var(--sd-muted); margin-bottom:1rem; padding-bottom:0.4rem;
+               border-bottom:1px solid var(--sd-border);">SMS (Twilio)</h3>
+    <div style="display:grid; grid-template-columns:auto 1fr; gap:1rem; align-items:center; margin-bottom:1rem;">
+      <div>
+        <label class="sd-label">Enable SMS</label>
+        <select name="sms_enabled" class="sd-input" style="width:auto;">
+          <option value="0" {% if s.sms_enabled != '1' %}selected{% endif %}>Disabled</option>
+          <option value="1" {% if s.sms_enabled == '1' %}selected{% endif %}>Enabled</option>
+        </select>
+      </div>
+      <div>
+        <label class="sd-label">Sender ID
+          <span style="font-size:0.7rem;color:var(--sd-muted);">
+            (alphanumeric max 11 chars, e.g. FlyingBike — overrides TWILIO_SENDER in .env)
+          </span>
+        </label>
+        <input type="text" name="sms_sender" class="sd-input" maxlength="11"
+               value="{{ s.sms_sender }}" placeholder="e.g. FlyingBike">
+      </div>
+    </div>
+    <div style="margin-bottom:1.5rem; padding:0.75rem; background:var(--sd-surface2);
+                border:1px solid var(--sd-border); border-radius:6px; font-size:0.78rem;
+                color:var(--sd-muted);">
+      Twilio credentials are loaded from <code>.env</code>:
+      <code>TWILIO_ACCOUNT_SID</code>, <code>TWILIO_AUTH_TOKEN</code>, <code>TWILIO_SENDER</code>.
+      SMS templates are managed under
+      <a href="{{ url_for('email_replies.templates_index') }}" style="color:var(--sd-accent);">
+        Email Templates → SMS group</a>.
+    </div>
+
     <div style="display:flex; justify-content:flex-end; gap:0.75rem; padding-top:0.5rem; border-top:1px solid var(--sd-border);">
       <a href="{{ url_for('jobs.index') }}" class="btn-ghost">Cancel</a>
       <button type="submit" class="btn-accent">

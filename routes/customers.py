@@ -19,6 +19,13 @@ def _is_gmail_user(email):
 customers_bp = Blueprint('customers', __name__)
 
 
+def _internal_domain():
+    """Return configured internal email domain from settings."""
+    from models import get_settings
+    return get_settings().get('internal_email_domain', 'app.internal')
+
+
+
 @customers_bp.route('/customers')
 def index():
     from flask import session as _sess

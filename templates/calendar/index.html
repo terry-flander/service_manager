@@ -165,7 +165,7 @@
       <i class="bi bi-apple"></i>
     </a>
   </div>
-  <div style="margin-top:0.5rem; display:flex; gap:0.5rem; align-items:center;">
+  <div style="margin-top:0.5rem; display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
     <a id="popup-link" href="#" class="btn-accent" style="font-size:0.78rem; padding:0.3rem 0.75rem;">
       View Job
     </a>
@@ -174,6 +174,13 @@
             onclick="openPopupReplyModal()">
       <i class="bi bi-chat-left-text"></i> Thread
     </button>
+    {% if settings.sms_enabled == '1' %}
+    <button id="popup-sms-btn" class="btn-ghost"
+            style="font-size:0.78rem; padding:0.3rem 0.75rem; display:none;"
+            onclick="openCalSmsModal()">
+      <i class="bi bi-phone"></i> SMS
+    </button>
+    {% endif %}
   </div>
 </div>
 
@@ -372,6 +379,50 @@
     <i class="bi bi-calendar-x"></i> Click region date to delete
   </div>
 </div>
+
+{% if settings.sms_enabled == '1' %}
+<div id="cal-sms-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6);
+            z-index:3000; align-items:center; justify-content:center;"
+     onclick="if(event.target===this) closeCalSmsModal()">
+  <div style="background:var(--sd-surface); border:1px solid var(--sd-border);
+               border-radius:12px; width:100%; max-width:480px; margin:1rem;
+               box-shadow:0 8px 40px rgba(0,0,0,0.5);">
+    <div style="padding:0.9rem 1.2rem; border-bottom:1px solid var(--sd-border);
+                display:flex; align-items:center; justify-content:space-between;">
+      <span style="font-weight:600; font-size:0.9rem;">
+        <i class="bi bi-phone" style="color:var(--sd-accent);"></i> Send SMS
+      </span>
+      <span id="cal-sms-to" style="font-size:0.8rem; color:var(--sd-muted);"></span>
+      <button type="button" onclick="closeCalSmsModal()"
+              style="background:none; border:none; color:var(--sd-muted); font-size:1rem; cursor:pointer;">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    <div style="padding:1rem 1.2rem;">
+      <select id="cal-sms-tmpl" class="sd-input"
+              style="margin-bottom:0.6rem; font-size:0.8rem;"
+              onchange="loadCalSmsTemplate()">
+        <option value="">Load template…</option>
+      </select>
+      <textarea id="cal-sms-body" class="sd-input" rows="4"
+                style="resize:vertical; font-size:0.88rem;"
+                placeholder="Type your message…"
+                oninput="updateCalSmsCounter()"></textarea>
+      <div style="font-size:0.73rem; color:var(--sd-muted); margin-top:0.3rem; text-align:right;">
+        <span id="cal-sms-count">0 / 160</span>
+      </div>
+    </div>
+    <div style="padding:0.75rem 1.2rem; border-top:1px solid var(--sd-border);
+                display:flex; justify-content:flex-end; gap:0.5rem;">
+      <button type="button" class="btn-ghost" onclick="closeCalSmsModal()">Cancel</button>
+      <button type="button" class="btn-accent" id="cal-sms-send-btn" onclick="sendCalSms()">
+        <i class="bi bi-send"></i> Send
+      </button>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -584,6 +635,19 @@ document.addEventListener('DOMContentLoaded', function() {
       };
     } else {
       threadBtn.style.display = 'none';
+    }
+
+    // SMS button
+    const smsBtn = document.getElementById('popup-sms-btn');
+    if (smsBtn) {
+      if (jobIdMatch && p.phone) {
+        smsBtn.style.display = '';
+        smsBtn._jobId = jobIdMatch[1];
+        smsBtn._phone = p.phone;
+        smsBtn._name  = p.customer_name || info.event.title;
+      } else {
+        smsBtn.style.display = 'none';
+      }
     }
 
     // Position popup below the event, keeping it on screen
@@ -1203,8 +1267,75 @@ function getCalDateRange() {
 
 // Initialise map after FullCalendar has rendered
 document.addEventListener('DOMContentLoaded', function() {
-  // Wait for FullCalendar to render before initialising the map
   setTimeout(initCalMap, 1000);
 });
+
+{% if settings.sms_enabled == '1' %}
+// ── Calendar SMS ─────────────────────────────────────────────────────────────
+var _calSmsTpls  = {};
+var _calSmsJobId = null;
+var _calSmsPhone = null;
+
+function openCalSmsModal() {
+  const btn = document.getElementById('popup-sms-btn');
+  _calSmsJobId = btn._jobId;
+  _calSmsPhone = btn._phone;
+  document.getElementById('cal-sms-to').textContent   = btn._phone || '';
+  document.getElementById('cal-sms-body').value = '';
+  updateCalSmsCounter();
+
+  if (!Object.keys(_calSmsTpls).length) {
+    fetch('/sms/templates').then(r => r.json()).then(function(tpls) {
+      const sel = document.getElementById('cal-sms-tmpl');
+      tpls.forEach(function(t) {
+        _calSmsTpls[t.id] = t.body;
+        const o = document.createElement('option');
+        o.value = t.id; o.textContent = t.name;
+        sel.appendChild(o);
+      });
+    });
+  }
+  document.getElementById('cal-sms-overlay').style.display = 'flex';
+}
+
+function closeCalSmsModal() {
+  document.getElementById('cal-sms-overlay').style.display = 'none';
+  document.getElementById('cal-sms-tmpl').value = '';
+}
+
+function loadCalSmsTemplate() {
+  const sel  = document.getElementById('cal-sms-tmpl');
+  const body = _calSmsTpls[sel.value];
+  if (!body) return;
+  fetch('/sms/render', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({job_id: _calSmsJobId, body: body})
+  }).then(r => r.json()).then(function(d) {
+    if (d.ok) { document.getElementById('cal-sms-body').value = d.body; updateCalSmsCounter(); }
+  });
+  sel.value = '';
+}
+
+function updateCalSmsCounter() {
+  const len = (document.getElementById('cal-sms-body').value || '').length;
+  document.getElementById('cal-sms-count').textContent = len + ' / 160';
+}
+
+function sendCalSms() {
+  const body = document.getElementById('cal-sms-body').value.trim();
+  if (!body) { alert('Message required.'); return; }
+  const btn = document.getElementById('cal-sms-send-btn');
+  btn.disabled = true;
+  fetch('/sms/send', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({job_id: _calSmsJobId, body: body, to_number: _calSmsPhone})
+  }).then(r => r.json()).then(function(d) {
+    if (d.ok) { closeCalSmsModal(); showToast('SMS sent.', 'success'); }
+    else       { showToast('SMS failed: ' + (d.error || 'unknown'), 'danger'); }
+  }).finally(function() { btn.disabled = false; });
+}
+{% endif %}
 </script>
 {% endblock %}

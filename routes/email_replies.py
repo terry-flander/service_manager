@@ -214,7 +214,7 @@ def _get_thread_refs(conn, job_id):
 
 # ── Email Templates CRUD ──────────────────────────────────────────────────────
 
-TEMPLATE_GROUPS = ['booking', 'shop', 'bike', 'rental', 'misc']
+TEMPLATE_GROUPS = ['booking', 'shop', 'bike', 'rental', 'sms', 'misc']
 
 @email_replies_bp.route('/email-templates')
 def templates_index():

@@ -317,21 +317,49 @@ function applySpecTemplate() {
 
 function uploadBikeImage(input) {
   if (!input.files[0] || !_bikeId) return;
-  var status = document.getElementById('bm-image-status');
-  status.textContent = 'Uploading…';
-  var fd = new FormData();
-  fd.append('image', input.files[0]);
-  fetch('/bikes/' + _bikeId + '/images', { method: 'POST', body: fd })
-    .then(r => r.json())
-    .then(data => {
-      if (data.ok) {
-        status.textContent = 'Uploaded.';
-        openBikeModal(_bikeId);
-      } else {
-        status.textContent = 'Error: ' + data.error;
-      }
-    });
+  var file = input.files[0];
   input.value = '';
+  var status = document.getElementById('bm-image-status');
+  status.textContent = 'Saving…';
+  // Save current form state first, then upload
+  _saveBikeForUpload(function() {
+    status.textContent = 'Uploading…';
+    var fd = new FormData();
+    fd.append('image', file);
+    fetch('/bikes/' + _bikeId + '/images', { method: 'POST', body: fd })
+      .then(r => r.json())
+      .then(function(data) {
+        if (data.ok) {
+          status.textContent = 'Uploaded.';
+          openBikeModal(_bikeId);
+        } else {
+          status.textContent = 'Error: ' + data.error;
+        }
+      });
+  });
+}
+
+function _saveBikeForUpload(callback) {
+  // Collect current form values and POST to bike edit endpoint
+  var rte = window._bmRte;
+  var descHtml = rte ? rte.getContent() : (document.getElementById('bm-desc-html') || {}).value || '';
+  var payload = {
+    short_desc:        (document.getElementById('bm-short-desc')  || {}).value || '',
+    description_html:  descHtml,
+    condition_grade:   (document.getElementById('bm-condition')   || {}).value || '',
+    frame_size:        (document.getElementById('bm-frame-size')  || {}).value || '',
+    colour:            (document.getElementById('bm-colour')      || {}).value || '',
+    year_est:          (document.getElementById('bm-year')        || {}).value || '',
+    asking_price:      (document.getElementById('bm-asking')|| {}).value || '',
+    min_price:         (document.getElementById('bm-min')   || {}).value || '',
+    status:            (document.getElementById('bm-status')      || {}).value || '',
+  };
+  fetch('/bikes/' + _bikeId, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  }).then(function() { callback(); })
+    .catch(function() { callback(); }); // upload even if save fails
 }
 
 function deleteBikeImage(imgId, btn) {

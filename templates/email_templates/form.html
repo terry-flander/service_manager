@@ -26,7 +26,7 @@
             <div class="col-md-4">
               <label class="sd-label">Group</label>
               <select name="grp" class="sd-input">
-                {% for g in (groups or ['booking','shop','bike','rental','misc']) %}
+                {% for g in (groups or ['booking','shop','bike','rental','sms','misc']) %}
                 <option value="{{ g }}" style="text-transform:capitalize;"
                   {% if tmpl and (tmpl['grp'] if tmpl['grp'] else 'misc') == g %}selected{% endif %}>
                   {{ g|title }}

@@ -592,3 +592,58 @@ try:
     print("Added show_in_new_job to job_type_config.")
 except Exception:
     pass  # already exists
+
+# ── sms_log table ─────────────────────────────────────────────────────────────
+try:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS sms_log (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id      INTEGER REFERENCES jobs(id),
+            to_number   TEXT NOT NULL,
+            body        TEXT NOT NULL,
+            status      TEXT NOT NULL DEFAULT 'sent',
+            twilio_sid  TEXT,
+            error_msg   TEXT,
+            sent_at     TEXT DEFAULT (datetime('now')),
+            sent_by     INTEGER REFERENCES users(id)
+        )
+    """)
+    conn.commit()
+    print("sms_log table ready.")
+except Exception as e:
+    print(f"sms_log: {e}")
+
+# ── SMS settings ──────────────────────────────────────────────────────────────
+for key, default in [('sms_enabled', '0'), ('sms_sender', '')]:
+    try:
+        conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?,?)", (key, default))
+    except Exception:
+        pass
+conn.commit()
+
+# ── SMS email_templates (grp='sms') ──────────────────────────────────────────
+_sms_seeds = [
+    ('SMS: Booking Reminder',
+     'Hi {{name}}, reminder of your {{business}} visit on {{date}}. '
+     'Call {{phone}} to reschedule. Ref {{ref}}.'),
+    ('SMS: On My Way',
+     'Hi {{name}}, your mechanic is on the way — expected arrival {{time}}. Ref {{ref}}.'),
+    ('SMS: Job Complete',
+     'Hi {{name}}, your bike service is complete. Total: ${{total}}. '
+     'Thanks for choosing {{business}}!'),
+    ('SMS: Workshop Ready',
+     'Hi {{name}}, your bike at {{business}} is ready for collection. '
+     'Ref {{ref}}. Call {{phone}} for pickup times.'),
+    ('SMS: Booking Confirmed',
+     'Hi {{name}}, your booking with {{business}} is confirmed for {{date}} {{time}}. '
+     'Ref {{ref}}.'),
+]
+for name, body in _sms_seeds:
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO email_templates (name, subject, body, grp) VALUES (?,?,?,?)",
+            (name, '', body, 'sms'))
+    except Exception:
+        pass
+conn.commit()
+print("SMS settings and templates seeded.")

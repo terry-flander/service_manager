@@ -155,6 +155,13 @@ function silentSave(callback) {
       <i class="bi bi-clock-history"></i> History
     </button>
     {% endif %}
+    {% if settings.sms_enabled == '1' and job['customer_phone'] and not is_sale_bike %}
+    <button type="button" class="btn-ghost"
+            style="padding:0.35rem 0.85rem; font-size:0.82rem;"
+            onclick="openSmsModal()">
+      <i class="bi bi-phone"></i> SMS
+    </button>
+    {% endif %}
     {% if is_sale_bike %}
     <button type="button" class="btn-ghost"
             style="padding:0.35rem 0.85rem; font-size:0.82rem;"
@@ -896,6 +903,66 @@ function silentSave(callback) {
     </form>
   </div>
 </div>
+
+{% if settings.sms_enabled == '1' %}
+<!-- ── SMS Compose Modal ──────────────────────────────────────────────────── -->
+<div id="sms-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6);
+            z-index:2000; align-items:center; justify-content:center;"
+     onclick="if(event.target===this) closeSmsModal()">
+  <div style="background:var(--sd-surface); border:1px solid var(--sd-border);
+               border-radius:12px; width:100%; max-width:520px; margin:1rem;
+               box-shadow:0 8px 40px rgba(0,0,0,0.5);">
+    <div style="padding:1rem 1.25rem; border-bottom:1px solid var(--sd-border);
+                display:flex; align-items:center; justify-content:space-between;">
+      <span style="font-weight:600; font-size:0.95rem;">
+        <i class="bi bi-phone" style="color:var(--sd-accent);"></i> Send SMS
+      </span>
+      <span id="sms-to-display" style="font-size:0.8rem; color:var(--sd-muted);"></span>
+      <button type="button" onclick="closeSmsModal()"
+              style="background:none; border:none; color:var(--sd-muted); font-size:1.1rem; cursor:pointer;">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    <div style="padding:1.25rem;">
+      <div style="display:flex; gap:0.5rem; margin-bottom:0.75rem;">
+        <select id="sms-template-sel" class="sd-input" style="flex:1; font-size:0.8rem;"
+                onchange="loadSmsTemplate()">
+          <option value="">Load template…</option>
+        </select>
+      </div>
+      <textarea id="sms-body" class="sd-input" rows="5"
+                style="resize:vertical; font-size:0.88rem; line-height:1.55;"
+                placeholder="Type your message…"
+                oninput="updateSmsCounter()"></textarea>
+      <div style="display:flex; justify-content:space-between; margin-top:0.35rem;
+                  font-size:0.75rem; color:var(--sd-muted);">
+        <span id="sms-char-count">0 / 160</span>
+        <span id="sms-parts-warn" style="color:#f59e0b; display:none;">
+          <i class="bi bi-exclamation-triangle"></i> Multi-part SMS
+        </span>
+      </div>
+      <div id="sms-log-wrap" style="margin-top:0.75rem; display:none;">
+        <div style="font-size:0.72rem; font-weight:700; text-transform:uppercase;
+                    letter-spacing:0.08em; color:var(--sd-muted); margin-bottom:0.4rem;">
+          Previous Messages
+        </div>
+        <div id="sms-log-list"
+             style="max-height:120px; overflow-y:auto; font-size:0.75rem;
+                    border:1px solid var(--sd-border); border-radius:5px;
+                    padding:0.4rem 0.6rem;"></div>
+      </div>
+    </div>
+    <div style="padding:0.75rem 1.25rem; border-top:1px solid var(--sd-border);
+                display:flex; justify-content:flex-end; gap:0.6rem;">
+      <button type="button" class="btn-ghost" onclick="closeSmsModal()">Cancel</button>
+      <button type="button" class="btn-accent" id="sms-send-btn" onclick="sendSms()">
+        <i class="bi bi-send"></i> Send SMS
+      </button>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <!-- Email Thread — full width below grid -->
 <div class="detail-email">
@@ -1835,21 +1902,48 @@ function applyBikeSpecTemplate() {
 
 function uploadBikeDetailImage(input) {
   if (!input.files[0] || !_bikeDetailId) return;
-  var status = document.getElementById('bm-image-status');
-  if (status) status.textContent = 'Uploading…';
-  var fd = new FormData();
-  fd.append('image', input.files[0]);
-  fetch('/bikes/' + _bikeDetailId + '/images', { method: 'POST', body: fd })
-    .then(r => r.json())
-    .then(data => {
-      if (data.ok) {
-        if (status) status.textContent = '';
-        openBikeDetailsModal({{ job['id'] }});
-      } else {
-        if (status) status.textContent = 'Error: ' + data.error;
-      }
-    });
+  var file = input.files[0];
   input.value = '';
+  var status = document.getElementById('bm-image-status');
+  if (status) status.textContent = 'Saving…';
+  // Save current details first, then upload
+  _saveBikeDetailForUpload(function() {
+    if (status) status.textContent = 'Uploading…';
+    var fd = new FormData();
+    fd.append('image', file);
+    fetch('/bikes/' + _bikeDetailId + '/images', { method: 'POST', body: fd })
+      .then(r => r.json())
+      .then(function(data) {
+        if (data.ok) {
+          if (status) status.textContent = '';
+          openBikeDetailsModal({{ job['id'] }});
+        } else {
+          if (status) status.textContent = 'Error: ' + data.error;
+        }
+      });
+  });
+}
+
+function _saveBikeDetailForUpload(callback) {
+  var rte = window._bmRte;
+  var descHtml = rte ? rte.getContent() : (document.getElementById('bm-desc-html') || {}).value || '';
+  var payload = {
+    short_desc:       (document.getElementById('bm-short-desc')   || {}).value || '',
+    description_html:  descHtml,
+    condition_grade:  (document.getElementById('bm-condition')    || {}).value || '',
+    frame_size:       (document.getElementById('bm-frame-size')   || {}).value || '',
+    colour:           (document.getElementById('bm-colour')       || {}).value || '',
+    year_est:         (document.getElementById('bm-year')         || {}).value || '',
+    asking_price:     (document.getElementById('bm-asking') || {}).value || '',
+    min_price:        (document.getElementById('bm-min')    || {}).value || '',
+    status:           (document.getElementById('bm-status')       || {}).value || '',
+  };
+  fetch('/bikes/' + _bikeDetailId, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  }).then(function() { callback(); })
+    .catch(function() { callback(); });
 }
 
 function deleteBikeDetailImage(imgId) {
@@ -1999,4 +2093,97 @@ function _doSyncShortDesc(val) {
     </div>
   </div>
 </div>
+
+{% if settings.sms_enabled == '1' %}
+<script>
+// ── SMS Compose ───────────────────────────────────────────────────────────────
+const SMS_JOB_ID    = {{ job['id'] }};
+const SMS_JOB_PHONE = {{ (job['customer_phone'] or '')|tojson }};
+var _smsTpls = {};
+
+function openSmsModal() {
+  document.getElementById('sms-to-display').textContent = SMS_JOB_PHONE;
+  document.getElementById('sms-body').value = '';
+  updateSmsCounter();
+  _loadSmsLog();
+  if (!Object.keys(_smsTpls).length) {
+    fetch('/sms/templates').then(r => r.json()).then(function(tpls) {
+      const sel = document.getElementById('sms-template-sel');
+      tpls.forEach(function(t) {
+        _smsTpls[t.id] = t.body;
+        const o = document.createElement('option');
+        o.value = t.id; o.textContent = t.name;
+        sel.appendChild(o);
+      });
+    });
+  }
+  document.getElementById('sms-overlay').style.display = 'flex';
+  setTimeout(function() { document.getElementById('sms-body').focus(); }, 100);
+}
+
+function closeSmsModal() {
+  document.getElementById('sms-overlay').style.display = 'none';
+  document.getElementById('sms-template-sel').value = '';
+}
+
+function loadSmsTemplate() {
+  const sel  = document.getElementById('sms-template-sel');
+  const body = _smsTpls[sel.value];
+  if (!body) return;
+  fetch('/sms/render', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({job_id: SMS_JOB_ID, body: body})
+  }).then(r => r.json()).then(function(d) {
+    if (d.ok) { document.getElementById('sms-body').value = d.body; updateSmsCounter(); }
+  });
+  sel.value = '';
+}
+
+function updateSmsCounter() {
+  const len   = document.getElementById('sms-body').value.length;
+  const parts = Math.max(1, Math.ceil(len / 160));
+  document.getElementById('sms-char-count').textContent =
+    len + ' / ' + (parts * 160) + (parts > 1 ? ' (' + parts + ' parts)' : '');
+  document.getElementById('sms-parts-warn').style.display = parts > 1 ? '' : 'none';
+}
+
+function sendSms() {
+  const body = document.getElementById('sms-body').value.trim();
+  if (!body) { alert('Message body is required.'); return; }
+  const btn = document.getElementById('sms-send-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Sending…';
+  fetch('/sms/send', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({job_id: SMS_JOB_ID, body: body})
+  }).then(r => r.json()).then(function(d) {
+    if (d.ok) { showToast('SMS sent.', 'success'); closeSmsModal(); }
+    else       { showToast('SMS failed: ' + (d.error || 'unknown'), 'danger'); }
+  }).catch(function() {
+    showToast('SMS send error.', 'danger');
+  }).finally(function() {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-send"></i> Send SMS';
+  });
+}
+
+function _loadSmsLog() {
+  fetch('/sms/log/' + SMS_JOB_ID).then(r => r.json()).then(function(rows) {
+    const wrap = document.getElementById('sms-log-wrap');
+    const list = document.getElementById('sms-log-list');
+    if (!rows.length) { wrap.style.display = 'none'; return; }
+    wrap.style.display = '';
+    list.innerHTML = rows.map(function(r) {
+      const clr = r.status === 'failed' ? '#f87171' : 'var(--sd-muted)';
+      return '<div style="padding:0.2rem 0; border-bottom:1px solid var(--sd-border);">' +
+        '<span style="color:var(--sd-text);">' + r.body + '</span> ' +
+        '<span style="color:' + clr + '; font-size:0.7rem;">' +
+        r.status + ' · ' + (r.sent_at || '').slice(0, 16) + '</span></div>';
+    }).join('');
+  });
+}
+</script>
+{% endif %}
 {% endblock %}

@@ -21,6 +21,12 @@ def _get_or_create_portal_token(conn, job_id):
 
 jobs_bp = Blueprint('jobs', __name__)
 
+
+def _internal_domain():
+    """Return configured internal email domain from settings (e.g. 'flyingbike.internal')."""
+    from models import get_settings
+    return get_settings().get('internal_email_domain', 'app.internal')
+
 TIME_SLOTS  = ['07:00', '07:30', '08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30']
 
 TIME_LABELS = {
@@ -124,7 +130,7 @@ def upsert_customer(conn, name, email, phone, suburb, address=''):
             existing = conn.execute(
                 "SELECT id, address FROM customers "
                 "WHERE LOWER(name)=LOWER(?) "
-                "AND email NOT LIKE '%' + _internal_domain() + '%'",
+                f"AND email NOT LIKE '%{_internal_domain()}%'",
                 (name,)).fetchone()
         if not existing and phone:
             existing = conn.execute(
@@ -177,20 +183,20 @@ def new_sale():
             if cust_id_field and cust_id_field.isdigit():
                 named_cust = conn.execute(
                     "SELECT id, name, email, phone FROM customers WHERE id=? "
-                    "AND email NOT LIKE '%' + _internal_domain() + '%'",
+                    f"AND email NOT LIKE '%{_internal_domain()}%'",
                     (int(cust_id_field),)).fetchone()
             elif cust_name_field:
                 # Fallback: try exact then partial name match
                 named_cust = conn.execute(
                     "SELECT id, name, email, phone FROM customers "
                     "WHERE LOWER(name)=LOWER(?) "
-                    "AND email NOT LIKE '%' + _internal_domain() + '%' LIMIT 1",
+                    f"AND email NOT LIKE '%{_internal_domain()}%' LIMIT 1",
                     (cust_name_field,)).fetchone()
                 if not named_cust:
                     named_cust = conn.execute(
                         "SELECT id, name, email, phone FROM customers "
                         "WHERE LOWER(name) LIKE LOWER(?) "
-                        "AND email NOT LIKE '%' + _internal_domain() + '%' LIMIT 1",
+                        f"AND email NOT LIKE '%{_internal_domain()}%' LIMIT 1",
                         (f'%{cust_name_field}%',)).fetchone()
 
             if named_cust:
@@ -1829,6 +1835,7 @@ def settings_business():
         'business_state', 'business_postcode',
         'business_bank_name', 'business_bsb', 'business_account',
         'app_url', 'booking_cors_origins', 'internal_email_domain',
+        'sms_enabled', 'sms_sender',
     ]
     with get_db() as conn:
         if request.method == 'POST':

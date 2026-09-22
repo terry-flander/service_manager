@@ -413,6 +413,18 @@ def init_db():
                 unit_cost   REAL NOT NULL DEFAULT 0.0
             );
 
+            CREATE TABLE IF NOT EXISTS sms_log (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_id      INTEGER REFERENCES jobs(id),
+                to_number   TEXT NOT NULL,
+                body        TEXT NOT NULL,
+                status      TEXT NOT NULL DEFAULT 'sent',
+                twilio_sid  TEXT,
+                error_msg   TEXT,
+                sent_at     TEXT DEFAULT (datetime('now')),
+                sent_by     INTEGER REFERENCES users(id)
+            );
+
             CREATE TABLE IF NOT EXISTS job_type_config (
                 key                   TEXT PRIMARY KEY,
                 label                 TEXT NOT NULL,
