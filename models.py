@@ -413,6 +413,19 @@ def init_db():
                 unit_cost   REAL NOT NULL DEFAULT 0.0
             );
 
+            CREATE TABLE IF NOT EXISTS workshop_day_config (
+                day_of_week   INTEGER PRIMARY KEY,
+                is_open       INTEGER NOT NULL DEFAULT 0,
+                max_bookings  INTEGER NOT NULL DEFAULT 5
+            );
+
+            CREATE TABLE IF NOT EXISTS workshop_day_override (
+                date          TEXT PRIMARY KEY,
+                is_open       INTEGER,
+                max_bookings  INTEGER,
+                note          TEXT
+            );
+
             CREATE TABLE IF NOT EXISTS sms_log (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 job_id      INTEGER REFERENCES jobs(id),
@@ -559,3 +572,85 @@ def get_job_types(conn=None):
             return _load(c) or _defaults()
     except Exception:
         return _defaults()
+
+
+def get_workshop_capacity(date_str, conn=None):
+    """
+    Return dict {is_open, max_bookings, booked, remaining} for a given ISO date.
+    Checks override first, falls back to day-of-week config.
+    booked = count of non-lost workshop/workshop_booking jobs on that date.
+    """
+    from datetime import date as _date
+    import datetime as _dt
+
+    def _fetch(c):
+        # Override takes priority
+        ov = c.execute(
+            "SELECT is_open, max_bookings FROM workshop_day_override WHERE date=?",
+            (date_str,)).fetchone()
+
+        if ov is not None:
+            is_open      = ov['is_open'] if ov['is_open'] is not None else _dow_default(c, date_str)[0]
+            max_bookings = ov['max_bookings'] if ov['max_bookings'] is not None else _dow_default(c, date_str)[1]
+        else:
+            is_open, max_bookings = _dow_default(c, date_str)
+
+        booked = c.execute("""
+            SELECT COUNT(*) FROM jobs
+            WHERE job_type IN ('workshop', 'workshop_booking')
+            AND scheduled_date = ?
+            AND status != 'lost'
+        """, (date_str,)).fetchone()[0]
+
+        return {
+            'date':         date_str,
+            'is_open':      bool(is_open),
+            'max_bookings': max_bookings,
+            'booked':       booked,
+            'remaining':    max(0, max_bookings - booked),
+        }
+
+    def _dow_default(c, ds):
+        try:
+            d   = _date.fromisoformat(ds)
+            dow = d.weekday()  # 0=Mon
+        except Exception:
+            return (0, 5)
+        row = c.execute(
+            "SELECT is_open, max_bookings FROM workshop_day_config WHERE day_of_week=?",
+            (dow,)).fetchone()
+        if row:
+            return (row['is_open'], row['max_bookings'])
+        return (0, 5)
+
+    if conn is not None:
+        return _fetch(conn)
+    with get_db() as c:
+        return _fetch(c)
+
+
+def get_workshop_available_dates(from_date_str=None, weeks=8, conn=None):
+    """
+    Return list of capacity dicts for the next `weeks` weeks starting from from_date.
+    Only returns open days with remaining capacity > 0.
+    """
+    from datetime import date as _date, timedelta as _td
+    start = _date.today() if not from_date_str else _date.fromisoformat(from_date_str)
+    # Start from tomorrow at minimum
+    if start <= _date.today():
+        start = _date.today() + _td(days=1)
+    end   = start + _td(weeks=weeks)
+
+    def _fetch(c):
+        results = []
+        cur = start
+        while cur <= end:
+            cap = get_workshop_capacity(cur.isoformat(), conn=c)
+            results.append(cap)
+            cur += _td(days=1)
+        return results
+
+    if conn is not None:
+        return _fetch(conn)
+    with get_db() as c:
+        return _fetch(c)

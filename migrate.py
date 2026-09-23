@@ -647,3 +647,124 @@ for name, body in _sms_seeds:
         pass
 conn.commit()
 print("SMS settings and templates seeded.")
+
+# ── Workshop booking tables ───────────────────────────────────────────────────
+try:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS workshop_day_config (
+            day_of_week   INTEGER PRIMARY KEY,  -- 0=Mon, 1=Tue ... 6=Sun
+            is_open       INTEGER NOT NULL DEFAULT 0,
+            max_bookings  INTEGER NOT NULL DEFAULT 5
+        )
+    """)
+    conn.commit()
+    print("workshop_day_config table ready.")
+except Exception as e:
+    print(f"workshop_day_config: {e}")
+
+try:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS workshop_day_override (
+            date          TEXT PRIMARY KEY,  -- ISO date YYYY-MM-DD
+            is_open       INTEGER,           -- NULL = use default
+            max_bookings  INTEGER,           -- NULL = use default
+            note          TEXT
+        )
+    """)
+    conn.commit()
+    print("workshop_day_override table ready.")
+except Exception as e:
+    print(f"workshop_day_override: {e}")
+
+# ── Seed workshop_day_config (Mon=0 closed, Tue-Fri open, Sat closed, Sun open)
+_day_defaults = [
+    (0, 0, 5),  # Mon — closed by default (open in busy season via override)
+    (1, 1, 5),  # Tue
+    (2, 1, 5),  # Wed
+    (3, 1, 5),  # Thu
+    (4, 1, 5),  # Fri
+    (5, 0, 5),  # Sat — closed
+    (6, 1, 5),  # Sun
+]
+for row in _day_defaults:
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO workshop_day_config (day_of_week, is_open, max_bookings) VALUES (?,?,?)",
+            row)
+    except Exception:
+        pass
+conn.commit()
+print("workshop_day_config seeded.")
+
+# ── Add source columns to jobs ────────────────────────────────────────────────
+for col, defn in [
+    ('web_source',  "TEXT"),        # 'pista_booking', 'in_service', etc.
+    ('web_ref',     "TEXT"),        # external reference / event token
+]:
+    try:
+        conn.execute(f"ALTER TABLE jobs ADD COLUMN {col} {defn}")
+        conn.commit()
+        print(f"jobs.{col} added.")
+    except Exception:
+        pass  # already exists
+
+# ── Extend calendar_events for future In Service days ───────────────────────
+for col, defn in [
+    ('booking_token',   "TEXT UNIQUE"),
+    ('max_bookings',    "INTEGER DEFAULT 0"),
+    ('booking_secret',  "TEXT"),
+    ('location_name',   "TEXT"),
+]:
+    try:
+        conn.execute(f"ALTER TABLE calendar_events ADD COLUMN {col} {defn}")
+        conn.commit()
+        print(f"calendar_events.{col} added.")
+    except Exception:
+        pass  # already exists
+
+# ── workshop_booking job type ─────────────────────────────────────────────────
+_idom_row = conn.execute(
+    "SELECT value FROM settings WHERE key='internal_email_domain'").fetchone()
+_idom = _idom_row['value'] if _idom_row else 'app.internal'
+try:
+    max_sort = conn.execute(
+        "SELECT MAX(sort_order) FROM job_type_config").fetchone()[0] or 0
+    conn.execute("""
+        INSERT OR IGNORE INTO job_type_config
+        (key, label, prefix, hide_customer, hide_address, hide_phone, hide_portal,
+         has_service_types, has_bike_description, has_bike_listing, has_end_date,
+         use_calendar, use_region, tax_inclusive_default, internal_customer,
+         sort_order, active, show_in_new_job)
+        VALUES ('workshop_booking','Workshop Booking','WB',0,1,0,0,1,1,0,0,0,0,0,NULL,?,1,0)
+    """, (max_sort + 1,))
+    conn.commit()
+    print("workshop_booking job type seeded.")
+except Exception as e:
+    print(f"workshop_booking job type: {e}")
+
+# ── Booking secret for Pista Bikes ────────────────────────────────────────────
+try:
+    conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('pista_booking_secret','change-me')")
+    conn.commit()
+    print("pista_booking_secret setting seeded.")
+except Exception:
+    pass
+
+# ── Email template for workshop booking ack ───────────────────────────────────
+try:
+    conn.execute("""
+        INSERT OR IGNORE INTO email_templates (name, subject, body, grp) VALUES (
+            'Workshop Booking Acknowledgement',
+            'Your Workshop Booking Request — {{ref}}',
+            'Hi {{name}},\n\nThanks for your workshop booking request at Pista Bikes!\n\n'
+            'We have received your request for {{date}} and will confirm your appointment shortly.\n\n'
+            'Booking reference: {{ref}}\nBike: {{bike}}\n\n'
+            'If you need to get in touch:\nPhone: {{phone}}\nEmail: {{email}}\n\n'
+            'Pista Bikes\n255 Hawthorn Road, Caulfield',
+            'workshop'
+        )
+    """)
+    conn.commit()
+    print("Workshop booking ack template seeded.")
+except Exception:
+    pass

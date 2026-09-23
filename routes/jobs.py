@@ -1824,6 +1824,70 @@ def settings_job_types():
     return render_template('jobs/settings_job_types.html', job_types=job_types)
 
 
+@jobs_bp.route('/settings/workshop-capacity', methods=['GET', 'POST'])
+def settings_workshop_capacity():
+    """Admin page to configure workshop day capacity and date overrides."""
+    DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    with get_db() as conn:
+        if request.method == 'POST':
+            action = request.form.get('action')
+            if action == 'day_config':
+                for dow in range(7):
+                    is_open      = 1 if request.form.get(f'open_{dow}') else 0
+                    max_bookings = int(request.form.get(f'max_{dow}') or 5)
+                    conn.execute("""
+                        INSERT INTO workshop_day_config (day_of_week, is_open, max_bookings)
+                        VALUES (?,?,?)
+                        ON CONFLICT(day_of_week) DO UPDATE SET
+                            is_open=excluded.is_open,
+                            max_bookings=excluded.max_bookings
+                    """, (dow, is_open, max_bookings))
+                conn.commit()
+                flash('Workshop day schedule saved.', 'success')
+            elif action == 'add_override':
+                date      = request.form.get('override_date', '').strip()
+                is_open   = request.form.get('override_open')  # None if unchecked
+                max_bk    = request.form.get('override_max', '').strip()
+                note      = request.form.get('override_note', '').strip()
+                if date:
+                    conn.execute("""
+                        INSERT INTO workshop_day_override (date, is_open, max_bookings, note)
+                        VALUES (?,?,?,?)
+                        ON CONFLICT(date) DO UPDATE SET
+                            is_open=excluded.is_open,
+                            max_bookings=excluded.max_bookings,
+                            note=excluded.note
+                    """, (date,
+                          1 if is_open else 0,
+                          int(max_bk) if max_bk else None,
+                          note or None))
+                    conn.commit()
+                    flash(f'Override for {date} saved.', 'success')
+            elif action == 'delete_override':
+                date = request.form.get('override_date', '').strip()
+                if date:
+                    conn.execute("DELETE FROM workshop_day_override WHERE date=?", (date,))
+                    conn.commit()
+                    flash(f'Override for {date} removed.', 'success')
+            return redirect(url_for('jobs.settings_workshop_capacity'))
+
+        day_config = {r['day_of_week']: dict(r) for r in
+                      conn.execute("SELECT * FROM workshop_day_config ORDER BY day_of_week").fetchall()}
+        # Ensure all 7 days present
+        for d in range(7):
+            if d not in day_config:
+                day_config[d] = {'day_of_week': d, 'is_open': 0, 'max_bookings': 5}
+
+        from datetime import date as _date
+        overrides = conn.execute("""
+            SELECT * FROM workshop_day_override
+            WHERE date >= ? ORDER BY date
+        """, (_date.today().isoformat(),)).fetchall()
+
+    return render_template('jobs/settings_workshop_capacity.html',
+                           day_config=day_config, overrides=overrides, DAYS=DAYS)
+
+
 @jobs_bp.route('/settings/business', methods=['GET', 'POST'])
 def settings_business():
     """Admin page to configure business identity settings."""
@@ -1836,6 +1900,7 @@ def settings_business():
         'business_bank_name', 'business_bsb', 'business_account',
         'app_url', 'booking_cors_origins', 'internal_email_domain',
         'sms_enabled', 'sms_sender',
+        'pista_booking_secret', 'pista_cors_origins',
     ]
     with get_db() as conn:
         if request.method == 'POST':

@@ -104,7 +104,7 @@ def send_sms(to_raw, body, job_id=None, sent_by=None):
         from twilio.rest import Client
         message = Client(TWILIO_SID, TWILIO_TOKEN).messages.create(
             body=body, from_=sender, to=to_number)
-        log.info(f'SMS sent to {to_number} job={job_id} sid={message.sid}')
+        log.info(f'SMS sent to {to_number} job={job_id} sid={message.sid} from_={sender}')
         _log(job_id, to_number, body, message.status or 'sent', message.sid, None, sent_by)
         return True, message.sid, None
     except Exception as e:

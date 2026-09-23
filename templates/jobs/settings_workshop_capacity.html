@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+{% block title %}Workshop Capacity{% endblock %}
+{% block content %}
+<div style="max-width:760px; margin:2rem auto;">
+
+  {% with msgs = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in msgs %}
+      <div class="alert alert-{{ cat }}" style="margin-bottom:1rem;">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <!-- Day of week schedule -->
+  <div class="sd-card" style="margin-bottom:1.5rem;">
+    <div class="sd-card-header">
+      <span><i class="bi bi-calendar-week" style="color:var(--sd-accent);"></i> Weekly Schedule</span>
+    </div>
+    <form method="post" style="padding:1.5rem;">
+      <input type="hidden" name="action" value="day_config">
+      <p style="font-size:0.82rem; color:var(--sd-muted); margin-bottom:1.25rem;">
+        Set which days are open and the maximum number of workshop bookings per day.
+        Walk-in jobs count against the daily total. Override specific dates below.
+      </p>
+      <div style="display:grid; grid-template-columns:1fr auto auto; gap:0.5rem 1rem;
+                  align-items:center; margin-bottom:1rem;">
+        <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase;
+                    letter-spacing:0.08em; color:var(--sd-muted);">Day</div>
+        <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase;
+                    letter-spacing:0.08em; color:var(--sd-muted);">Open</div>
+        <div style="font-size:0.75rem; font-weight:700; text-transform:uppercase;
+                    letter-spacing:0.08em; color:var(--sd-muted);">Max Bookings</div>
+        {% for dow in range(7) %}
+        {% set cfg = day_config[dow] %}
+        <label style="font-size:0.9rem; cursor:pointer;"
+               for="open_{{ dow }}">{{ DAYS[dow] }}</label>
+        <input type="checkbox" id="open_{{ dow }}" name="open_{{ dow }}" value="1"
+               {% if cfg.is_open %}checked{% endif %}
+               style="width:1.1rem; height:1.1rem; accent-color:var(--sd-accent);">
+        <input type="number" name="max_{{ dow }}" value="{{ cfg.max_bookings }}"
+               min="1" max="50" class="sd-input" style="width:80px;">
+        {% endfor %}
+      </div>
+      <div style="display:flex; justify-content:flex-end;">
+        <button type="submit" class="btn-accent">
+          <i class="bi bi-check-lg"></i> Save Schedule
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Date overrides -->
+  <div class="sd-card">
+    <div class="sd-card-header">
+      <span><i class="bi bi-calendar-x" style="color:var(--sd-accent);"></i> Date Overrides</span>
+    </div>
+    <div style="padding:1.5rem;">
+      <p style="font-size:0.82rem; color:var(--sd-muted); margin-bottom:1.25rem;">
+        Override any specific date — close for a public holiday, open on a normally closed day,
+        or change the slot count for a busy or short day.
+        Leave Max Bookings blank to use the day's default.
+      </p>
+
+      <!-- Add override form -->
+      <form method="post" style="display:grid; grid-template-columns:auto 1fr auto auto auto;
+                                  gap:0.5rem; align-items:end; margin-bottom:1.5rem;">
+        <input type="hidden" name="action" value="add_override">
+        <div>
+          <label class="sd-label">Date</label>
+          <input type="date" name="override_date" class="sd-input" required
+                 min="{{ '' }}">
+        </div>
+        <div>
+          <label class="sd-label">Note (e.g. Public holiday)</label>
+          <input type="text" name="override_note" class="sd-input"
+                 placeholder="e.g. Public holiday, Busy season">
+        </div>
+        <div>
+          <label class="sd-label">Max Slots</label>
+          <input type="number" name="override_max" class="sd-input"
+                 style="width:80px;" min="0" max="50" placeholder="default">
+        </div>
+        <div>
+          <label class="sd-label">Open</label>
+          <input type="checkbox" name="override_open" value="1" checked
+                 style="width:1.1rem; height:1.1rem; accent-color:var(--sd-accent); margin-top:0.5rem;">
+        </div>
+        <div style="padding-top:1.4rem;">
+          <button type="submit" class="btn-accent">
+            <i class="bi bi-plus-lg"></i> Add
+          </button>
+        </div>
+      </form>
+
+      <!-- Existing overrides -->
+      {% if overrides %}
+      <table style="width:100%; border-collapse:collapse; font-size:0.82rem;">
+        <thead>
+          <tr style="border-bottom:2px solid var(--sd-border);">
+            <th style="text-align:left; padding:0.4rem 0.6rem; color:var(--sd-muted);">Date</th>
+            <th style="text-align:left; padding:0.4rem 0.6rem; color:var(--sd-muted);">Note</th>
+            <th style="text-align:center; padding:0.4rem 0.6rem; color:var(--sd-muted);">Open</th>
+            <th style="text-align:center; padding:0.4rem 0.6rem; color:var(--sd-muted);">Max</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for ov in overrides %}
+          <tr style="border-bottom:1px solid var(--sd-border);">
+            <td style="padding:0.5rem 0.6rem; font-weight:600;">{{ ov['date'] }}</td>
+            <td style="padding:0.5rem 0.6rem; color:var(--sd-muted);">{{ ov['note'] or '—' }}</td>
+            <td style="padding:0.5rem 0.6rem; text-align:center;">
+              {% if ov['is_open'] %}
+                <i class="bi bi-check-circle-fill" style="color:#4ade80;"></i>
+              {% else %}
+                <i class="bi bi-x-circle-fill" style="color:#f87171;"></i>
+              {% endif %}
+            </td>
+            <td style="padding:0.5rem 0.6rem; text-align:center;">
+              {{ ov['max_bookings'] if ov['max_bookings'] is not none else '—' }}
+            </td>
+            <td style="padding:0.5rem 0.6rem; text-align:right;">
+              <form method="post" style="display:inline;">
+                <input type="hidden" name="action" value="delete_override">
+                <input type="hidden" name="override_date" value="{{ ov['date'] }}">
+                <button type="submit" class="btn-ghost"
+                        style="padding:0.2rem 0.5rem; font-size:0.75rem; color:var(--sd-danger);"
+                        onclick="return confirm('Remove override for ' + {{ ov['date']|tojson }} + '?')">
+                  <i class="bi bi-trash3"></i>
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color:var(--sd-muted); font-size:0.82rem; text-align:center; padding:1rem 0;">
+        No upcoming date overrides.
+      </p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

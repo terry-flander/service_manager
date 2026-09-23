@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Book a Workshop Visit — Pista Bikes</title>
+  <meta name="description" content="Request a workshop appointment at Pista Bikes, 255 Hawthorn Road Caulfield. We'll confirm your booking by email." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚲</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800;900&family=Lora:ital,wght@0,400;0,600;1,400&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:          #0d1a2e;
+  --surface:     #122038;
+  --panel:       #182842;
+  --border:      #243d5e;
+  --blue:        #1a5fa8;
+  --blue-light:  #2a7fd4;
+  --copper:      #c87941;
+  --copper-dark: #a05e28;
+  --text:        #ffffff;
+  --muted:       #8aabcf;
+  --white:       #ffffff;
+  --input-bg:    #f4f7fb;
+  --input-text:  #0d1a2e;
+  --input-border:#2a7fd4;
+  --r:           6px;
+  --green:       #22c55e;
+  --amber:       #f59e0b;
+  --red:         #ef4444;
+}
+
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Barlow', sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+a { color: inherit; text-decoration: none; }
+h1, h2, h3 { font-family: 'Barlow Condensed', sans-serif; line-height: 1.05; }
+
+.container { max-width: 1100px; margin: 0 auto; padding: 0 1.5rem; }
+.inner { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+
+/* ── NAVBAR ── */
+header {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(13,26,46,0.96); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+  padding: .9rem 0;
+  transition: box-shadow .3s;
+}
+header.scrolled { box-shadow: 0 4px 24px rgba(0,0,0,.4); }
+.logo {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900; font-size: 1.45rem; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--white);
+}
+.logo span { color: var(--copper); }
+nav { display: flex; gap: 2rem; }
+nav a {
+  font-size: .9rem; font-weight: 600; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--muted);
+  transition: color .2s;
+}
+nav a:hover, nav a.active { color: var(--white); }
+.hamburger { display: none; flex-direction: column; gap: 5px; cursor: pointer; padding: 4px; }
+.hamburger span { display: block; width: 22px; height: 2px; background: var(--white); border-radius: 2px; }
+.nav-mobile {
+  display: none; flex-direction: column;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 1rem 1.5rem; gap: .75rem;
+}
+.nav-mobile a { font-size: 1.05rem; font-weight: 600; color: var(--muted); }
+.nav-mobile a:hover { color: var(--white); }
+.nav-mobile.open { display: flex; }
+
+/* ── PAGE HERO ── */
+.page-hero {
+  background: linear-gradient(135deg, #0a1622 0%, #122038 60%, #0d1a2e 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 3.5rem 0 2.5rem;
+  text-align: center;
+}
+.page-hero h1 {
+  font-size: clamp(2.2rem, 5vw, 3.5rem);
+  font-weight: 900; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--white);
+}
+.page-hero h1 span { color: var(--copper); }
+.page-hero p {
+  font-family: 'Lora', serif; font-style: italic;
+  color: var(--muted); font-size: 1.1rem; margin-top: .75rem;
+}
+
+/* ── MAIN LAYOUT ── */
+.booking-wrap {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 2rem;
+  padding: 3rem 0;
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .booking-wrap { grid-template-columns: 1fr; }
+}
+
+/* ── CALENDAR ── */
+.cal-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.cal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+.cal-header h3 {
+  font-size: 1.1rem; font-weight: 700;
+}
+.cal-nav {
+  background: none; border: 1px solid var(--border); color: var(--text);
+  width: 32px; height: 32px; border-radius: 6px; cursor: pointer;
+  font-size: 1rem; display: flex; align-items: center; justify-content: center;
+  transition: border-color .15s;
+}
+.cal-nav:hover { border-color: var(--copper); }
+.cal-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr);
+  gap: 2px; padding: 0.75rem;
+}
+.cal-day-name {
+  text-align: center; font-size: .72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .08em;
+  color: var(--muted); padding: .3rem 0;
+}
+.cal-day {
+  aspect-ratio: 1; border-radius: 6px; display: flex;
+  flex-direction: column; align-items: center; justify-content: center;
+  font-size: .82rem; font-weight: 600; cursor: pointer;
+  border: 2px solid transparent; transition: all .15s;
+  position: relative; line-height: 1.2;
+}
+.cal-day.empty      { cursor: default; }
+.cal-day.closed     { color: #2a3d5a; cursor: not-allowed; }
+.cal-day.past       { color: #2a3d5a; cursor: not-allowed; }
+.cal-day.full       { background: rgba(239,68,68,.12); color: #f87171; cursor: not-allowed; }
+.cal-day.low        { background: rgba(245,158,11,.1);  color: var(--amber); }
+.cal-day.open       { background: rgba(34,197,94,.1);   color: #4ade80; }
+.cal-day.open:hover { background: rgba(34,197,94,.22);  border-color: var(--green); }
+.cal-day.selected   { background: var(--copper); color: var(--white) !important;
+                      border-color: var(--copper-dark); }
+.cal-day .slots-badge {
+  font-size: .6rem; font-weight: 700; margin-top: 1px; opacity: .8;
+}
+.cal-day.today { border-color: var(--blue-light); }
+
+.cal-legend {
+  display: flex; gap: 1rem; flex-wrap: wrap;
+  padding: .75rem 1.25rem; border-top: 1px solid var(--border);
+  font-size: .75rem; color: var(--muted);
+}
+.leg { display: flex; align-items: center; gap: .35rem; }
+.leg-dot { width: 10px; height: 10px; border-radius: 3px; }
+
+/* ── FORM CARD ── */
+.form-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.form-card-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.form-card-header h3 { font-size: 1.05rem; font-weight: 700; }
+.form-card-header .selected-date {
+  font-size: .82rem; color: var(--copper); margin-top: .2rem; min-height: 1.2em;
+}
+.form-body { padding: 1.25rem; }
+
+label.field-label {
+  display: block; font-size: .78rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .08em;
+  color: var(--muted); margin-bottom: .35rem;
+}
+.field-label span { color: #ef4444; }
+
+input[type=text], input[type=email], input[type=tel], textarea {
+  width: 100%; padding: .65rem .85rem;
+  background: var(--input-bg); color: var(--input-text);
+  border: 2px solid #c8d8e8; border-radius: var(--r);
+  font-family: 'Barlow', sans-serif; font-size: .92rem;
+  transition: border-color .15s;
+}
+input:focus, textarea:focus {
+  outline: none; border-color: var(--input-border);
+}
+textarea { resize: vertical; min-height: 80px; }
+
+.field { margin-bottom: 1rem; }
+.field:last-of-type { margin-bottom: 0; }
+
+.submit-btn {
+  width: 100%; margin-top: 1.25rem;
+  background: var(--copper); color: var(--white);
+  border: none; border-radius: var(--r);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.1rem; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; padding: .9rem;
+  cursor: pointer; transition: background .2s;
+}
+.submit-btn:hover:not(:disabled) { background: var(--copper-dark); }
+.submit-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ── STATUS MESSAGES ── */
+.msg {
+  padding: .75rem 1rem; border-radius: var(--r);
+  font-size: .88rem; margin-bottom: 1rem; display: none;
+}
+.msg.error   { background: rgba(239,68,68,.12); border: 1px solid #f87171; color: #fca5a5; }
+.msg.success { background: rgba(34,197,94,.12);  border: 1px solid #4ade80; color: #86efac; }
+
+/* ── NO DATE SELECTED HINT ── */
+.date-hint {
+  padding: 2rem 1.25rem; text-align: center;
+  color: var(--muted); font-size: .9rem;
+  font-family: 'Lora', serif; font-style: italic;
+}
+
+/* ── INFO PANEL ── */
+.info-panel {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 10px; padding: 1.5rem;
+  margin-top: 2rem;
+}
+.info-panel h3 {
+  font-size: 1rem; font-weight: 700; margin-bottom: 1rem;
+  text-transform: uppercase; letter-spacing: .06em; color: var(--copper);
+}
+.info-item {
+  display: flex; gap: .75rem; align-items: flex-start;
+  margin-bottom: .85rem; font-size: .88rem; color: var(--muted);
+}
+.info-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: .05rem; }
+
+/* ── FOOTER ── */
+footer {
+  background: #060e1a; padding: 3rem 0 2rem;
+  border-top: 1px solid var(--border); margin-top: 3rem;
+}
+.footer-inner {
+  display: flex; justify-content: space-between;
+  align-items: center; flex-wrap: wrap; gap: 1.5rem;
+}
+.footer-logo {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900; font-size: 1.3rem;
+  color: var(--white); text-transform: uppercase; letter-spacing: .05em;
+}
+.footer-logo span { color: var(--copper); }
+.footer-tagline {
+  font-family: 'Lora', serif; font-style: italic;
+  color: var(--muted); font-size: .9rem; margin-top: .2rem;
+}
+.footer-bottom {
+  text-align: center; margin-top: 2.5rem; padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  color: var(--muted); font-size: .8rem;
+}
+@media (max-width: 768px) {
+  nav { display: none; }
+  .hamburger { display: flex; }
+  .footer-inner { flex-direction: column; text-align: center; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── NAVBAR ──────────────────────────────────────────────── -->
+<header id="navbar">
+  <div class="container inner">
+    <a href="pistabikes.html" class="logo">Pista <span>Bikes</span></a>
+    <nav>
+      <a href="pistabikes.html">Home</a>
+      <a href="pistabikes.html#section-services">Services</a>
+      <a href="pistabikes.html#section-repairs">Repairs</a>
+      <a href="pistabikes.html#section-gear">Shop</a>
+      <a href="pistabikes-bikes.html">Used Bikes</a>
+      <a href="pistabikes-booking.html" class="active">Book</a>
+    </nav>
+    <div class="hamburger" id="hamburgerBtn">
+      <span></span><span></span><span></span>
+    </div>
+  </div>
+</header>
+
+<div class="nav-mobile" id="mobileNav">
+  <a href="pistabikes.html">Home</a>
+  <a href="pistabikes.html#section-services">Services</a>
+  <a href="pistabikes.html#section-repairs">Repairs</a>
+  <a href="pistabikes.html#section-gear">Shop</a>
+  <a href="pistabikes-bikes.html">Used Bikes</a>
+  <a href="pistabikes-booking.html">Book a Visit</a>
+</div>
+
+<!-- ── HERO ── -->
+<div class="page-hero">
+  <div class="container">
+    <h1>Book a <span>Workshop</span> Visit</h1>
+    <p>Choose an available date and we'll confirm your appointment by email.</p>
+  </div>
+</div>
+
+<!-- ── MAIN ── -->
+<div class="container">
+  <div class="booking-wrap">
+
+    <!-- LEFT — Calendar + info -->
+    <div>
+      <div class="cal-card">
+        <div class="cal-header">
+          <button class="cal-nav" id="cal-prev" onclick="changeMonth(-1)">&#8249;</button>
+          <h3 id="cal-month-label">Loading…</h3>
+          <button class="cal-nav" id="cal-next" onclick="changeMonth(1)">&#8250;</button>
+        </div>
+        <div class="cal-grid" id="cal-grid">
+          <!-- populated by JS -->
+        </div>
+        <div class="cal-legend">
+          <div class="leg"><div class="leg-dot" style="background:rgba(34,197,94,.4)"></div> Available</div>
+          <div class="leg"><div class="leg-dot" style="background:rgba(245,158,11,.4)"></div> Limited (1–2 left)</div>
+          <div class="leg"><div class="leg-dot" style="background:rgba(239,68,68,.4)"></div> Full</div>
+          <div class="leg"><div class="leg-dot" style="background:#1e2d42"></div> Closed</div>
+        </div>
+      </div>
+
+      <div class="info-panel">
+        <h3>What to expect</h3>
+        <div class="info-item">
+          <span class="info-icon">📍</span>
+          <span>255 Hawthorn Road, Caulfield VIC 3162 — rear workshop entrance on Hawthorn Rd.</span>
+        </div>
+        <div class="info-item">
+          <span class="info-icon">🕐</span>
+          <span>We're open Tuesday–Friday and Sunday. Drop off your bike during business hours.</span>
+        </div>
+        <div class="info-item">
+          <span class="info-icon">📧</span>
+          <span>You'll receive a confirmation email within one business day. We may suggest an alternative date if yours fills up.</span>
+        </div>
+        <div class="info-item">
+          <span class="info-icon">🔧</span>
+          <span>We service all bike types — road, MTB, gravel, eBike, and everything in between.</span>
+        </div>
+        <div class="info-item">
+          <span class="info-icon">📞</span>
+          <span>Questions? Call us on <a href="tel:0403225135" style="color:var(--copper);">0403 225 135</a> or email <a href="mailto:info@theflyingbike.com.au" style="color:var(--copper);">info@theflyingbike.com.au</a>.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT — Form -->
+    <div>
+      <div class="form-card">
+        <div class="form-card-header">
+          <h3>Your Details</h3>
+          <div class="selected-date" id="selected-date-label">← Select a date on the calendar</div>
+        </div>
+
+        <div id="form-hint" class="date-hint">
+          Please choose an available date on the calendar to continue.
+        </div>
+
+        <div id="form-body" class="form-body" style="display:none;">
+          <div id="msg-error"   class="msg error"></div>
+          <div id="msg-success" class="msg success"></div>
+
+          <div class="field">
+            <label class="field-label" for="f-name">Full Name <span>*</span></label>
+            <input type="text" id="f-name" placeholder="Jane Smith" autocomplete="name">
+          </div>
+          <div class="field">
+            <label class="field-label" for="f-email">Email Address <span>*</span></label>
+            <input type="email" id="f-email" placeholder="jane@example.com" autocomplete="email">
+          </div>
+          <div class="field">
+            <label class="field-label" for="f-phone">Mobile Number <span>*</span></label>
+            <input type="tel" id="f-phone" placeholder="0412 345 678" autocomplete="tel">
+          </div>
+          <div class="field">
+            <label class="field-label" for="f-bike">Bike Description</label>
+            <input type="text" id="f-bike" placeholder="e.g. 2021 Trek Domane, Giant TCR, eBike">
+          </div>
+          <div class="field">
+            <label class="field-label" for="f-desc">What needs doing?</label>
+            <textarea id="f-desc" placeholder="Describe the service or repair needed — we'll do our best to have the right parts on hand."></textarea>
+          </div>
+          <button class="submit-btn" id="submit-btn" onclick="submitBooking()">
+            Request Booking
+          </button>
+        </div>
+
+        <!-- Success state -->
+        <div id="success-panel" style="display:none; padding:2rem 1.25rem; text-align:center;">
+          <div style="font-size:3rem; margin-bottom:1rem;">✅</div>
+          <h3 style="font-size:1.4rem; margin-bottom:.5rem;">Booking Request Received!</h3>
+          <p style="color:var(--muted); font-size:.9rem; margin-bottom:1rem;">
+            We'll confirm your appointment by email within one business day.
+          </p>
+          <div id="success-ref"
+               style="background:var(--panel); border:1px solid var(--border);
+                      border-radius:var(--r); padding:.75rem 1rem;
+                      font-family:'Barlow Condensed',sans-serif; font-size:1.2rem;
+                      font-weight:700; color:var(--copper); letter-spacing:.08em;">
+          </div>
+          <p style="color:var(--muted); font-size:.8rem; margin-top:1rem;">
+            Keep this reference number for your records.
+          </p>
+          <button onclick="resetForm()"
+                  style="margin-top:1.5rem; background:none; border:1px solid var(--border);
+                         color:var(--muted); padding:.6rem 1.5rem; border-radius:var(--r);
+                         cursor:pointer; font-family:'Barlow',sans-serif; font-size:.9rem;">
+            Make another booking
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── FOOTER ── -->
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div>
+        <div class="footer-logo">Pista <span>Bikes</span></div>
+        <div class="footer-tagline">Bicycle Workshop · 255 Hawthorn Rd, Caulfield</div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      © <span id="fyear"></span> Pista Bikes · 255 Hawthorn Road, Caulfield VIC 3162
+    </div>
+  </div>
+</footer>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+const API_BASE   = 'https://app.theflyingbike.com.au';
+const API_SECRET = 'tfb-website-booking'; // set to match pista_booking_secret in Business Settings
+
+// ── State ─────────────────────────────────────────────────────────────────────
+var _capacity   = {};      // {date: {is_open, max_bookings, remaining}}
+var _selectedDate = null;
+var _viewYear   = null;
+var _viewMonth  = null;    // 0-indexed
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+document.getElementById('fyear').textContent = new Date().getFullYear();
+
+(function() {
+  var now   = new Date();
+  _viewYear  = now.getFullYear();
+  _viewMonth = now.getMonth();
+  loadCapacity();
+  document.getElementById('hamburgerBtn').addEventListener('click', function() {
+    document.getElementById('mobileNav').classList.toggle('open');
+  });
+})();
+
+// ── Capacity loading ──────────────────────────────────────────────────────────
+function loadCapacity() {
+  var from = new Date();
+  from.setDate(from.getDate() + 1);
+  from.setHours(12,0,0,0);
+  var fromStr = from.getFullYear() + '-'
+    + String(from.getMonth() + 1).padStart(2, '0') + '-'
+    + String(from.getDate()).padStart(2, '0');
+  fetch(API_BASE + '/workshop/available-dates?from=' + fromStr + '&weeks=16')
+    .then(function(r) { return r.json(); })
+    .then(function(dates) {
+      _capacity = {};
+      dates.forEach(function(d) { _capacity[d.date] = d; });
+      renderCalendar();
+    })
+    .catch(function() {
+      document.getElementById('cal-grid').innerHTML =
+        '<p style="color:#f87171; grid-column:1/-1; text-align:center; padding:1rem; font-size:.85rem;">Unable to load availability. Please try again shortly.</p>';
+    });
+}
+
+// ── Calendar rendering ────────────────────────────────────────────────────────
+var MONTHS = ['January','February','March','April','May','June',
+              'July','August','September','October','November','December'];
+var DAYS   = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+function changeMonth(dir) {
+  _viewMonth += dir;
+  if (_viewMonth < 0)  { _viewMonth = 11; _viewYear--; }
+  if (_viewMonth > 11) { _viewMonth = 0;  _viewYear++; }
+  renderCalendar();
+}
+
+function renderCalendar() {
+  document.getElementById('cal-month-label').textContent =
+    MONTHS[_viewMonth] + ' ' + _viewYear;
+
+  var grid  = document.getElementById('cal-grid');
+  var now   = new Date();
+  var today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
+  var todayStr = today.getFullYear() + '-'
+    + String(today.getMonth() + 1).padStart(2, '0') + '-'
+    + String(today.getDate()).padStart(2, '0');
+
+  var html = DAYS.map(function(d) {
+    return '<div class="cal-day-name">' + d + '</div>';
+  }).join('');
+
+  // First day of month (Mon=0 grid)
+  var first = new Date(_viewYear, _viewMonth, 1);
+  var startDow = (first.getDay() + 6) % 7; // Mon=0
+  for (var b = 0; b < startDow; b++) {
+    html += '<div class="cal-day empty"></div>';
+  }
+
+  var daysInMonth = new Date(_viewYear, _viewMonth + 1, 0).getDate();
+  for (var d = 1; d <= daysInMonth; d++) {
+    var dt   = new Date(_viewYear, _viewMonth, d);
+    dt.setHours(12,0,0,0);  // noon avoids UTC rollover in any timezone
+    // Build ISO date string from local date parts, not toISOString() which uses UTC
+    var dateStr = dt.getFullYear() + '-'
+      + String(dt.getMonth() + 1).padStart(2, '0') + '-'
+      + String(dt.getDate()).padStart(2, '0');
+    var cap  = _capacity[dateStr];
+    var isToday = dateStr === todayStr;
+
+    var cls = 'cal-day';
+    if (isToday) cls += ' today';
+    var badge = '';
+    var title = '';
+
+    if (dateStr <= todayStr) {
+      cls += ' past';
+    } else if (!cap || !cap.is_open) {
+      cls += ' closed';
+      title = 'Closed';
+    } else if (cap.remaining <= 0) {
+      cls += ' full';
+      title = 'Fully booked';
+      badge = 'Full';
+    } else if (cap.remaining <= 2) {
+      cls += ' low';
+      title = cap.remaining + ' slot' + (cap.remaining===1?'':'s') + ' remaining';
+      badge = cap.remaining + ' left';
+    } else {
+      cls += ' open';
+      title = cap.remaining + ' slots remaining';
+      badge = cap.remaining + ' slots';
+    }
+
+    if (_selectedDate === dateStr) cls += ' selected';
+
+    html += '<div class="' + cls + '" title="' + title + '"'
+      + (cap && cap.is_open && cap.remaining > 0 && dateStr > todayStr
+        ? ' onclick="selectDate(\'' + dateStr + '\')"' : '')
+      + '>'
+      + d
+      + (badge ? '<div class="slots-badge">' + badge + '</div>' : '')
+      + '</div>';
+  }
+
+  grid.innerHTML = html;
+}
+
+// ── Date selection ────────────────────────────────────────────────────────────
+function selectDate(dateStr) {
+  _selectedDate = dateStr;
+  renderCalendar();
+
+  // Format date nicely
+  var d    = new Date(dateStr + 'T12:00:00');
+  var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var nice = days[d.getDay()] + ', ' + d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+  var cap  = _capacity[dateStr];
+  var rem  = cap ? cap.remaining : '?';
+
+  document.getElementById('selected-date-label').textContent =
+    nice + ' — ' + rem + ' slot' + (rem===1?'':'s') + ' remaining';
+  document.getElementById('form-hint').style.display  = 'none';
+  document.getElementById('form-body').style.display  = '';
+  document.getElementById('success-panel').style.display = 'none';
+  document.getElementById('msg-error').style.display   = 'none';
+  document.getElementById('msg-success').style.display = 'none';
+}
+
+// ── Form submission ───────────────────────────────────────────────────────────
+function submitBooking() {
+  var name  = document.getElementById('f-name').value.trim();
+  var email = document.getElementById('f-email').value.trim();
+  var phone = document.getElementById('f-phone').value.trim();
+  var bike  = document.getElementById('f-bike').value.trim();
+  var desc  = document.getElementById('f-desc').value.trim();
+  var errEl = document.getElementById('msg-error');
+
+  errEl.style.display = 'none';
+
+  if (!_selectedDate) { showErr('Please select a date.'); return; }
+  if (!name)          { showErr('Full name is required.'); return; }
+  if (!email || !email.includes('@')) { showErr('A valid email address is required.'); return; }
+  if (!phone)         { showErr('Mobile number is required.'); return; }
+
+  var btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Submitting…';
+
+  fetch(API_BASE + '/workshop/request', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      _secret:          API_SECRET,
+      name:             name,
+      email:            email,
+      phone:            phone,
+      bike_description: bike,
+      description:      desc,
+      requested_date:   _selectedDate,
+    }),
+  })
+  .then(function(r) { return r.json().then(function(d) { return {ok: r.ok, data: d}; }); })
+  .then(function(res) {
+    if (res.ok && res.data.ok) {
+      document.getElementById('form-body').style.display    = 'none';
+      document.getElementById('success-panel').style.display = '';
+      document.getElementById('success-ref').textContent = 'Reference: ' + res.data.reference;
+      // Remove from local capacity so it's immediately reflected
+      if (_capacity[_selectedDate]) {
+        _capacity[_selectedDate].remaining = Math.max(0, _capacity[_selectedDate].remaining - 1);
+        _capacity[_selectedDate].booked++;
+      }
+      _selectedDate = null;
+      renderCalendar();
+    } else {
+      showErr(res.data.error || 'Something went wrong. Please try again.');
+    }
+  })
+  .catch(function() {
+    showErr('Network error. Please check your connection and try again.');
+  })
+  .finally(function() {
+    btn.disabled = false;
+    btn.textContent = 'Request Booking';
+  });
+}
+
+function showErr(msg) {
+  var el = document.getElementById('msg-error');
+  el.textContent = msg;
+  el.style.display = '';
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function resetForm() {
+  _selectedDate = null;
+  document.getElementById('selected-date-label').textContent = '← Select a date on the calendar';
+  document.getElementById('form-hint').style.display    = '';
+  document.getElementById('form-body').style.display    = 'none';
+  document.getElementById('success-panel').style.display = 'none';
+  document.getElementById('f-name').value  = '';
+  document.getElementById('f-email').value = '';
+  document.getElementById('f-phone').value = '';
+  document.getElementById('f-bike').value  = '';
+  document.getElementById('f-desc').value  = '';
+}
+
+// ── Navbar scroll ─────────────────────────────────────────────────────────────
+window.addEventListener('scroll', function() {
+  document.getElementById('navbar').classList.toggle('scrolled', window.scrollY > 40);
+});
+</script>
+</body>
+</html>

@@ -157,6 +157,38 @@
              placeholder="https://yourbusiness.com.au, https://www.yourbusiness.com.au">
     </div>
 
+    <!-- ── Workshop Booking Form ─────────────────────────────────────────── -->
+    <h3 style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.1em;
+               color:var(--sd-muted); margin-bottom:1rem; padding-bottom:0.4rem;
+               border-bottom:1px solid var(--sd-border);">Workshop Booking Form</h3>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;">
+      <div>
+        <label class="sd-label">Booking Secret
+          <span style="font-size:0.7rem;color:var(--sd-muted);">(must match the form's _secret value)</span>
+        </label>
+        <input type="text" name="pista_booking_secret" class="sd-input"
+               value="{{ s.get('pista_booking_secret','') }}" placeholder="change-me">
+      </div>
+      <div>
+        <label class="sd-label">CORS Origins
+          <span style="font-size:0.7rem;color:var(--sd-muted);">(comma-separated domains)</span>
+        </label>
+        <input type="text" name="pista_cors_origins" class="sd-input"
+               value="{{ s.get('pista_cors_origins','') }}"
+               placeholder="https://pistabikes.com.au, https://www.pistabikes.com.au">
+      </div>
+    </div>
+    <div style="margin-bottom:1.5rem; padding:0.75rem; background:var(--sd-surface2);
+                border:1px solid var(--sd-border); border-radius:6px; font-size:0.78rem;
+                color:var(--sd-muted);">
+      Public endpoints: <code>GET /workshop/available-dates</code> ·
+      <code>GET /workshop/date-info?date=YYYY-MM-DD</code> ·
+      <code>POST /workshop/request</code>.
+      Capacity managed under
+      <a href="{{ url_for('jobs.settings_workshop_capacity') }}" style="color:var(--sd-accent);">
+        Settings → Workshop Capacity</a>.
+    </div>
+
     <!-- ── SMS ──────────────────────────────────────────────────────────── -->
     <h3 style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.1em;
                color:var(--sd-muted); margin-bottom:1rem; padding-bottom:0.4rem;

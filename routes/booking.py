@@ -15,7 +15,9 @@ booking_bp = Blueprint('booking', __name__)
 log = logging.getLogger('app')
 
 # These can be overridden by env vars; booking_cors_origins setting supplements them
-TFB_SECRET = os.environ.get('TFB_BOOKING_SECRET', 'change-me')
+TFB_SECRET = (os.environ.get('TFB_BOOKING_SECRET')
+              or os.environ.get('TFB_API_SECRET')
+              or 'change-me')
 NOTIFY_TO  = os.environ.get('GMAIL_USER', '')
 
 

@@ -765,6 +765,9 @@
         <a href="{{ url_for('jobs.settings_job_types') }}" data-label="Job Types" class="sidebar-link {% if request.endpoint == 'jobs.settings_job_types' %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
           <i class="bi bi-diagram-3"></i> Job Types
         </a>
+        <a href="{{ url_for('jobs.settings_workshop_capacity') }}" data-label="Workshop Capacity" class="sidebar-link {% if request.endpoint == 'jobs.settings_workshop_capacity' %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
+          <i class="bi bi-calendar-week"></i> Workshop Capacity
+        </a>
         <a href="{{ url_for('jobs.calendar_settings') }}" data-label="Calendar Sync" class="sidebar-link {% if request.endpoint == 'jobs.calendar_settings' %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
           <i class="bi bi-calendar-check"></i> Calendar Sync
         </a>

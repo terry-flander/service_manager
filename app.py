@@ -64,6 +64,8 @@ def create_app():
     app.register_blueprint(bikes_bp)
     from routes.sms import sms_bp
     app.register_blueprint(sms_bp)
+    from routes.workshop_booking import workshop_booking_bp
+    app.register_blueprint(workshop_booking_bp)
 
     # ── Global auth gate ──────────────────────────────────────────────────────
     PUBLIC_ENDPOINTS = {'auth.login', 'auth.totp_verify', 'static',

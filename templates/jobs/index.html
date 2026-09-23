@@ -186,6 +186,32 @@
             <span style="color:var(--sd-muted);">—</span>
           {% endif %}
         </td>
+        {% elif col_key == 'thread' %}
+        <td class="{{ hide_classes }}" style="text-align:center;">
+          {% if job['customer_email'] %}
+          <button type="button"
+                  onclick="openReplyModal({{ job['id'] }}, {{ job['customer_email']|tojson }}, {{ job['customer_name']|tojson }})"
+                  class="btn-ghost"
+                  style="padding:0.15rem 0.5rem; font-size:0.75rem;">
+            <i class="bi bi-chat-left-text"></i>
+          </button>
+          {% else %}
+          <span style="color:var(--sd-muted);">—</span>
+          {% endif %}
+        </td>
+        {% elif col_key == 'sms' %}
+        <td class="{{ hide_classes }}" style="text-align:center;">
+          {% if settings.sms_enabled == '1' and job['customer_phone'] %}
+          <button type="button"
+                  onclick="openListSmsModal({{ job['id'] }}, {{ job['customer_phone']|tojson }}, {{ job['customer_name']|tojson }})"
+                  class="btn-ghost"
+                  style="padding:0.15rem 0.5rem; font-size:0.75rem;">
+            <i class="bi bi-phone"></i>
+          </button>
+          {% else %}
+          <span style="color:var(--sd-muted);">—</span>
+          {% endif %}
+        </td>
         {% endif %}
         {% endfor %}
       </tr>
@@ -220,5 +246,100 @@ document.addEventListener('DOMContentLoaded', function () {
     window.onQuerySelected(this.value);
   });
 });
+
+{% if settings.sms_enabled == '1' %}
+// ── Job list inline SMS ───────────────────────────────────────────────────────
+var _listSmsTpls = {}, _listSmsJobId = null, _listSmsPhone = null;
+
+function openListSmsModal(jobId, phone, name) {
+  _listSmsJobId = jobId;
+  _listSmsPhone = phone;
+  document.getElementById('list-sms-to').textContent = phone;
+  document.getElementById('list-sms-body').value = '';
+  document.getElementById('list-sms-count').textContent = '0 / 160';
+  if (!Object.keys(_listSmsTpls).length) {
+    fetch('/sms/templates').then(r => r.json()).then(function(tpls) {
+      const sel = document.getElementById('list-sms-tmpl');
+      tpls.forEach(function(t) {
+        _listSmsTpls[t.id] = t.body;
+        const o = document.createElement('option');
+        o.value = t.id; o.textContent = t.name; sel.appendChild(o);
+      });
+    });
+  }
+  document.getElementById('list-sms-overlay').style.display = 'flex';
+}
+function closeListSmsModal() {
+  document.getElementById('list-sms-overlay').style.display = 'none';
+}
+function loadListSmsTemplate() {
+  const sel = document.getElementById('list-sms-tmpl');
+  const body = _listSmsTpls[sel.value];
+  if (!body) return;
+  fetch('/sms/render', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({job_id: _listSmsJobId, body: body})})
+  .then(r => r.json()).then(function(d) {
+    if (d.ok) { document.getElementById('list-sms-body').value = d.body; updateListSmsCount(); }
+  });
+  sel.value = '';
+}
+function updateListSmsCount() {
+  const len = document.getElementById('list-sms-body').value.length;
+  document.getElementById('list-sms-count').textContent = len + ' / 160';
+}
+function sendListSms() {
+  const body = document.getElementById('list-sms-body').value.trim();
+  if (!body) { alert('Message required.'); return; }
+  const btn = document.getElementById('list-sms-send-btn');
+  btn.disabled = true;
+  fetch('/sms/send', {method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({job_id: _listSmsJobId, body: body, to_number: _listSmsPhone})})
+  .then(r => r.json()).then(function(d) {
+    if (d.ok) { closeListSmsModal(); showToast('SMS sent.', 'success'); }
+    else       { showToast('SMS failed: ' + (d.error||'unknown'), 'danger'); }
+  }).finally(function() { btn.disabled = false; });
+}
+{% endif %}
 </script>
+
+{% if settings.sms_enabled == '1' %}
+<div id="list-sms-overlay"
+     style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6);
+            z-index:2000; align-items:center; justify-content:center;"
+     onclick="if(event.target===this) closeListSmsModal()">
+  <div style="background:var(--sd-surface); border:1px solid var(--sd-border);
+               border-radius:12px; width:100%; max-width:480px; margin:1rem;
+               box-shadow:0 8px 40px rgba(0,0,0,0.5);">
+    <div style="padding:0.9rem 1.2rem; border-bottom:1px solid var(--sd-border);
+                display:flex; align-items:center; justify-content:space-between;">
+      <span style="font-weight:600;"><i class="bi bi-phone" style="color:var(--sd-accent);"></i> Send SMS</span>
+      <span id="list-sms-to" style="font-size:0.8rem; color:var(--sd-muted);"></span>
+      <button type="button" onclick="closeListSmsModal()"
+              style="background:none; border:none; color:var(--sd-muted); cursor:pointer;">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
+    <div style="padding:1rem 1.2rem;">
+      <select id="list-sms-tmpl" class="sd-input" style="margin-bottom:0.6rem; font-size:0.8rem;"
+              onchange="loadListSmsTemplate()">
+        <option value="">Load template…</option>
+      </select>
+      <textarea id="list-sms-body" class="sd-input" rows="4"
+                style="resize:vertical; font-size:0.88rem;"
+                placeholder="Type your message…"
+                oninput="updateListSmsCount()"></textarea>
+      <div style="font-size:0.73rem; color:var(--sd-muted); margin-top:0.3rem; text-align:right;">
+        <span id="list-sms-count">0 / 160</span>
+      </div>
+    </div>
+    <div style="padding:0.75rem 1.2rem; border-top:1px solid var(--sd-border);
+                display:flex; justify-content:flex-end; gap:0.5rem;">
+      <button type="button" class="btn-ghost" onclick="closeListSmsModal()">Cancel</button>
+      <button type="button" class="btn-accent" id="list-sms-send-btn" onclick="sendListSms()">
+        <i class="bi bi-send"></i> Send
+      </button>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

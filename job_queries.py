@@ -421,6 +421,8 @@ COLUMN_CATALOG = {
     'status':     {'label': 'Status',           'align': 'left'},
     'end_date':   {'label': 'End Date',         'align': 'left'},
     'weeks':      {'label': 'Weeks',            'align': 'right'},
+    'thread':     {'label': 'Thread',           'align': 'center'},
+    'sms':        {'label': 'SMS',              'align': 'center'},
 }
 
 # Defaults — exactly match what's hardcoded in the template, so a query
