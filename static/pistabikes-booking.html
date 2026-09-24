@@ -3,8 +3,67 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Book a Workshop Visit — Pista Bikes</title>
-  <meta name="description" content="Request a workshop appointment at Pista Bikes, 255 Hawthorn Road Caulfield. We'll confirm your booking by email." />
+  <title>Book a Workshop Visit – Pista Bikes Caulfield Bicycle Workshop</title>
+  <meta name="description" content="Book your bike service or repair at Pista Bikes, 255 Hawthorn Road Caulfield. Choose an available date online — we'll confirm your appointment by email." />
+  <link rel="canonical" href="https://pistabikes.com.au/book" />
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+  <meta property="og:type"        content="website" />
+  <meta property="og:locale"      content="en_AU" />
+  <meta property="og:site_name"   content="Pista Bikes" />
+  <meta property="og:title"       content="Book a Workshop Visit – Pista Bikes Caulfield" />
+  <meta property="og:description" content="Book your bike service or repair at Pista Bikes, Caulfield. Choose an available date — confirmation sent by email." />
+  <meta property="og:url"         content="https://pistabikes.com.au/book" />
+  <meta name="twitter:card"        content="summary" />
+  <meta name="twitter:title"       content="Book a Workshop Visit – Pista Bikes Caulfield" />
+  <meta name="twitter:description" content="Choose an available date for your bike service at Pista Bikes, 255 Hawthorn Road Caulfield." />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "LocalBusiness",
+        "@id": "https://pistabikes.com.au/#business",
+        "name": "Pista Bikes",
+        "url": "https://pistabikes.com.au/",
+        "telephone": "+61403225135",
+        "email": "info@theflyingbike.com.au",
+        "address": {
+          "@type": "PostalAddress",
+          "streetAddress": "255 Hawthorn Road",
+          "addressLocality": "Caulfield",
+          "addressRegion": "VIC",
+          "postalCode": "3162",
+          "addressCountry": "AU"
+        },
+        "geo": { "@type": "GeoCoordinates", "latitude": -37.879435, "longitude": 145.023454 },
+        "openingHoursSpecification": [
+          { "@type": "OpeningHoursSpecification", "dayOfWeek": ["Tuesday","Wednesday","Thursday","Friday"], "opens": "11:00", "closes": "17:00" },
+          { "@type": "OpeningHoursSpecification", "dayOfWeek": ["Sunday"], "opens": "10:00", "closes": "16:00" }
+        ],
+        "parentOrganization": { "@type": "Organization", "name": "The Flying Bike Group", "url": "https://theflyingbike.com.au" }
+      },
+      {
+        "@type": "WebPage",
+        "@id": "https://pistabikes.com.au/book#webpage",
+        "url": "https://pistabikes.com.au/book",
+        "name": "Book a Workshop Visit – Pista Bikes Caulfield",
+        "description": "Book your bike service or repair online at Pista Bikes, 255 Hawthorn Road Caulfield.",
+        "isPartOf": { "@id": "https://pistabikes.com.au/#business" },
+        "inLanguage": "en-AU"
+      },
+      {
+        "@type": "Service",
+        "@id": "https://pistabikes.com.au/book#service",
+        "serviceType": "Bicycle Workshop Booking",
+        "name": "Workshop Booking",
+        "description": "Book a bicycle service or repair appointment at Pista Bikes workshop in Caulfield. Choose your date online.",
+        "provider": { "@id": "https://pistabikes.com.au/#business" },
+        "areaServed": { "@type": "City", "name": "Melbourne", "addressCountry": "AU" },
+        "url": "https://pistabikes.com.au/book"
+      }
+    ]
+  }
+  </script>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚲</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -296,9 +355,9 @@ footer {
       <a href="pistabikes.html">Home</a>
       <a href="pistabikes.html#section-services">Services</a>
       <a href="pistabikes.html#section-repairs">Repairs</a>
-      <a href="pistabikes.html#section-gear">Shop</a>
-      <a href="pistabikes-bikes.html">Used Bikes</a>
       <a href="pistabikes-booking.html" class="active">Book</a>
+      <a href="pistabikes-bikes.html">Used Bikes</a>
+      <a href="pistabikes.html#section-gear">Shop</a>
     </nav>
     <div class="hamburger" id="hamburgerBtn">
       <span></span><span></span><span></span>
@@ -310,9 +369,9 @@ footer {
   <a href="pistabikes.html">Home</a>
   <a href="pistabikes.html#section-services">Services</a>
   <a href="pistabikes.html#section-repairs">Repairs</a>
-  <a href="pistabikes.html#section-gear">Shop</a>
-  <a href="pistabikes-bikes.html">Used Bikes</a>
   <a href="pistabikes-booking.html">Book a Visit</a>
+  <a href="pistabikes-bikes.html">Used Bikes</a>
+  <a href="pistabikes.html#section-gear">Shop</a>
 </div>
 
 <!-- ── HERO ── -->
@@ -349,12 +408,16 @@ footer {
       <div class="info-panel">
         <h3>What to expect</h3>
         <div class="info-item">
-          <span class="info-icon">📍</span>
-          <span>255 Hawthorn Road, Caulfield VIC 3162 — rear workshop entrance on Hawthorn Rd.</span>
+          <span class="info-icon">🕐</span>
+          <span style="font-weight:600; color:var(--white);">Drop off your bike first thing on the day or the night before.</span>
         </div>
         <div class="info-item">
-          <span class="info-icon">🕐</span>
-          <span>We're open Tuesday–Friday and Sunday. Drop off your bike during business hours.</span>
+          <span class="info-icon">📅</span>
+          <span>We're open Tuesday–Friday and Sunday.</span>
+        </div>
+        <div class="info-item">
+          <span class="info-icon">📍</span>
+          <span>255 Hawthorn Road, Caulfield VIC 3162.</span>
         </div>
         <div class="info-item">
           <span class="info-icon">📧</span>
@@ -449,6 +512,14 @@ footer {
         <div class="footer-logo">Pista <span>Bikes</span></div>
         <div class="footer-tagline">Bicycle Workshop · 255 Hawthorn Rd, Caulfield</div>
       </div>
+      <div style="display:flex; gap:1.5rem; flex-wrap:wrap;">
+        <a href="pistabikes.html" style="color:var(--white); font-size:.9rem;">Home</a>
+        <a href="pistabikes.html#section-services" style="color:var(--white); font-size:.9rem;">Services</a>
+        <a href="pistabikes.html#section-repairs" style="color:var(--white); font-size:.9rem;">Repairs</a>
+        <a href="pistabikes-booking.html" style="color:var(--copper); font-size:.9rem;">Book</a>
+        <a href="pistabikes-bikes.html" style="color:var(--white); font-size:.9rem;">Used Bikes</a>
+        <a href="pistabikes.html#section-gear" style="color:var(--white); font-size:.9rem;">Shop</a>
+      </div>
     </div>
     <div class="footer-bottom">
       © <span id="fyear"></span> Pista Bikes · 255 Hawthorn Road, Caulfield VIC 3162
@@ -459,7 +530,7 @@ footer {
 <script>
 // ── Config ────────────────────────────────────────────────────────────────────
 const API_BASE   = 'https://app.theflyingbike.com.au';
-const API_SECRET = 'tfb-website-booking'; // set to match pista_booking_secret in Business Settings
+const API_SECRET = 'change-me'; // set to match pista_booking_secret in Business Settings
 
 // ── State ─────────────────────────────────────────────────────────────────────
 var _capacity   = {};      // {date: {is_open, max_bookings, remaining}}

@@ -17,6 +17,7 @@
   <meta property="og:title"       content="Pista Bikes – Bicycle Workshop Caulfield" />
   <meta property="og:description" content="Full-service bike workshop at 255 Hawthorn Road, Caulfield. Servicing, repairs, parts and gear. Open daily except Saturday." />
   <meta property="og:url"         content="https://pistabikes.com.au/" />
+  <meta property="og:image"       content="https://pistabikes.com.au/static/img/site/Workshop.jpg" />
 
   <!-- Twitter Card -->
   <meta name="twitter:card"        content="summary_large_image" />
@@ -34,7 +35,7 @@
         "name": "Pista Bikes",
         "description": "Full-service bicycle workshop providing servicing, repairs, parts and cycling gear at 255 Hawthorn Road, Caulfield.",
         "url": "https://pistabikes.com.au/",
-        "telephone": "",
+        "telephone": "+61403225135",
         "email": "info@theflyingbike.com.au",
         "address": {
           "@type": "PostalAddress",
@@ -48,7 +49,9 @@
           { "@type": "OpeningHoursSpecification", "dayOfWeek": ["Tuesday","Wednesday","Thursday","Friday"], "opens": "11:00", "closes": "17:00" },
           { "@type": "OpeningHoursSpecification", "dayOfWeek": ["Sunday"], "opens": "10:00", "closes": "16:00" }
         ],
+        "geo": { "@type": "GeoCoordinates", "latitude": -37.879435, "longitude": 145.023454 },
         "areaServed": { "@type": "City", "name": "Melbourne", "addressCountry": "AU" },
+        "parentOrganization": { "@type": "Organization", "name": "The Flying Bike Group", "url": "https://theflyingbike.com.au" },
         "priceRange": "$$",
         "currenciesAccepted": "AUD"
       },
@@ -753,9 +756,9 @@
       <a href="#top">Home</a>
       <a href="#section-services">Services</a>
       <a href="#section-repairs">Repairs</a>
-      <a href="#section-gear">Shop</a>
-      <a href="pistabikes-bikes.html">Used Bikes</a>
       <a href="pistabikes-booking.html">Book</a>
+      <a href="pistabikes-bikes.html">Used Bikes</a>
+      <a href="#section-gear">Shop</a>
     </nav>
     <div class="hamburger" id="hamburgerBtn" aria-label="Open menu">
       <span></span><span></span><span></span>
@@ -767,9 +770,9 @@
   <a href="#top"               onclick="closeNav()">Home</a>
   <a href="#section-services"  onclick="closeNav()">Services</a>
   <a href="#section-repairs"   onclick="closeNav()">Repairs</a>
-  <a href="#section-gear"      onclick="closeNav()">Shop</a>
+  <a href="pistabikes-booking.html" onclick="closeNav()">Book a Visit</a>
   <a href="pistabikes-bikes.html" onclick="closeNav()">Used Bikes</a>
-  <a href="#section-contact"   onclick="closeNav()">Book a Visit</a>
+  <a href="#section-gear"      onclick="closeNav()">Shop</a>
 </div>
 
 <!-- ── HERO ────────────────────────────────────────────────── -->
@@ -782,7 +785,7 @@
     <h1 class="hero-title">Your Bike Deserves a <em>Proper Workshop.</em></h1>
     <p class="hero-sub">Full-service bicycle repairs, professional servicing, quality parts and cycling gear — all under one roof in Caulfield.</p>
     <div class="hero-ctas">
-      <a href="#section-contact" class="btn btn-primary">Book a Visit</a>
+      <a href="pistabikes-booking.html" class="btn btn-primary">Book a Visit</a>
       <a href="#section-services" class="btn btn-outline">See Services</a>
     </div>
     <div class="hero-badges">
@@ -819,7 +822,7 @@
         <span class="hours-day closed">Sat</span>
       </div>
       <div style="font-size:.9rem;color:var(--white);font-family:'Barlow Condensed',sans-serif;font-weight:600;">
-        Winter hours &nbsp;·&nbsp; <a href="#section-contact" style="color:var(--copper);">Spring Mon 11–5 opening soon</a>
+        Winter hours &nbsp;·&nbsp; <a href="pistabikes-booking.html" style="color:var(--copper);">Spring Mon 11–5 opening soon</a>
       </div>
     </div>
   </div>
@@ -869,7 +872,7 @@
           <li>Safety check</li>
           <li>Parts inspection &amp; recommendations</li>
         </ul>
-        <a href="#section-contact" class="btn btn-outline">Book Now</a>
+        <a href="pistabikes-booking.html" class="btn btn-outline">Book Now</a>
       </div>
 
       <div class="service-card featured">
@@ -891,7 +894,7 @@
           <li>Full component inspection &amp; adjustment</li>
           <li>Parts recommendations</li>
         </ul>
-        <a href="#section-contact" class="btn btn-primary">Book Now</a>
+        <a href="pistabikes-booking.html" class="btn btn-primary">Book Now</a>
       </div>
 
       <div class="service-card">
@@ -908,7 +911,7 @@
           <li>Safety check</li>
           <li>Repair recommendations</li>
         </ul>
-        <a href="#section-contact" class="btn btn-outline">Book Now</a>
+        <a href="pistabikes-booking.html" class="btn btn-outline">Book Now</a>
       </div>
 
     </div>
@@ -937,7 +940,7 @@
           <span class="repair-tag">Full bike rebuild</span>
           <span class="repair-tag">Custom builds</span>
         </div>
-        <a href="#section-contact" class="btn btn-primary">Book a Repair</a>
+        <a href="pistabikes-booking.html" class="btn btn-primary">Book a Repair</a>
       </div>
       <div>
         <div style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:2rem;">
@@ -1065,10 +1068,10 @@
   <div class="container">
     <div class="visit-box">
       <div class="visit-text">
-        <div class="label" style="justify-content:flex-start;">Find Us</div>
+        <div class="label" style="justify-content:flex-start;">Visit Us</div>
         <h2>Come Visit the Workshop</h2>
         <p>We're located on Hawthorn Road in Caulfield — easy to find, with parking nearby. Walk-ins welcome, or book ahead to secure your time.</p>
-        <a href="#section-contact" class="btn btn-primary" style="margin-top:1.5rem;">Book a Visit</a>
+        <a href="pistabikes-booking.html" class="btn btn-primary" style="margin-top:1.5rem;">Book a Visit</a>
       </div>
       <div class="visit-details">
         <div class="visit-detail">
@@ -1109,9 +1112,9 @@
   <div class="container">
     <div class="contact-grid">
       <div class="contact-info">
-        <div class="label">Book a Visit</div>
-        <h2>Make an Enquiry</h2>
-        <p>Select a preferred day and time and we'll confirm your booking. Walk-ins are always welcome too.</p>
+        <div class="label">Find Us</div>
+        <h2>Find the Workshop</h2>
+        <p>Drop off your bike first thing on the day or the night before. Walk-ins are always welcome — or book ahead to guarantee your spot.</p>
 
         <div class="contact-detail">
           <div class="contact-detail-icon">📍</div>
@@ -1128,98 +1131,31 @@
           </div>
         </div>
         <div class="contact-detail">
+          <div class="contact-detail-icon">📞</div>
+          <div class="contact-detail-text">
+            <strong>Phone</strong>
+            <a href="tel:0403225135">0403 225 135</a>
+          </div>
+        </div>
+        <div class="contact-detail">
           <div class="contact-detail-icon">✉️</div>
           <div class="contact-detail-text">
             <strong>Email</strong>
             <a href="mailto:info@theflyingbike.com.au">info@theflyingbike.com.au</a>
           </div>
         </div>
+
+        <a href="pistabikes-booking.html" class="btn btn-primary" style="margin-top:2rem; display:inline-block;">
+          Book a Workshop Visit →
+        </a>
       </div>
 
-      <div class="form-card">
-        <form id="bookingForm" novalidate>
-
-          <div class="form-section-title">Your Details</div>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="fname">Full Name <span class="req">*</span></label>
-              <input type="text" id="fname" name="name" placeholder="e.g. Jane Smith" required />
-            </div>
-            <div class="form-group">
-              <label for="fsuburb">Suburb <span class="req">*</span></label>
-              <input type="text" id="fsuburb" name="suburb" placeholder="e.g. Caulfield" required />
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="femail">Email Address <span class="req">*</span></label>
-              <input type="email" id="femail" name="email" placeholder="you@email.com" required />
-            </div>
-            <div class="form-group">
-              <label for="fphone">Phone Number</label>
-              <input type="tel" id="fphone" name="phone" placeholder="04xx xxx xxx" />
-            </div>
-          </div>
-
-          <div class="form-section-title">Preferred Visit Time</div>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="fdate">Preferred Date</label>
-              <input type="date" id="fdate" name="date" />
-            </div>
-            <div class="form-group">
-              <label for="ftime">Preferred Time</label>
-              <select id="ftime" name="time">
-                <option value="">-- Select a time --</option>
-                <option>Morning (9am – 12pm)</option>
-                <option>Midday (12pm – 2pm)</option>
-                <option>Afternoon (2pm – 5pm)</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-section-title">Service Type</div>
-          <div class="checkbox-grid">
-            <label class="check-item">
-              <input type="checkbox" name="services" value="General Service" />
-              <span>🔧 General Service — $120</span>
-            </label>
-            <label class="check-item">
-              <input type="checkbox" name="services" value="Deluxe Service" />
-              <span>⭐ Deluxe Service — $220</span>
-            </label>
-            <label class="check-item">
-              <input type="checkbox" name="services" value="E-Bike Service" />
-              <span>⚡ E-Bike Service — $150</span>
-            </label>
-            <label class="check-item">
-              <input type="checkbox" name="services" value="Repair" />
-              <span>🔩 Repair / Other work</span>
-            </label>
-            <label class="check-item">
-              <input type="checkbox" name="services" value="Parts / Gear" />
-              <span>🛒 Parts or Gear enquiry</span>
-            </label>
-            <label class="check-item">
-              <input type="checkbox" name="services" value="Not sure" />
-              <span>💬 Not sure yet</span>
-            </label>
-          </div>
-
-          <div class="form-section-title">Message</div>
-          <div class="form-group">
-            <label for="fmessage">Tell us about your bike or what you need</label>
-            <textarea id="fmessage" name="message" placeholder="Describe your bike, the issue, or any questions…"></textarea>
-          </div>
-          <button type="submit" class="btn btn-primary form-submit">Send Booking Request →</button>
-
-          <div class="form-msg" id="formSuccess">
-            ✅ Thanks! We've received your request and will confirm your booking shortly.
-          </div>
-          <div class="form-msg" id="formError">
-            ⚠️ Something went wrong. Please email us at <a href="mailto:info@theflyingbike.com.au" style="color:inherit;text-decoration:underline;">info@theflyingbike.com.au</a>
-          </div>
-        </form>
+      <div style="border-radius:10px; overflow:hidden; border:1px solid var(--border); min-height:360px;">
+        <iframe
+          src="https://www.openstreetmap.org/export/embed.html?bbox=145.0134,-37.8844,145.0334,-37.8744&layer=mapnik&marker=-37.879435,145.023454"
+          width="100%" height="100%" style="border:none; min-height:360px; display:block;"
+          loading="lazy" title="Pista Bikes location">
+        </iframe>
       </div>
     </div>
   </div>
@@ -1237,8 +1173,9 @@
         <a href="#top">Home</a>
         <a href="#section-services">Services</a>
         <a href="#section-repairs">Repairs</a>
-        <a href="#section-gear">Shop</a>
         <a href="pistabikes-booking.html">Book</a>
+        <a href="pistabikes-bikes.html">Used Bikes</a>
+        <a href="#section-gear">Shop</a>
       </div>
       <!-- Link back to The Flying Bike -->
       <a href="https://theflyingbike.com.au" target="_blank" rel="noopener" class="footer-tfb">
@@ -1289,84 +1226,6 @@
 
   /* ── Footer year ── */
   document.getElementById('fyear').textContent = new Date().getFullYear();
-
-  /* ── Form submission ─────────────────────────────────────────────────────
-   * Posts to the WordPress AJAX endpoint on theflyingbike.com.au via the
-   * tfb-booking-handler plugin. A separate action (pistbikes_booking) should
-   * be added to that plugin to route Pista Bikes enquiries — or the same
-   * tfb_booking action can be used initially to deliver to the same inbox.
-   *
-   * Change TFB_SECRET to match TFB_BOOKING_SECRET in the plugin.
-   * ─────────────────────────────────────────────────────────────────────── */
-  const WP_AJAX_URL = 'https://theflyingbike.com.au/wp-admin/admin-ajax.php';
-  const TFB_SECRET  = 'tfb-flyingbike-2026';
-
-  const form        = document.getElementById('bookingForm');
-  const successMsg  = document.getElementById('formSuccess');
-  const errorMsg    = document.getElementById('formError');
-
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if (!form.checkValidity()) { form.reportValidity(); return; }
-
-    const ack = form.querySelector('#fack');
-    if (!ack.checked) {
-      ack.setCustomValidity('Please acknowledge the booking conditions.');
-      ack.reportValidity(); return;
-    }
-    ack.setCustomValidity('');
-
-    const services = [...form.querySelectorAll('input[name="services"]:checked')]
-      .map(cb => cb.value).join(', ') || 'None selected';
-
-    const visitDate = form.date?.value || '';
-    const visitTime = form.time?.value || '';
-    const visitStr  = visitDate
-      ? `${visitDate}${visitTime ? ' · ' + visitTime : ''}`
-      : 'Not specified';
-
-    const payload = {
-      _secret:  TFB_SECRET,
-      _source:  'Pista Bikes',
-      name:     form.name.value.trim(),
-      email:    form.email.value.trim(),
-      phone:    form.phone.value.trim(),
-      suburb:   form.suburb.value.trim(),
-      services,
-      message:  `Preferred visit: ${visitStr}\n\n${form.message.value.trim()}`,
-    };
-
-    const submitBtn = form.querySelector('.form-submit');
-    submitBtn.disabled    = true;
-    submitBtn.textContent = 'Sending…';
-    successMsg.style.display = 'none';
-    errorMsg.style.display   = 'none';
-
-    try {
-      const res  = await fetch(WP_AJAX_URL + '?action=tfb_booking', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body:    JSON.stringify(payload),
-      });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        successMsg.style.display = 'block';
-        form.reset();
-        successMsg.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      } else {
-        const msg = json?.data?.message || 'Submission failed.';
-        errorMsg.textContent = '⚠️ ' + msg;
-        errorMsg.style.display = 'block';
-      }
-    } catch (err) {
-      errorMsg.textContent = '⚠️ Could not reach the server. Please email info@theflyingbike.com.au directly.';
-      errorMsg.style.display = 'block';
-    } finally {
-      submitBtn.disabled    = false;
-      submitBtn.textContent = 'Send Booking Request →';
-    }
-  });
-</script>
 
 </body>
 </html>
