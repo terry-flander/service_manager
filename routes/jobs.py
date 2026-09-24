@@ -1627,8 +1627,11 @@ def mark_email_read(import_id):
         imp = conn.execute(
             "SELECT job_id FROM email_imports WHERE id=?", (import_id,)).fetchone()
         conn.commit()
+        new_count = conn.execute(
+            "SELECT COUNT(*) FROM email_imports WHERE read=1 OR read IS NULL"
+        ).fetchone()[0]
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return jsonify({'ok': True})
+        return jsonify({'ok': True, 'unread_count': new_count})
     if imp and imp['job_id']:
         return redirect(url_for('jobs.job_detail', job_id=imp['job_id']))
     return redirect(url_for('jobs.email_imports'))
@@ -1640,7 +1643,10 @@ def mark_email_unread(import_id):
     with get_db() as conn:
         conn.execute("UPDATE email_imports SET read=1 WHERE id=?", (import_id,))
         conn.commit()
-    return jsonify({'ok': True})
+        new_count = conn.execute(
+            "SELECT COUNT(*) FROM email_imports WHERE read=1 OR read IS NULL"
+        ).fetchone()[0]
+    return jsonify({'ok': True, 'unread_count': new_count})
 
 
 @jobs_bp.route('/jobs/email-imports/mark-subject-read', methods=['POST'])
@@ -1650,24 +1656,23 @@ def mark_subject_read():
     data   = request.get_json() if request.is_json else {}
     job_id = (data or {}).get('job_id') or request.form.get('job_id')
 
-    if job_id:
-        with get_db() as conn:
+    with get_db() as conn:
+        if job_id:
             conn.execute(
                 "UPDATE email_imports SET read=0 WHERE job_id=?",
                 (int(job_id),))
-            conn.commit()
-        return jsonify({'ok': True})
-
-    # Legacy fallback — subject-based matching
-    subject = ((data or {}).get('subject') or request.form.get('subject') or '').strip()
-    if not subject:
-        return jsonify({'ok': False, 'error': 'No job_id or subject'}), 400
-    with get_db() as conn:
-        conn.execute(
-            "UPDATE email_imports SET read=0 WHERE LOWER(TRIM(subject))=LOWER(TRIM(?))",
-            (subject,))
+        else:
+            subject = ((data or {}).get('subject') or request.form.get('subject') or '').strip()
+            if not subject:
+                return jsonify({'ok': False, 'error': 'No job_id or subject'}), 400
+            conn.execute(
+                "UPDATE email_imports SET read=0 WHERE LOWER(TRIM(subject))=LOWER(TRIM(?))",
+                (subject,))
         conn.commit()
-    return jsonify({'ok': True})
+        new_count = conn.execute(
+            "SELECT COUNT(*) FROM email_imports WHERE read=1 OR read IS NULL"
+        ).fetchone()[0]
+    return jsonify({'ok': True, 'unread_count': new_count})
 
 
 @jobs_bp.route('/jobs/email-polling-toggle', methods=['POST'])

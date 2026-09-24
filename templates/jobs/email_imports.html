@@ -237,7 +237,9 @@ function markSubjectReadAndNavigate(importId, jobId) {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({job_id: jobId})
-    }).then(function() {
+    }).then(function(r) { return r.json(); })
+    .then(function(res) {
+      if (res.unread_count !== undefined) { window.updateBadge(res.unread_count); }
       window.location = '/jobs/' + jobId + '?from=email';
     });
   } else {
@@ -259,6 +261,8 @@ function toggleRowReadUnread(btn, importId, currentlyUnread, jobId) {
     .then(function(r) { return r.json(); })
     .then(function(res) {
       if (!res.ok) return;
+      // Update sidebar badge immediately
+      if (res.unread_count !== undefined) { window.updateBadge(res.unread_count); }
       var row = btn.closest('tr');
       if (currentlyUnread) {
         row.style.fontWeight = '';
