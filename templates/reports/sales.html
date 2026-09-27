@@ -97,7 +97,8 @@
           <th>Customer</th>
           <th style="text-align:right;">Gross (inc GST)</th>
           <th style="text-align:right;">GST</th>
-          <th style="text-align:right;">Net (ex GST)</th>
+          <th style="text-align:right; color:var(--sd-muted);">Surcharge</th>
+          <th style="text-align:right;">Net Sale</th>
           <th>Payment</th>
           <th>Status</th>
         </tr>
@@ -130,7 +131,10 @@
           <td class="mono" style="text-align:right; color:var(--sd-muted);">
             ${{ '%.2f'|format(row['gst']) }}
           </td>
-          <td class="mono" style="text-align:right;">${{ '%.2f'|format(row['net']) }}</td>
+          <td class="mono" style="text-align:right; color:var(--sd-muted);">
+            {% if row['surcharge'] %}-${{ '%.2f'|format(row['surcharge']) }}{% else %}—{% endif %}
+          </td>
+          <td class="mono" style="text-align:right;">${{ '%.2f'|format(row['net_sale']) }}</td>
           <td style="font-size:0.82rem;">{{ row['payment_type'] or '—' }}</td>
           <td>
             <span class="badge-status status-{{ row['status'] }}">
@@ -153,8 +157,11 @@
           <td class="mono" style="text-align:right; font-weight:500; padding:0.45rem 1rem; font-size:0.82rem; color:var(--sd-muted);">
             ${{ '%.2f'|format(day_sub['gst']) }}
           </td>
+          <td class="mono" style="text-align:right; font-weight:500; padding:0.45rem 1rem; font-size:0.82rem; color:var(--sd-muted);">
+            {% if day_sub['surcharge'] %}-${{ '%.2f'|format(day_sub['surcharge']) }}{% else %}—{% endif %}
+          </td>
           <td class="mono" style="text-align:right; font-weight:600; padding:0.45rem 1rem; font-size:0.82rem;">
-            ${{ '%.2f'|format(day_sub['net']) }}
+            ${{ '%.2f'|format(day_sub['net_sale']) }}
           </td>
           <td style="padding:0.45rem 1rem;"></td>
           <td style="padding:0.45rem 1rem;"></td>
@@ -175,8 +182,12 @@
                                    color:var(--sd-muted);">
             ${{ '%.2f'|format(sub['gst']) }}
           </td>
+          <td class="mono" style="text-align:right; font-weight:600; padding:0.6rem 1rem;
+                                   color:var(--sd-muted);">
+            {% if sub['surcharge'] %}-${{ '%.2f'|format(sub['surcharge']) }}{% else %}—{% endif %}
+          </td>
           <td class="mono" style="text-align:right; font-weight:700; padding:0.6rem 1rem;">
-            ${{ '%.2f'|format(sub['net']) }}
+            ${{ '%.2f'|format(sub['net_sale']) }}
           </td>
           <td style="padding:0.6rem 1rem;"></td>
           <td style="padding:0.6rem 1rem;"></td>
@@ -200,7 +211,8 @@
           </th>
           <th style="text-align:right; color:var(--sd-muted); font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em;">Gross (inc GST)</th>
           <th style="text-align:right; color:var(--sd-muted); font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em;">GST</th>
-          <th style="text-align:right; color:var(--sd-muted); font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em;">Net (ex GST)</th>
+          <th style="text-align:right; color:var(--sd-muted); font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em;">Surcharge</th>
+          <th style="text-align:right; color:var(--sd-muted); font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em;">Net Sale</th>
           <th></th>
         </tr>
       </thead>
@@ -215,9 +227,13 @@
                                    color:var(--sd-muted); padding:0.75rem 1rem;">
             ${{ '%.2f'|format(totals['gst']) }}
           </td>
+          <td class="mono" style="text-align:right; font-size:1.05rem; font-weight:600;
+                                   color:var(--sd-muted); padding:0.75rem 1rem;">
+            {% if totals['surcharge'] %}-${{ '%.2f'|format(totals['surcharge']) }}{% else %}—{% endif %}
+          </td>
           <td class="mono" style="text-align:right; font-size:1.05rem; font-weight:700;
                                    padding:0.75rem 1rem;">
-            ${{ '%.2f'|format(totals['net']) }}
+            ${{ '%.2f'|format(totals['net_sale']) }}
           </td>
           <td style="padding:0.75rem 1rem;"></td>
         </tr>

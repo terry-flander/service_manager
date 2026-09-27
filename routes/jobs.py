@@ -406,10 +406,15 @@ def index():
                    c.id as cust_id,
                    MAX(CAST((julianday(j.end_date) - julianday(j.scheduled_date) + 1) / 7.0 AS INTEGER) +
                        CASE WHEN ((julianday(j.end_date) - julianday(j.scheduled_date) + 1) % 7) > 0 THEN 1 ELSE 0 END,
-                       1) as rental_weeks
+                       1) as rental_weeks,
+                   coalesce(e.surcharge, 0) as eftpos_surcharge
             FROM jobs j
             JOIN regions r ON j.region_id = r.id
             LEFT JOIN customers c ON j.customer_id = c.id
+            LEFT JOIN eftpos_transactions e
+                   ON e.job_id = j.id
+                  AND e.reconciled_at IS NOT NULL
+                  AND e.surcharge > 0
             WHERE 1=1
         """
         params = []

@@ -89,7 +89,7 @@ scp -i ec2-key.pem \
   /tmp/field_service.db
 
 # Copy DB from local to Lightsail:
-scp -i lightsail-key.pem /tmp/field_service.db ec2-user@13.210.197.67:/tmp/
+scp -i ~/Development/service_manager/certs/TheFlyingBikeLightsail.pem ~/Downloads/field_service.db ec2-user@13.238.114.221:/tmp/
 
 # On Lightsail — copy into volume and fix permissions:
 MOUNTPOINT=$(docker volume inspect $(docker volume ls -q | grep data) \

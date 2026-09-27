@@ -423,6 +423,9 @@ COLUMN_CATALOG = {
     'weeks':      {'label': 'Weeks',            'align': 'right'},
     'thread':     {'label': 'Thread',           'align': 'center'},
     'sms':        {'label': 'SMS',              'align': 'center'},
+    'gst':        {'label': 'GST',              'align': 'right'},
+    'surcharge':  {'label': 'Surcharge',        'align': 'right'},
+    'net_sale':   {'label': 'Net Sale',         'align': 'right'},
 }
 
 # Defaults — exactly match what's hardcoded in the template, so a query

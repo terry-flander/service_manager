@@ -116,8 +116,13 @@ def _get_report_data(date_from, date_to, job_types, show_cash=False, sort_by='pa
                    j.scheduled_date, j.paid_date, j.status,
                    j.amount_paid, j.payment_type,
                    j.subtotal, j.gst, j.total,
-                   coalesce(j.paid_date, j.scheduled_date) as report_date
+                   coalesce(j.paid_date, j.scheduled_date) as report_date,
+                   coalesce(e.surcharge, 0) as surcharge
             FROM jobs j
+            LEFT JOIN eftpos_transactions e
+                   ON e.job_id = j.id
+                  AND e.reconciled_at IS NOT NULL
+                  AND e.surcharge > 0
             WHERE {date_where}
               AND j.job_type IN ({jt_ph})
               {extra_clause}
@@ -126,22 +131,30 @@ def _get_report_data(date_from, date_to, job_types, show_cash=False, sort_by='pa
         """.format(date_where=date_where, order_clause=order_clause, jt_ph=jt_ph,
                    extra_clause=extra_clause, cash_clause=cash_clause), params).fetchall()
 
-        # subtotal/gst/total are now stored directly on the jobs row —
-        # no more per-row parts fetch + calc_totals() call needed here.
+        SURCHARGE_CUTOFF = '2026-10-01'
         rows = []
         for job in jobs:
+            paid = job['paid_date'] or ''
+            # Surcharge borne by business from 01/10/2026 onwards
+            surcharge = float(job['surcharge'] or 0) if paid >= SURCHARGE_CUTOFF else 0.0
+            gross   = float(job['total'] or 0)
+            gst     = float(job['gst'] or 0)
+            # Net sale = payment minus GST minus surcharge (business cost)
+            net_sale = gross - gst - surcharge
             rows.append({
                 'id':             job['id'],
                 'reference':      job['reference'],
                 'invoice_number': job['invoice_number'] or '',
                 'job_type':       job['job_type'],
                 'customer_name':  job['customer_name'],
-                'paid_date':      job['paid_date'] or '',
+                'paid_date':      paid,
                 'scheduled_date': job['scheduled_date'] or '',
                 'status':         job['status'],
-                'gross':          job['total'] or 0.0,
-                'gst':            job['gst'] or 0.0,
-                'net':            job['subtotal'] or 0.0,
+                'gross':          gross,
+                'gst':            gst,
+                'net':            float(job['subtotal'] or 0),
+                'surcharge':      surcharge,
+                'net_sale':       net_sale,
                 'amount_paid':    float(job['amount_paid'] or 0),
                 'payment_type':   job['payment_type'] or '',
             })
@@ -180,6 +193,8 @@ def _group_by_month(rows, sort_by='paid'):
                 'gross': sum(r['gross'] for r in day_rows),
                 'gst':   sum(r['gst']   for r in day_rows),
                 'net':   sum(r['net']   for r in day_rows),
+                'surcharge': sum(r['surcharge'] for r in day_rows),
+                'net_sale':  sum(r['net_sale']  for r in day_rows),
                 'count': len(day_rows),
             }
             day_groups.append((day_label, day_rows, day_sub))
@@ -189,6 +204,8 @@ def _group_by_month(rows, sort_by='paid'):
             'gross': sum(r['gross'] for r in all_month_rows),
             'gst':   sum(r['gst']   for r in all_month_rows),
             'net':   sum(r['net']   for r in all_month_rows),
+            'surcharge': sum(r['surcharge'] for r in all_month_rows),
+            'net_sale':  sum(r['net_sale']  for r in all_month_rows),
         }
         result.append((month_label, day_groups, month_sub))
     return result
@@ -196,10 +213,12 @@ def _group_by_month(rows, sort_by='paid'):
 
 def _grand_totals(rows):
     return {
-        'gross': sum(r['gross'] for r in rows),
-        'gst':   sum(r['gst']   for r in rows),
-        'net':   sum(r['net']   for r in rows),
-        'count': len(rows),
+        'gross':     sum(r['gross']     for r in rows),
+        'gst':       sum(r['gst']       for r in rows),
+        'net':       sum(r['net']       for r in rows),
+        'surcharge': sum(r['surcharge'] for r in rows),
+        'net_sale':  sum(r['net_sale']  for r in rows),
+        'count':     len(rows),
     }
 
 
@@ -357,15 +376,14 @@ def sales_csv():
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(['Reference', 'Type', 'Date', 'Customer',
-                     'Gross (inc GST)', 'GST', 'Net (ex GST)', 'Status'])
+                     'Gross (inc GST)', 'GST', 'Surcharge', 'Net Sale', 'Status'])
 
     current_month = None
-    month_gross = month_gst = month_net = 0.0
+    month_gross = month_gst = month_net = month_surcharge = month_net_sale = 0.0
 
     for row in rows:
         month = (row['scheduled_date'] or '')[:7]
         if current_month is not None and month != current_month:
-            # Write month subtotal
             try:
                 from datetime import datetime
                 ml = datetime.strptime(current_month, '%Y-%m').strftime('%B %Y')
@@ -373,14 +391,16 @@ def sales_csv():
                 ml = current_month
             writer.writerow(['', '', f'Subtotal {ml}', '',
                              f'{month_gross:.2f}', f'{month_gst:.2f}',
-                             f'{month_net:.2f}', ''])
+                             f'{month_surcharge:.2f}', f'{month_net_sale:.2f}', ''])
             writer.writerow([])
-            month_gross = month_gst = month_net = 0.0
+            month_gross = month_gst = month_net = month_surcharge = month_net_sale = 0.0
 
         current_month = month
-        month_gross += row['gross']
-        month_gst   += row['gst']
-        month_net   += row['net']
+        month_gross      += row['gross']
+        month_gst        += row['gst']
+        month_net        += row['net']
+        month_surcharge  += row['surcharge']
+        month_net_sale   += row['net_sale']
 
         writer.writerow([
             row['reference'],
@@ -389,11 +409,11 @@ def sales_csv():
             row['customer_name'],
             f"{row['gross']:.2f}",
             f"{row['gst']:.2f}",
-            f"{row['net']:.2f}",
+            f"{row['surcharge']:.2f}" if row['surcharge'] else '',
+            f"{row['net_sale']:.2f}",
             row['status'].replace('_', ' ').title(),
         ])
 
-    # Final month subtotal
     if current_month:
         try:
             ml = datetime.strptime(current_month, '%Y-%m').strftime('%B %Y')
@@ -401,15 +421,15 @@ def sales_csv():
             ml = current_month
         writer.writerow(['', '', f'Subtotal {ml}', '',
                          f'{month_gross:.2f}', f'{month_gst:.2f}',
-                         f'{month_net:.2f}', ''])
+                         f'{month_surcharge:.2f}', f'{month_net_sale:.2f}', ''])
         writer.writerow([])
 
-    # Grand total
     totals = _grand_totals(rows)
     writer.writerow(['', '', 'GRAND TOTAL', f"{totals['count']} jobs",
                      f"{totals['gross']:.2f}",
                      f"{totals['gst']:.2f}",
-                     f"{totals['net']:.2f}", ''])
+                     f"{totals['surcharge']:.2f}",
+                     f"{totals['net_sale']:.2f}", ''])
 
     fname = f"sales_report_{date_from}_to_{date_to}.csv"
     response = make_response(buf.getvalue())

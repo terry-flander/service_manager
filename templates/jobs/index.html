@@ -212,6 +212,22 @@
           <span style="color:var(--sd-muted);">—</span>
           {% endif %}
         </td>
+        {% elif col_key == 'gst' %}
+        <td class="mono{{ hide_classes }}" style="text-align:right; font-size:0.82rem; color:var(--sd-muted);">
+          {% if job['gst'] %}${{ '%.2f'|format(job['gst']) }}{% else %}—{% endif %}
+        </td>
+        {% elif col_key == 'surcharge' %}
+        <td class="mono{{ hide_classes }}" style="text-align:right; font-size:0.82rem; color:var(--sd-muted);">
+          {% set sc = job['eftpos_surcharge'] if job['eftpos_surcharge'] and job['paid_date'] and job['paid_date'] >= '2026-10-01' else 0 %}
+          {% if sc %}-${{ '%.2f'|format(sc) }}{% else %}—{% endif %}
+        </td>
+        {% elif col_key == 'net_sale' %}
+        <td class="mono{{ hide_classes }}" style="text-align:right; font-size:0.85rem;">
+          {% if job['total'] %}
+            {% set sc = job['eftpos_surcharge'] if job['eftpos_surcharge'] and job['paid_date'] and job['paid_date'] >= '2026-10-01' else 0 %}
+            ${{ '%.2f'|format((job['total'] or 0) - (job['gst'] or 0) - sc) }}
+          {% else %}—{% endif %}
+        </td>
         {% endif %}
         {% endfor %}
       </tr>
