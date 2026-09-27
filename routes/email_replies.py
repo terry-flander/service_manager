@@ -466,12 +466,27 @@ def compose_reply(job_id):
 
 # ── Reply Modal API ────────────────────────────────────────────────────────────
 
+_JOB_TYPE_TEMPLATE_GROUPS = {
+    'booking':          ('booking', 'misc'),
+    'workshop':         ('shop', 'misc'),
+    'workshop_booking': ('shop', 'misc'),
+    'rental':           ('rental', 'misc'),
+    'sale_bike':        ('bike', 'misc'),
+}
+
 @email_replies_bp.route('/jobs/<int:job_id>/compose/templates')
 def compose_template_list(job_id):
-    """Return all email templates (id, name) for the reply modal dropdown."""
+    """Return email templates filtered by job type for the reply modal dropdown.
+    SMS group templates are always excluded."""
     with get_db() as conn:
+        job = conn.execute("SELECT job_type FROM jobs WHERE id=?", (job_id,)).fetchone()
+        job_type = job['job_type'] if job else 'booking'
+        allowed = _JOB_TYPE_TEMPLATE_GROUPS.get(job_type, ('misc',))
+        placeholders = ','.join('?' * len(allowed))
         rows = conn.execute(
-            "SELECT id, name FROM email_templates ORDER BY name").fetchall()
+            f"SELECT id, name, grp FROM email_templates "
+            f"WHERE grp IN ({placeholders}) ORDER BY grp, name",
+            allowed).fetchall()
     return jsonify([dict(r) for r in rows])
 
 

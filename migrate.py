@@ -641,8 +641,10 @@ _sms_seeds = [
 for name, body in _sms_seeds:
     try:
         conn.execute(
-            "INSERT OR IGNORE INTO email_templates (name, subject, body, grp) VALUES (?,?,?,?)",
-            (name, '', body, 'sms'))
+            "INSERT INTO email_templates (name, subject, body, grp) "
+            "SELECT ?,?,?,? WHERE NOT EXISTS "
+            "(SELECT 1 FROM email_templates WHERE name=? AND grp='sms')",
+            (name, '', body, 'sms', name))
     except Exception:
         pass
 conn.commit()

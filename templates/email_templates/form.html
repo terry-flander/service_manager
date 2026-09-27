@@ -65,9 +65,6 @@
 
           <div style="display:flex; justify-content:space-between; align-items:center;">
             {% if not is_new %}
-            <form id="del-form" method="post"
-                  action="{{ url_for('email_replies.delete_template', tmpl_id=tmpl_id) }}"
-                  style="display:none;"></form>
             <button type="button" class="btn-danger"
                     onclick="if(confirm('Delete this template?')) document.getElementById('del-form').submit()">
               <i class="bi bi-trash3"></i> Delete
@@ -84,6 +81,11 @@
             </div>
           </div>
         </form>
+        {% if not is_new %}
+        <form id="del-form" method="post"
+              action="{{ url_for('email_replies.delete_template', tmpl_id=tmpl_id) }}"
+              style="display:none;"></form>
+        {% endif %}
       </div>
     </div>
   </div>
