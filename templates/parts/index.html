@@ -59,7 +59,7 @@ var SUPPLIERS_LIST = [{ id: 0, name: '— None —' }{% for s in suppliers %}, {
           <th style="width:85px;">Type</th>
           <th style="width:70px; text-align:right;">On Hand</th>
           <th style="min-width:110px;">Supplier</th>
-          <th style="width:60px;"></th>
+          <th style="width:80px;"></th>
         </tr>
       </thead>
       <tbody>
@@ -106,7 +106,11 @@ var SUPPLIERS_LIST = [{ id: 0, name: '— None —' }{% for s in suppliers %}, {
               {{ part['supplier_name'] or '—' }}
             </span>
           </td>
-          <td>
+          <td style="white-space:nowrap;">
+            <a href="{{ url_for('parts.edit_part', part_id=part['id']) }}"
+               class="btn-ghost" style="padding:0.2rem 0.45rem; font-size:0.72rem;" title="Edit">
+              <i class="bi bi-pencil"></i>
+            </a>
             <a href="{{ url_for('parts.merge_part', part_id=part['id']) }}"
                class="btn-ghost" style="padding:0.2rem 0.45rem; font-size:0.72rem;" title="Merge">
               <i class="bi bi-arrow-left-right"></i>
