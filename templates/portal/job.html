@@ -282,8 +282,8 @@
               {% endif %}
             </td>
             <td class="r">{{ p['quantity']|int if p['quantity'] == p['quantity']|int else p['quantity'] }}</td>
-            <td class="r">${{ '%.2f'|format(p['unit_cost']) }}</td>
-            <td class="r">${{ '%.2f'|format(p['quantity'] * p['unit_cost']) }}</td>
+            <td class="r">${{ '%.2f'|format(p['unit_price'] if p['unit_price'] else p['unit_cost']) }}</td>
+            <td class="r">${{ '%.2f'|format(p['quantity'] * (p['unit_price'] if p['unit_price'] else p['unit_cost'])) }}</td>
           </tr>
           {% endfor %}
         </tbody>

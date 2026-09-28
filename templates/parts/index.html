@@ -51,7 +51,8 @@ var SUPPLIERS_LIST = [{ id: 0, name: '— None —' }{% for s in suppliers %}, {
         <tr>
           <th style="min-width:160px;">Name</th>
           <th style="min-width:110px;">Part Number</th>
-          <th style="width:85px; text-align:right;">Cost</th>
+          <th style="width:85px; text-align:right;">Buy Cost</th>
+          <th style="width:85px; text-align:right;">Sale Price</th>
           <th style="width:85px; text-align:right;">Avg Cost</th>
           <th style="width:75px; text-align:right;">Reorder Pt</th>
           <th style="width:75px; text-align:right;">Reorder Qty</th>
@@ -71,8 +72,13 @@ var SUPPLIERS_LIST = [{ id: 0, name: '— None —' }{% for s in suppliers %}, {
             <span class="ie mono" data-field="part_number" data-val="{{ part['part_number'] or '' }}">{{ part['part_number'] or '&#x2014;' }}</span>
           </td>
           <td style="text-align:right;">
-            <span class="ie mono" data-field="unit_cost" data-val="{{ '%.2f'|format(part['unit_cost']) }}" data-type="number">
-              ${{ '%.2f'|format(part['unit_cost']) }}
+            <span class="ie mono" data-field="unit_cost" data-val="{{ '%.2f'|format(part['unit_cost'] or 0) }}" data-type="number">
+              ${{ '%.2f'|format(part['unit_cost'] or 0) }}
+            </span>
+          </td>
+          <td style="text-align:right;">
+            <span class="ie mono" data-field="unit_price" data-val="{{ '%.2f'|format(part['unit_price'] or part['unit_cost'] or 0) }}" data-type="number">
+              ${{ '%.2f'|format(part['unit_price'] or part['unit_cost'] or 0) }}
             </span>
           </td>
           <td style="text-align:right;">

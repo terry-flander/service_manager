@@ -82,9 +82,12 @@ def new_part():
     if request.method == 'POST':
         with get_db() as conn:
             conn.execute(
-                "INSERT INTO parts (name, part_number, unit_cost, unit, active) VALUES (?, ?, ?, ?, 1)",
+                "INSERT INTO parts (name, part_number, unit_cost, unit, unit_price, price_uom, active) VALUES (?, ?, ?, ?, ?, ?, 1)",
                 (request.form['name'], request.form.get('part_number', ''),
-                 float(request.form['unit_cost']), request.form.get('unit', 'each')))
+                 float(request.form.get('unit_cost', 0) or 0),
+                 request.form.get('unit', 'each'),
+                 float(request.form.get('unit_price', 0) or 0),
+                 request.form.get('price_uom', 'each')))
             conn.commit()
         flash(f'Part "{request.form["name"]}" added to master list.', 'success')
         return redirect(url_for('parts.index'))
@@ -102,9 +105,12 @@ def edit_part(part_id):
         part_type = request.form.get('part_type', 'stock')
         with get_db() as conn:
             conn.execute(
-                "UPDATE parts SET name=?, part_number=?, unit_cost=?, unit=?, active=?, part_type=? WHERE id=?",
+                "UPDATE parts SET name=?, part_number=?, unit_cost=?, unit=?, unit_price=?, price_uom=?, active=?, part_type=? WHERE id=?",
                 (request.form['name'], request.form.get('part_number', ''),
-                 float(request.form['unit_cost']), request.form.get('unit', 'each'),
+                 float(request.form.get('unit_cost', 0) or 0),
+                 request.form.get('unit', 'each'),
+                 float(request.form.get('unit_price', 0) or 0),
+                 request.form.get('price_uom', 'each'),
                  active, part_type, part_id))
             conn.commit()
         flash('Part updated.', 'success')
@@ -150,7 +156,7 @@ def search():
     like = f'%{q}%'
     with get_db() as conn:
         parts = conn.execute("""
-            SELECT id, name, part_number, unit_cost
+            SELECT id, name, part_number, unit_cost, unit_price, price_uom
             FROM parts
             WHERE active = 1
               AND (name LIKE ? OR part_number LIKE ?)
@@ -166,7 +172,9 @@ def search():
         'name':        p['name'],
         'part_number': p['part_number'] or '',
         'unit_cost':   p['unit_cost'],
-        'label':       f"{p['name']}{' (' + p['part_number'] + ')' if p['part_number'] else ''} — ${p['unit_cost']:.2f}",
+        'unit_price':  p['unit_price'] if p['unit_price'] else p['unit_cost'],
+        'price_uom':   p['price_uom'] or 'each',
+        'label':       f"{p['name']}{' (' + p['part_number'] + ')' if p['part_number'] else ''} — ${(p['unit_price'] or p['unit_cost']):.2f}",
     } for p in parts])
 
 
@@ -174,18 +182,20 @@ def search():
 def quick_add():
     """Create a part quickly from the PO import popup. Returns JSON."""
     from flask import jsonify
-    name      = request.form.get('name', '').strip()
-    number    = request.form.get('part_number', '').strip() or None
-    cost      = float(request.form.get('unit_cost', 0) or 0)
-    part_type = request.form.get('part_type', 'stock')
+    name       = request.form.get('name', '').strip()
+    number     = request.form.get('part_number', '').strip() or None
+    cost       = float(request.form.get('unit_cost', 0) or 0)
+    price      = float(request.form.get('unit_price', 0) or 0)
+    price_uom  = request.form.get('price_uom', 'each')
+    part_type  = request.form.get('part_type', 'stock')
     if not name:
         return jsonify({'ok': False, 'error': 'Name is required'}), 400
     with get_db() as conn:
         try:
             conn.execute("""
-                INSERT INTO parts (name, part_number, unit_cost, unit, active, part_type)
-                VALUES (?, ?, ?, 'each', 1, ?)
-            """, (name, number, cost, part_type))
+                INSERT INTO parts (name, part_number, unit_cost, unit, unit_price, price_uom, active, part_type)
+                VALUES (?, ?, ?, 'each', ?, ?, 1, ?)
+            """, (name, number, cost, price or cost, price_uom, part_type))
             conn.commit()
             new_id = conn.execute(
                 "SELECT id FROM parts WHERE name=? ORDER BY id DESC LIMIT 1",
@@ -193,7 +203,8 @@ def quick_add():
         except Exception as e:
             return jsonify({'ok': False, 'error': str(e)}), 400
     return jsonify({'ok': True, 'id': new_id, 'name': name,
-                    'unit_cost': cost, 'part_number': number or ''})
+                    'unit_cost': cost, 'unit_price': price or cost,
+                    'part_number': number or ''})
 
 
 @parts_bp.route('/parts/<int:part_id>/reactivate', methods=['POST'])
@@ -228,11 +239,11 @@ def save_field(part_id):
     data  = request.get_json() or {}
     field = data.get('field')
     value = data.get('value')
-    allowed = {'name', 'part_number', 'unit_cost', 'part_type',
+    allowed = {'name', 'part_number', 'unit_cost', 'unit_price', 'part_type',
                'avg_cost_inc_gst', 'reorder_point', 'reorder_qty', 'supplier_id'}
     if field not in allowed:
         return jsonify({'ok': False, 'error': 'Invalid field'}), 400
-    numeric = {'unit_cost', 'avg_cost_inc_gst', 'reorder_point', 'reorder_qty'}
+    numeric = {'unit_cost', 'unit_price', 'avg_cost_inc_gst', 'reorder_point', 'reorder_qty'}
     with get_db() as conn:
         if field in numeric:
             v = float(value) if value not in (None, '') else 0

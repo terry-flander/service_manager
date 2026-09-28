@@ -61,7 +61,7 @@ TIME_LABELS = {
 def _load_service_types(conn, job_group=None):
     """Load active service types from DB for a given group.
     job_group: 'booking' | 'workshop' | None (returns all).
-    Returns list of dicts with id, code, label, part_id, part_name, unit_cost.
+    Returns list of dicts with id, code, label, part_id, part_name, unit_price.
     Falls back to hardcoded list if table missing."""
     try:
         where = "WHERE st.active=1"
@@ -71,7 +71,8 @@ def _load_service_types(conn, job_group=None):
             params.append(job_group)
         rows = conn.execute(f"""
             SELECT st.id, st.code, st.label, st.part_id, st.sort_order,
-                   st.job_group, p.name as part_name, p.unit_cost
+                   st.job_group, p.name as part_name,
+                   COALESCE(NULLIF(p.unit_price, 0), p.unit_cost, 0) as unit_price
             FROM service_types st
             LEFT JOIN parts p ON p.id = st.part_id
             {where}
@@ -83,7 +84,7 @@ def _load_service_types(conn, job_group=None):
         pass
     # Fallback labels only
     return [{'label': l, 'id': None, 'code': l.lower().replace(' ','_'),
-             'part_id': None, 'part_name': None, 'unit_cost': 0,
+             'part_id': None, 'part_name': None, 'unit_price': 0,
              'job_group': 'booking'}
             for l in ['General Service', 'eBike Service',
                       'Tribe/Cargo Bike Service', '3 or More Bikes', 'Other']]
@@ -284,7 +285,7 @@ def recalc_job_totals(conn, job_id):
         return
 
     parts = conn.execute(
-        "SELECT quantity, unit_cost FROM job_parts WHERE job_id=?",
+        "SELECT quantity, COALESCE(NULLIF(unit_price,0), unit_cost, 0) as unit_price FROM job_parts WHERE job_id=?",
         (job_id,)).fetchall()
 
     tax_raw   = job['tax_inclusive'] or 0
@@ -292,7 +293,7 @@ def recalc_job_totals(conn, job_id):
     is_exempt = (tax_raw == 2)
 
     if is_cash or is_exempt:
-        raw = round(sum(p['quantity'] * p['unit_cost'] for p in parts), 2)
+        raw = round(sum(p['quantity'] * p['unit_price'] for p in parts), 2)
         subtotal, gst, total = raw, 0.0, raw
     else:
         from routes.invoice import calc_totals
@@ -607,20 +608,22 @@ def new_job():
                             (stype, _group)).fetchone()
                         if st_row:
                             part = conn.execute(
-                                "SELECT id, name, part_number, unit_cost FROM parts "
-                                "WHERE id=? AND active=1", (st_row['part_id'],)).fetchone()
+                                "SELECT id, name, part_number, unit_cost, "
+                                "COALESCE(NULLIF(unit_price,0), unit_cost, 0) as unit_price "
+                                "FROM parts WHERE id=? AND active=1", (st_row['part_id'],)).fetchone()
                         else:
                             part = None
                         if part:
-                            if job_type == 'workshop' and part['unit_cost'] == 0:
+                            _price = part['unit_price'] if part['unit_price'] else part['unit_cost']
+                            if job_type == 'workshop' and _price == 0:
                                 continue
                             conn.execute(
                                 """INSERT INTO job_parts
                                     (job_id, part_id, description, part_number,
-                                     quantity, unit_cost)
-                                   VALUES (?, ?, ?, ?, 1, ?)""",
+                                     quantity, unit_cost, unit_price)
+                                   VALUES (?, ?, ?, ?, 1, ?, ?)""",
                                 (job_id, part['id'], part['name'],
-                                 part['part_number'] or '', part['unit_cost']))
+                                 part['part_number'] or '', _price, _price))
 
                     conn.commit()
                     recalc_job_totals(conn, job_id)
@@ -1089,7 +1092,7 @@ def update_part(job_id, jp_id):
     field = data.get('field')
     value = data.get('value')
 
-    if field not in ('quantity', 'unit_cost') or value is None:
+    if field not in ('quantity', 'unit_cost', 'unit_price') or value is None:
         return jsonify({'error': 'invalid field'}), 400
     try:
         value = float(value)
@@ -1102,7 +1105,7 @@ def update_part(job_id, jp_id):
             (value, jp_id, job_id))
         conn.commit()
         jp = conn.execute(
-            "SELECT quantity, unit_cost FROM job_parts WHERE id=?",
+            "SELECT quantity, COALESCE(NULLIF(unit_price,0), unit_cost, 0) as unit_price FROM job_parts WHERE id=?",
             (jp_id,)).fetchone()
         job_row = conn.execute(
             "SELECT tax_inclusive FROM jobs WHERE id=?", (job_id,)).fetchone()
@@ -1113,7 +1116,7 @@ def update_part(job_id, jp_id):
 
     return jsonify({
         'ok':          True,
-        'total':       round(jp['quantity'] * jp['unit_cost'], 2),
+        'total':       round(jp['quantity'] * jp['unit_price'], 2),
         'grand_total': round(grand, 2),
     })
 
@@ -1124,7 +1127,8 @@ def add_part(job_id):
     part_number = request.form.get('part_number', '').strip()
     description = request.form.get('description', '').strip()
     quantity    = float(request.form.get('quantity', 1) or 1)
-    unit_cost   = float(request.form.get('unit_cost', 0) or 0)
+    unit_price  = float(request.form.get('unit_price', 0) or 0)
+    unit_cost   = unit_price  # keep legacy field in sync
 
     # Part number is required in all cases
     if not part_number:
@@ -1140,36 +1144,38 @@ def add_part(job_id):
             if not part:
                 flash('Part not found.', 'danger')
                 return redirect(url_for('jobs.job_detail', job_id=job_id) + '#add-part-again')
+            _price = unit_price or (part['unit_price'] if part['unit_price'] else part['unit_cost'])
             conn.execute("""
-                INSERT INTO job_parts (job_id, part_id, description, part_number, quantity, unit_cost)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO job_parts (job_id, part_id, description, part_number, quantity, unit_cost, unit_price)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (job_id, part['id'],
                   description or part['name'],
                   part_number,           # use submitted value, not part['part_number']
                   quantity,
-                  unit_cost or part['unit_cost']))
+                  _price, _price))
             conn.commit()
             recalc_job_totals(conn, job_id)
     else:
         # New part — upsert into master parts table
         with get_db() as conn:
             conn.execute("""
-                INSERT INTO parts (name, part_number, unit_cost, unit, active, part_type)
-                VALUES (?, ?, ?, 'each', 1, 'ad_hoc')
+                INSERT INTO parts (name, part_number, unit_cost, unit_price, unit, active, part_type)
+                VALUES (?, ?, ?, ?, 'each', 1, 'ad_hoc')
                 ON CONFLICT(part_number) DO UPDATE SET
                     name=excluded.name,
                     unit_cost=excluded.unit_cost,
+                    unit_price=excluded.unit_price,
                     active=1
-            """, (description, part_number, unit_cost))
+            """, (description, part_number, unit_price, unit_price))
             conn.execute(
                 "UPDATE parts SET active=1 WHERE part_number=?", (part_number,))
             master_part_id = conn.execute(
                 "SELECT id FROM parts WHERE part_number=?",
                 (part_number,)).fetchone()['id']
             conn.execute("""
-                INSERT INTO job_parts (job_id, part_id, description, part_number, quantity, unit_cost)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (job_id, master_part_id, description, part_number, quantity, unit_cost))
+                INSERT INTO job_parts (job_id, part_id, description, part_number, quantity, unit_cost, unit_price)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (job_id, master_part_id, description, part_number, quantity, unit_price, unit_price))
             conn.commit()
             recalc_job_totals(conn, job_id)
 

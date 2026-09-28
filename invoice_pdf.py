@@ -215,7 +215,7 @@ def generate_invoice_pdf(job, job_parts, tax_inclusive, subtotal, gst, total, se
     else:
         for jp in job_parts:
             qty  = jp['quantity']
-            uc   = jp['unit_cost']
+            uc   = jp['unit_price'] if jp['unit_price'] else jp['unit_cost']
             line = qty * uc
             if gst == 0.0:
                 # Cash job — no GST, show raw prices as-is

@@ -425,9 +425,9 @@ function silentSave(callback) {
                          {% if st['label'] in current_svc %}checked{% endif %}
                          style="accent-color:var(--sd-accent); width:14px; height:14px;">
                   {{ st['label'] }}
-                  {% if st['unit_cost'] and st['unit_cost'] > 0 %}
+                  {% if st['unit_price'] and st['unit_price'] > 0 %}
                   <span style="font-size:0.75rem; color:var(--sd-muted);">
-                    ${{ '%.2f'|format(st['unit_cost']) }}
+                    ${{ '%.2f'|format(st['unit_price']) }}
                   </span>
                   {% endif %}
                 </label>
@@ -723,13 +723,14 @@ function silentSave(callback) {
             <th>Description</th>
             <th>Part #</th>
             <th style="text-align:right;">Qty</th>
-            <th style="text-align:right;">Unit Cost</th>
+            <th style="text-align:right;">Unit Price</th>
             <th style="text-align:right;">Total</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
           {% for jp in job_parts %}
+          {% set jp_price = jp['unit_price'] if jp['unit_price'] else jp['unit_cost'] %}
           <tr id="jp-row-{{ jp['id'] }}">
             <td>{{ jp['description'] }}</td>
             <td class="mono" style="font-size:0.78rem; color:var(--sd-muted);">{{ jp['part_number'] or '—' }}</td>
@@ -746,14 +747,14 @@ function silentSave(callback) {
               <input type="number"
                      class="jp-inline-input"
                      data-jp="{{ jp['id'] }}"
-                     data-field="unit_cost"
-                     value="{{ '%.2f'|format(jp['unit_cost']) }}"
+                     data-field="unit_price"
+                     value="{{ '%.2f'|format(jp_price) }}"
                      step="0.01"
                      style="width:5.5rem; text-align:right;">
             </td>
             <td class="mono" style="text-align:right; font-weight:600;"
                 id="jp-total-{{ jp['id'] }}">
-              ${{ '%.2f'|format(jp['quantity'] * jp['unit_cost']) }}
+              ${{ '%.2f'|format(jp['quantity'] * jp_price) }}
             </td>
             <td>
               <form method="post" action="{{ url_for('jobs.remove_part', job_id=job['id'], jp_id=jp['id']) }}">
@@ -889,8 +890,8 @@ function silentSave(callback) {
                  class="sd-input" value="1" min="0.01" step="any">
         </div>
         <div class="col-6 col-sm-4">
-          <label class="sd-label">Unit Cost ($)</label>
-          <input type="number" name="unit_cost" id="part-cost"
+          <label class="sd-label">Unit Price ($)</label>
+          <input type="number" name="unit_price" id="part-cost"
                  class="sd-input" value="0.00" step="0.01">
         </div>
       </div>
@@ -1491,7 +1492,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 : '') +
             '</span>' +
             '<span class="mono" style="font-size:0.82rem;color:var(--sd-accent);flex-shrink:0;">$' +
-              parseFloat(p.unit_cost).toFixed(2) + '</span>';
+              parseFloat(p.unit_price || p.unit_cost).toFixed(2) + '</span>';
           item.addEventListener('mousedown', function (e) { e.preventDefault(); selectPart(p); });
           // Touch: only select if finger didn't move (i.e. not scrolling)
           let touchStartY = 0;
@@ -1513,7 +1514,7 @@ document.addEventListener('DOMContentLoaded', function() {
     idH.value         = p.id;
     searchInput.value = p.name;
     pnum.value        = p.part_number || '';
-    cost.value        = parseFloat(p.unit_cost).toFixed(2);
+    cost.value        = parseFloat(p.unit_price || p.unit_cost).toFixed(2);
     qty.value         = '1';
     closeDropdown();
     qty.focus();
@@ -1672,7 +1673,7 @@ document.addEventListener('keydown', function (e) {
 
   function updateTotal(jpId) {
     const qtyInput  = document.querySelector(`.jp-inline-input[data-jp="${jpId}"][data-field="quantity"]`);
-    const costInput = document.querySelector(`.jp-inline-input[data-jp="${jpId}"][data-field="unit_cost"]`);
+    const costInput = document.querySelector(`.jp-inline-input[data-jp="${jpId}"][data-field="unit_price"]`);
     const totalCell = document.getElementById(`jp-total-${jpId}`);
     if (!qtyInput || !costInput || !totalCell) return;
     const total = parseFloat(qtyInput.value) * parseFloat(costInput.value);

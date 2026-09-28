@@ -22,13 +22,25 @@
               <input type="text" name="part_number" class="sd-input" placeholder="e.g. OF-001">
             </div>
             <div class="col-md-3">
-              <label class="sd-label">Unit Cost ($) *</label>
-              <input type="number" name="unit_cost" class="sd-input" required step="0.01" min="0" placeholder="0.00">
+              <label class="sd-label">Buy Cost ($) <span style="font-size:0.7rem; color:var(--sd-muted);">COGS</span></label>
+              <input type="number" name="unit_cost" class="sd-input" step="0.01" min="0" placeholder="0.00">
             </div>
             <div class="col-md-3">
-              <label class="sd-label">Unit</label>
+              <label class="sd-label">Buy UOM</label>
               <select name="unit" class="sd-input">
-                {% for u in ['each', 'litre', 'set', 'hour','day', 'metre', 'kg'] %}
+                {% for u in ['each', 'box', 'litre', 'set', 'hour', 'day', 'metre', 'kg'] %}
+                <option value="{{ u }}">{{ u }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="sd-label">Sale Price ($) *</label>
+              <input type="number" name="unit_price" class="sd-input" required step="0.01" min="0" placeholder="0.00">
+            </div>
+            <div class="col-md-3">
+              <label class="sd-label">Sale UOM</label>
+              <select name="price_uom" class="sd-input">
+                {% for u in ['each', 'litre', 'set', 'hour', 'day', 'metre', 'kg'] %}
                 <option value="{{ u }}">{{ u }}</option>
                 {% endfor %}
               </select>

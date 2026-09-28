@@ -130,9 +130,9 @@
                   <input type="checkbox" name="service_types" value="{{ st['label'] }}"
                          style="accent-color:var(--sd-accent); width:14px; height:14px;">
                   {{ st['label'] }}
-                  {% if st['unit_cost'] and st['unit_cost'] > 0 %}
+                  {% if st['unit_price'] and st['unit_price'] > 0 %}
                   <span style="font-size:0.75rem; color:var(--sd-muted);">
-                    ${{ '%.2f'|format(st['unit_cost']) }}
+                    ${{ '%.2f'|format(st['unit_price']) }}
                   </span>
                   {% endif %}
                 </label>
