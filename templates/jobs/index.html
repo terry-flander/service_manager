@@ -89,7 +89,7 @@
     <tbody>
       {% for job, total in jobs %}
       {% set detail_url = url_for('jobs.job_detail', job_id=job['id']) + '?from=jobs' %}
-      <tr style="cursor:pointer;" onclick="window.location='{{ detail_url }}'">
+      <tr style="cursor:pointer;" onclick="if(!event.target.closest('button'))window.location='{{ detail_url }}'">
         {% for col_key in all_columns %}
         {% set hide_classes =
             (' col-hide-landscape' if col_key not in columns_landscape else '') ~
@@ -190,8 +190,10 @@
         <td class="{{ hide_classes }}" style="text-align:center;">
           {% if job['customer_email'] %}
           <button type="button"
-                  onclick="openReplyModal({{ job['id'] }}, {{ job['customer_email']|tojson }}, {{ job['customer_name']|tojson }})"
-                  class="btn-ghost"
+                  class="btn-ghost js-thread-btn"
+                  data-job-id="{{ job['id'] }}"
+                  data-email="{{ job['customer_email'] }}"
+                  data-name="{{ job['customer_name'] }}"
                   style="padding:0.15rem 0.5rem; font-size:0.75rem;">
             <i class="bi bi-chat-left-text"></i>
           </button>
@@ -203,8 +205,10 @@
         <td class="{{ hide_classes }}" style="text-align:center;">
           {% if settings.sms_enabled == '1' and job['customer_phone'] %}
           <button type="button"
-                  onclick="openListSmsModal({{ job['id'] }}, {{ job['customer_phone']|tojson }}, {{ job['customer_name']|tojson }})"
-                  class="btn-ghost"
+                  class="btn-ghost js-sms-btn"
+                  data-job-id="{{ job['id'] }}"
+                  data-phone="{{ job['customer_phone'] }}"
+                  data-name="{{ job['customer_name'] }}"
                   style="padding:0.15rem 0.5rem; font-size:0.75rem;">
             <i class="bi bi-phone"></i>
           </button>
@@ -218,7 +222,7 @@
         </td>
         {% elif col_key == 'surcharge' %}
         <td class="mono{{ hide_classes }}" style="text-align:right; font-size:0.82rem; color:var(--sd-muted);">
-          {% set sc = job['eftpos_surcharge'] if job['eftpos_surcharge'] and job['paid_date'] and job['paid_date'] >= '2026-10-01' else 0 %}
+          {% set sc = job['eftpos_surcharge'] or 0 %}
           {% if sc %}-${{ '%.2f'|format(sc) }}{% else %}—{% endif %}
         </td>
         {% elif col_key == 'net_sale' %}
@@ -260,6 +264,21 @@ document.addEventListener('DOMContentLoaded', function () {
   populateSavedQueryDropdown(currentQueryId, 'saved-query-select');
   document.getElementById('saved-query-select').addEventListener('change', function () {
     window.onQuerySelected(this.value);
+  });
+
+  // Thread and SMS buttons — delegated to avoid tojson quoting inside onclick=""
+  document.addEventListener('click', function (e) {
+    var tb = e.target.closest('.js-thread-btn');
+    if (tb) {
+      e.stopPropagation();
+      openReplyModal(parseInt(tb.dataset.jobId), tb.dataset.email, tb.dataset.name);
+      return;
+    }
+    var sb = e.target.closest('.js-sms-btn');
+    if (sb) {
+      e.stopPropagation();
+      openListSmsModal(parseInt(sb.dataset.jobId), sb.dataset.phone, sb.dataset.name);
+    }
   });
 });
 

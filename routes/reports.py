@@ -135,12 +135,13 @@ def _get_report_data(date_from, date_to, job_types, show_cash=False, sort_by='pa
         rows = []
         for job in jobs:
             paid = job['paid_date'] or ''
-            # Surcharge borne by business from 01/10/2026 onwards
-            surcharge = float(job['surcharge'] or 0) if paid >= SURCHARGE_CUTOFF else 0.0
+            # Always display the surcharge amount; only deduct from Net from 01/10/2026
+            surcharge = float(job['surcharge'] or 0)
             gross   = float(job['total'] or 0)
             gst     = float(job['gst'] or 0)
-            # Net sale = payment minus GST minus surcharge (business cost)
-            net_sale = gross - gst - surcharge
+            # Net sale = payment minus GST minus surcharge (business cost from cutoff)
+            sc_deduct = surcharge if paid >= SURCHARGE_CUTOFF else 0.0
+            net_sale = gross - gst - sc_deduct
             rows.append({
                 'id':             job['id'],
                 'reference':      job['reference'],

@@ -2280,17 +2280,24 @@ def change_type(job_id):
     for _attempt in range(5):
         with get_db() as conn:
             job = conn.execute(
-                "SELECT job_type, reference FROM jobs WHERE id=?",
+                "SELECT job_type, reference, gcal_event_id FROM jobs WHERE id=?",
                 (job_id,)).fetchone()
             if not job:
                 return jsonify({'ok': False, 'error': 'Job not found'}), 404
             if job['job_type'] == new_type:
                 return jsonify({'ok': True, 'job_id': job_id,
                                 'reference': job['reference']})
+            # Delete any existing GCal event — do not create a new one automatically
+            if job['gcal_event_id']:
+                try:
+                    from gcal_sync import delete_calendar_event
+                    delete_calendar_event(job['gcal_event_id'])
+                except Exception:
+                    pass
             new_ref = generate_reference(new_type, conn)
             try:
                 conn.execute(
-                    "UPDATE jobs SET job_type=?, reference=? WHERE id=?",
+                    "UPDATE jobs SET job_type=?, reference=?, gcal_event_id=NULL WHERE id=?",
                     (new_type, new_ref, job_id))
                 conn.commit()
                 return jsonify({'ok': True, 'job_id': job_id,
