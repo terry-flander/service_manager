@@ -44,6 +44,22 @@ with get_db() as conn:
     except: pass
     try: conn.execute('ALTER TABLE jobs ADD COLUMN portal_token TEXT')
     except: pass
+    # ── parts: sale price and sale UOM (must precede recalc_job_totals backfill) ─
+    try: conn.execute("ALTER TABLE parts ADD COLUMN unit_price REAL DEFAULT 0.0")
+    except: pass
+    try: conn.execute("ALTER TABLE parts ADD COLUMN price_uom TEXT DEFAULT 'each'")
+    except: pass
+    conn.execute("""
+        UPDATE parts SET unit_price = unit_cost
+        WHERE (unit_price IS NULL OR unit_price = 0) AND unit_cost > 0
+    """)
+    # ── job_parts: unit_price (must precede recalc_job_totals backfill) ─────────
+    try: conn.execute("ALTER TABLE job_parts ADD COLUMN unit_price REAL DEFAULT 0.0")
+    except: pass
+    conn.execute("""
+        UPDATE job_parts SET unit_price = unit_cost
+        WHERE (unit_price IS NULL OR unit_price = 0) AND unit_cost > 0
+    """)
     try:
         conn.execute('''CREATE TABLE IF NOT EXISTS job_status_triggers (
             id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -649,42 +665,6 @@ for name, body in _sms_seeds:
         pass
 conn.commit()
 print("SMS settings and templates seeded.")
-
-# ── parts: unit_price (sale price) and price_uom (sale UOM) ─────────────────
-for col, defn in [
-    ('unit_price', 'REAL DEFAULT 0.0'),
-    ('price_uom',  "TEXT DEFAULT 'each'"),
-]:
-    try:
-        conn.execute(f'ALTER TABLE parts ADD COLUMN {col} {defn}')
-        conn.commit()
-        print(f"parts.{col} added.")
-    except Exception:
-        pass  # already exists
-
-# Seed unit_price from unit_cost where unit_price is 0 (first run only)
-conn.execute("""
-    UPDATE parts SET unit_price = unit_cost
-    WHERE (unit_price IS NULL OR unit_price = 0) AND unit_cost > 0
-""")
-conn.commit()
-print("parts.unit_price seeded from unit_cost where zero.")
-
-# ── job_parts: unit_price (customer-facing price replacing unit_cost label) ───
-try:
-    conn.execute('ALTER TABLE job_parts ADD COLUMN unit_price REAL DEFAULT 0.0')
-    conn.commit()
-    print("job_parts.unit_price added.")
-except Exception:
-    pass  # already exists
-
-# Seed job_parts.unit_price from unit_cost where unit_price is 0 (first run)
-conn.execute("""
-    UPDATE job_parts SET unit_price = unit_cost
-    WHERE (unit_price IS NULL OR unit_price = 0) AND unit_cost > 0
-""")
-conn.commit()
-print("job_parts.unit_price seeded from unit_cost where zero.")
 
 # ── Workshop booking tables ───────────────────────────────────────────────────
 try:
