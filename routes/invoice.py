@@ -12,7 +12,14 @@ def calc_totals(job_parts, tax_inclusive):
     tax_inclusive=False → prices are ex-GST. GST = subtotal * 0.10
     tax_inclusive=2     → GST Exempt: treat like inclusive for pricing but gst=0
     """
-    line_total = sum(jp['quantity'] * (jp['unit_price'] if jp['unit_price'] else jp['unit_cost']) for jp in job_parts)
+    def _price(jp):
+        keys = jp.keys()
+        if 'unit_price' in keys and jp['unit_price']:
+            return jp['unit_price']
+        if 'unit_cost' in keys and jp['unit_cost']:
+            return jp['unit_cost']
+        return 0.0
+    line_total = sum(jp['quantity'] * _price(jp) for jp in job_parts)
     if tax_inclusive == 2:          # GST Exempt — raw total, no GST
         return round(line_total, 2), 0.0, round(line_total, 2)
     if tax_inclusive:
