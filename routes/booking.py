@@ -241,6 +241,20 @@ def submit():
     return ok('Booking received.')
 
 
+@booking_bp.route('/booking/health', methods=['GET'], strict_slashes=False)
+def health():
+    """
+    Lightweight health-check for external monitors (UptimeRobot etc.).
+    Confirms the booking route is reachable and the secret is valid.
+    No DB writes, no email. Returns 200 {"ok": true} on success.
+    Usage: GET /booking/health?secret=<TFB_BOOKING_SECRET>
+    """
+    secret = request.args.get('secret', '')
+    if secret != TFB_SECRET:
+        return make_response(jsonify({'ok': False, 'message': 'Unauthorised.'}), 403)
+    return make_response(jsonify({'ok': True, 'message': 'Booking endpoint is healthy.'}), 200)
+
+
 # ── Email templates ──────────────────────────────────────────────────────────
 
 def _notification_text(name, email, phone, suburb, services,
