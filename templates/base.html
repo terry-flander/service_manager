@@ -476,8 +476,8 @@
     .status-complete    { background:var(--sc-complete-bg,rgba(16,185,129,0.15));    color:var(--sc-complete,#34d399); }
     .status-invoiced    { background:var(--sc-invoiced-bg,rgba(107,114,128,0.15));   color:var(--sc-invoiced,#9ca3af); }
     .status-paid        { background:var(--sc-paid-bg,rgba(16,185,129,0.18));        color:var(--sc-paid,#6ee7b7); }
-    .status-lost        { background:var(--sc-void-bg,rgba(239,68,68,0.12));         color:var(--sc-void,#fca5a5); }
-    .status-quote       { background:rgba(14,165,233,0.15);                           color:#38bdf8; }
+    .status-lost        { background:var(--sc-lost-bg,rgba(239,68,68,0.12));         color:var(--sc-lost,#fca5a5); }
+    .status-quote       { background:var(--sc-quote-bg,rgba(14,165,233,0.15));       color:var(--sc-quote,#38bdf8); }
 
     /* ── Buttons — min touch target 44px ── */
     .btn-accent {
@@ -602,6 +602,7 @@
     {% endfor %}
   }
   </style>
+  {{ status_css }}
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -756,8 +757,8 @@
         <a href="{{ url_for('email_replies.templates_index') }}" data-label="Email Templates" class="sidebar-link {% if request.endpoint and request.endpoint.startswith('email_replies.') %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
           <i class="bi bi-envelope-paper"></i> Email Templates
         </a>
-        <a href="{{ url_for('jobs.status_colors') }}" data-label="Status Colours" class="sidebar-link {% if request.endpoint == 'jobs.status_colors' %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
-          <i class="bi bi-palette"></i> Status Colours
+        <a href="{{ url_for('jobs.settings_job_statuses') }}" data-label="Job Statuses" class="sidebar-link {% if request.endpoint in ('jobs.settings_job_statuses', 'jobs.status_colors') %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
+          <i class="bi bi-palette"></i> Job Statuses
         </a>
         <a href="{{ url_for('jobs.settings_business') }}" data-label="Business Settings" class="sidebar-link {% if request.endpoint == 'jobs.settings_business' %}active{% endif %}" onclick="closeFlyouts();closeSidebar();" style="padding-left:2rem;">
           <i class="bi bi-building"></i> Business Settings
@@ -1945,15 +1946,8 @@ const JOB_TYPE_CHOICES = {{ (JOB_TYPES or {})|tojson }};
 const _JOB_TYPE_PAIRS = Object.entries(JOB_TYPE_CHOICES).map(function(e) {
   return [e[0], (e[1] && e[1].label) ? e[1].label : e[0]];
 });
-const STATUS_CHOICES = [
-  ['pending',     'Pending'],
-  ['scheduled',   'Scheduled'],
-  ['in_progress', 'In Progress'],
-  ['complete',    'Complete'],
-  ['invoiced',    'Invoiced'],
-  ['paid',        'Paid'],
-  ['lost',        'Lost'],
-];
+// From Settings → Job Statuses (falls back to the built-in list)
+const STATUS_CHOICES = {{ (job_status_choices or [])|tojson }};
 const PAYMENT_TYPE_CHOICES = ['EFTPOS', 'Cash', 'Transfer', 'VISA', 'MASTERCARD', 'AMEX'];
 const SORT_FIELD_CHOICES = [
   ['', '— None —'],
@@ -2749,7 +2743,7 @@ function saveColumnSet() {
   <div class="sb-flyout-title">Admin</div>
   <a href="{{ url_for('auth.users') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-people"></i> Users</a>
   <a href="{{ url_for('email_replies.templates_index') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-envelope-paper"></i> Email Templates</a>
-  <a href="{{ url_for('jobs.status_colors') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-palette"></i> Status Colours</a>
+  <a href="{{ url_for('jobs.settings_job_statuses') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-palette"></i> Job Statuses</a>
   <a href="{{ url_for('jobs.calendar_settings') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-calendar-check"></i> Calendar Sync</a>
   <a href="{{ url_for('jobs.feedback_settings') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-star"></i> Feedback Settings</a>
   <a href="{{ url_for('jobs.status_triggers') }}" class="flyout-link" onclick="closeFlyouts();"><i class="bi bi-envelope-check"></i> Status Triggers</a>

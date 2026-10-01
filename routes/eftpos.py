@@ -7,7 +7,7 @@ Routes:
   POST     /eftpos/unmatch/<id>    — unlink a reconciliation
 """
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify
-from models import get_db
+from models import get_db, status_sql_list
 from datetime import datetime
 import csv, io
 
@@ -155,7 +155,7 @@ def _candidate_query(conn, txn_date, amount, limit=10):
     Exact match requires same date AND same amount.
     Already-reconciled paid jobs are included (for split payments) with is_reconciled=1.
     """
-    rows = conn.execute("""
+    rows = conn.execute(f"""
         SELECT j.id, j.reference, j.customer_name, j.paid_date,
                j.amount_paid, j.payment_type, j.status, j.job_type,
                CASE WHEN j.reconciled_eftpos IS NOT NULL THEN 1 ELSE 0 END as is_reconciled,
@@ -167,7 +167,7 @@ def _candidate_query(conn, txn_date, amount, limit=10):
                  ELSE 'near'
                END as match_type
         FROM jobs j
-        WHERE j.status = 'paid'
+        WHERE j.status IN ({status_sql_list('paid', conn=conn)})
           AND j.payment_type IN ('EFTPOS','VISA','MASTERCARD','AMEX')
           AND j.paid_date BETWEEN date(?, '-7 days') AND date(?, '+28 days')
         ORDER BY

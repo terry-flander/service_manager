@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
-from models import get_db
+from models import get_db, status_sql_list, status_has_meaning
 from datetime import date
 import secrets
 import logging
@@ -423,15 +423,15 @@ def index():
         if saved_query is not None:
             statuses_selected = saved_query.get('statuses') or []
             if not statuses_selected:
-                query += " AND j.status != 'lost'"
+                query += f" AND j.status NOT IN ({status_sql_list('lost', conn=conn)})"
             frag, frag_params = resolve_query_filters(saved_query, table_alias='j',
                                                        date_column='j.scheduled_date')
             if frag:
                 query += " AND " + frag
                 params.extend(frag_params)
         else:
-            if job_type != 'lost' and status != 'lost':
-                query += " AND j.status != 'lost'"
+            if job_type != 'lost' and not status_has_meaning(status, 'lost', conn):
+                query += f" AND j.status NOT IN ({status_sql_list('lost', conn=conn)})"
             if status:
                 query += " AND j.status = ?"
                 params.append(status)
@@ -730,7 +730,7 @@ def job_detail(job_id):
 
         add_to_calendar = 1 if request.form.get('add_to_calendar') else 0
         # Never keep a lost job on the calendar
-        if new_status == 'lost':
+        if status_has_meaning(new_status, 'lost'):
             add_to_calendar = 0
         referral_source = request.form.get('referral_source', '').strip() or None
 
@@ -1934,40 +1934,134 @@ def settings_business():
 
 @jobs_bp.route('/settings/status-colors', methods=['GET', 'POST'])
 def status_colors():
-    """Admin page to configure per-status badge colours."""
-    statuses = ['pending', 'scheduled', 'in_progress', 'complete',
-                'invoiced', 'paid', 'lost']
-    defaults = {
-        'pending':     '#f59e0b',
-        'scheduled':   '#3b82f6',
-        'in_progress': '#8b5cf6',
-        'complete':    '#10b981',
-        'invoiced':    '#6b7280',
-        'paid':        '#10b981',
-        'lost':        '#ef4444',
-    }
-    if request.method == 'POST':
-        with get_db() as conn:
-            for s in statuses:
-                color = request.form.get(f'color_{s}', defaults[s]).strip()
-                conn.execute(
-                    "INSERT INTO settings (key,value) VALUES (?,?) "
-                    "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                    (f'status_color_{s}', color))
-            conn.commit()
-        flash('Status colours saved.', 'success')
-        return redirect(url_for('jobs.status_colors'))
+    """Old Status Colours page — colours now live on Job Statuses."""
+    return redirect(url_for('jobs.settings_job_statuses'))
+
+
+# Codes the app itself writes (Quick Pay, Xero sync, mechanic view, new jobs).
+# They can be relabelled/recoloured but not deactivated.
+_SYSTEM_WRITTEN_STATUSES = ('pending', 'in_progress', 'complete', 'invoiced', 'paid')
+
+
+@jobs_bp.route('/settings/job-statuses', methods=['GET', 'POST'])
+def settings_job_statuses():
+    """Admin page: labels, colours, order, job-type scope and special
+    meanings for job statuses. The job_statuses table starts empty (app uses
+    built-in defaults); the first save seeds it."""
+    import re as _re
+    from models import (get_job_statuses, seed_job_statuses, job_statuses_customised,
+                        clear_job_status_cache, STATUS_MEANINGS, STATUS_MEANING_LABELS,
+                        STATUS_CODE_RE, BUILTIN_STATUS_CODES)
+    from flask import session as _sess
+    if _sess.get('user_role') != 'admin':
+        flash('Administrator access required.', 'danger')
+        return redirect(url_for('jobs.index'))
+
+    hex_re = _re.compile(r'^#[0-9a-fA-F]{6}$')
+    job_type_keys = list(_JT().keys())
 
     with get_db() as conn:
-        colors_map = {}
-        for s in statuses:
-            row = conn.execute(
-                "SELECT value FROM settings WHERE key=?",
-                (f'status_color_{s}',)).fetchone()
-            colors_map[s] = row['value'] if row else defaults[s]
-    return render_template('jobs/status_colors.html',
-                           statuses=statuses, colors_map=colors_map,
-                           defaults=defaults)
+        if request.method == 'POST':
+            action = request.form.get('action', 'save')
+
+            if action == 'reset':
+                in_use = conn.execute(
+                    "SELECT status, COUNT(*) n FROM jobs WHERE status NOT IN (%s) "
+                    "GROUP BY status" % ','.join('?' * len(BUILTIN_STATUS_CODES)),
+                    BUILTIN_STATUS_CODES).fetchall()
+                if in_use:
+                    flash('Can\'t revert: jobs still use custom statuses ('
+                          + ', '.join(f"{r['status']} ×{r['n']}" for r in in_use)
+                          + '). Move those jobs to another status first.', 'danger')
+                else:
+                    conn.execute("DELETE FROM job_statuses")
+                    conn.commit()
+                    clear_job_status_cache()
+                    flash('Reverted to built-in statuses.', 'success')
+                return redirect(url_for('jobs.settings_job_statuses'))
+
+            seed_job_statuses(conn)  # no-op once customised
+
+            if action == 'add':
+                code    = request.form.get('code', '').strip().lower().replace(' ', '_')
+                label   = request.form.get('label', '').strip()
+                meaning = request.form.get('special_meaning', '').strip() or None
+                color   = request.form.get('badge_color', '').strip()
+                jts     = [j for j in request.form.getlist('job_types') if j in job_type_keys]
+                if not STATUS_CODE_RE.match(code):
+                    flash('Code must start with a letter and use only lowercase '
+                          'letters, numbers and underscores (max 31).', 'danger')
+                elif not label:
+                    flash('Label is required.', 'danger')
+                elif meaning and meaning not in STATUS_MEANINGS:
+                    flash('Unknown special meaning.', 'danger')
+                elif conn.execute("SELECT 1 FROM job_statuses WHERE code=?", (code,)).fetchone():
+                    flash(f'Status code "{code}" already exists.', 'danger')
+                else:
+                    max_sort = conn.execute(
+                        "SELECT COALESCE(MAX(sort_order),0) FROM job_statuses").fetchone()[0]
+                    conn.execute("""
+                        INSERT INTO job_statuses
+                            (code, label, job_types, sort_order, badge_color,
+                             special_meaning, builtin, active)
+                        VALUES (?,?,?,?,?,?,0,1)
+                    """, (code, label, ','.join(jts) or None, max_sort + 1,
+                          color if hex_re.match(color) else None, meaning))
+                    conn.commit()
+                    flash(f'Status "{label}" added.', 'success')
+                clear_job_status_cache()
+                return redirect(url_for('jobs.settings_job_statuses'))
+
+            # action == 'save': update every row from the table form
+            rows = conn.execute("SELECT * FROM job_statuses").fetchall()
+            for r in rows:
+                c = r['code']
+                if f'label_{c}' not in request.form:
+                    continue
+                label = request.form.get(f'label_{c}', '').strip() or r['label']
+                try:
+                    sort = int(request.form.get(f'sort_{c}', r['sort_order']))
+                except ValueError:
+                    sort = r['sort_order']
+                color = request.form.get(f'color_{c}', '').strip()
+                color = color if hex_re.match(color) else r['badge_color']
+                jts = [j for j in request.form.getlist(f'job_types_{c}') if j in job_type_keys]
+                # "All types" when every box (or none) is ticked
+                jt_val = None if (not jts or set(jts) == set(job_type_keys)) else ','.join(jts)
+                active = 1 if request.form.get(f'active_{c}') else 0
+                if c in _SYSTEM_WRITTEN_STATUSES:
+                    active = 1
+                if r['builtin']:
+                    meaning = r['special_meaning']        # locked for built-ins
+                else:
+                    meaning = request.form.get(f'meaning_{c}', '').strip() or None
+                    if meaning not in STATUS_MEANINGS:
+                        meaning = None
+                conn.execute("""
+                    UPDATE job_statuses
+                    SET label=?, sort_order=?, badge_color=?, job_types=?,
+                        special_meaning=?, active=?
+                    WHERE id=?
+                """, (label, sort, color, jt_val, meaning, active, r['id']))
+            conn.commit()
+            clear_job_status_cache()
+            flash('Job statuses saved.', 'success')
+            return redirect(url_for('jobs.settings_job_statuses'))
+
+        statuses = get_job_statuses(conn, include_inactive=True)
+        customised = job_statuses_customised(conn)
+        counts = {r['status']: r['n'] for r in conn.execute(
+            "SELECT status, COUNT(*) n FROM jobs GROUP BY status").fetchall()}
+        known = {s['code'] for s in statuses}
+        orphans = {k: v for k, v in counts.items() if k and k not in known}
+
+    return render_template('jobs/settings_job_statuses.html',
+                           statuses=statuses, customised=customised,
+                           counts=counts, orphans=orphans,
+                           job_types=_JT(),
+                           meanings=STATUS_MEANINGS,
+                           meaning_labels=STATUS_MEANING_LABELS,
+                           system_written=_SYSTEM_WRITTEN_STATUSES)
 
 
 @jobs_bp.route('/settings/calendar-sync', methods=['GET', 'POST'])
@@ -2117,12 +2211,12 @@ def push_to_xero(job_id):
 def xero_check_payments():
     """Check all jobs with xero_status='sent' against Xero payment status."""
     with get_db() as conn:
-        rows = conn.execute("""
+        rows = conn.execute(f"""
             SELECT id, invoice_number, xero_invoice_id
             FROM jobs
             WHERE invoice_number IS NOT NULL
               AND xero_invoice_id IS NOT NULL
-              AND status = 'invoiced'
+              AND status IN ({status_sql_list('invoiced', conn=conn)})
         """).fetchall()
 
     if not rows:
@@ -2174,8 +2268,8 @@ def xero_check_payments():
 def status_triggers():
     """Admin page to configure automatic email triggers per job type and status."""
     JOB_TYPES_LIST  = list(_JT().keys())
-    STATUS_LIST = ['pending', 'scheduled', 'in_progress', 'quote',
-                   'complete', 'invoiced', 'paid', 'lost']
+    from models import get_job_statuses
+    STATUS_LIST = [s['code'] for s in get_job_statuses()]
     with get_db() as conn:
         if request.method == 'POST':
             action = request.form.get('action')

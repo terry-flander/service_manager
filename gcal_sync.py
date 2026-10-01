@@ -81,7 +81,7 @@ def _base_url():
 
 
 # Google Calendar's fixed event colour palette — hex must match
-# templates/jobs/status_colors.html exactly.
+# templates/jobs/settings_job_statuses.html exactly.
 GCAL_COLOR_IDS = {
     '#7986cb': '1',   # Lavender
     '#33b679': '2',   # Sage
@@ -106,14 +106,11 @@ def _color_id_for_status(status):
     Google's numeric colorId. Returns None if no match (job keeps
     Google's default colour rather than failing the whole sync)."""
     try:
-        from models import get_db
-        with get_db() as conn:
-            row = conn.execute(
-                "SELECT value FROM settings WHERE key=?",
-                (f'status_color_{status}',)).fetchone()
-        if not row:
+        from models import status_colors_map
+        hex_ = status_colors_map().get(status)
+        if not hex_:
             return None
-        return GCAL_COLOR_IDS.get(row['value'].strip().lower())
+        return GCAL_COLOR_IDS.get(hex_.strip().lower())
     except Exception as e:
         log.error(f"Could not resolve colour for status '{status}': {e}")
         return None

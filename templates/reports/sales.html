@@ -110,7 +110,7 @@
             {{ row['scheduled_date']|fmt_date('dmy') if row['scheduled_date'] else '—' }}
           </td>
           <td class="mono" style="font-size:0.82rem; white-space:nowrap;">
-            {% if row['status'] == 'paid' and row['paid_date'] %}{{ row['paid_date']|fmt_date('dmy') }}{% else %}—{% endif %}
+            {% if row['paid_date'] and status_is(row['status'], 'paid') %}{{ row['paid_date']|fmt_date('dmy') }}{% else %}—{% endif %}
           </td>
           <td>
             <a href="{{ url_for('jobs.job_detail', job_id=row['id']) }}"
@@ -138,7 +138,7 @@
           <td style="font-size:0.82rem;">{{ row['payment_type'] or '—' }}</td>
           <td>
             <span class="badge-status status-{{ row['status'] }}">
-              {{ row['status']|replace('_',' ') }}
+              {{ row['status']|status_label }}
             </span>
           </td>
         </tr>

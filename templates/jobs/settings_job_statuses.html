@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% block title %}Job Statuses{% endblock %}
+{% block topbar_title %}Job Statuses{% endblock %}
+
+{% block head %}
+<style>
+.js-row {
+  background: var(--sd-surface2); border: 1px solid var(--sd-border);
+  border-radius: 8px; padding: 1rem 1.1rem; margin-bottom: 0.75rem;
+}
+.js-row.inactive { opacity: 0.55; }
+.js-top { display: grid; grid-template-columns: 110px 1fr 70px 200px 80px; gap: 0.75rem; align-items: end; }
+@media (max-width: 767px) { .js-top { grid-template-columns: 1fr 1fr; } }
+.js-meta { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; align-items: center;
+           margin-top: 0.75rem; font-size: 0.78rem; color: var(--sd-muted); }
+.js-jt label { display: inline-flex; align-items: center; gap: 0.3rem; margin-right: 0.6rem; cursor: pointer; }
+.js-pill { display:inline-block; padding:0.1rem 0.45rem; border-radius:4px; font-size:0.68rem;
+           border:1px solid var(--sd-border); color:var(--sd-muted); }
+.js-pill.meaning { border-color: var(--sd-accent); color: var(--sd-accent); }
+
+/* GCal palette picker — same palette as the old Status Colours page so
+   statuses still map to Google Calendar event colours. */
+.gcal-color-trigger { display:flex; align-items:center; gap:0.6rem;
+  background: var(--sd-input-bg, rgba(255,255,255,0.04)); border:1px solid var(--sd-border);
+  border-radius:6px; padding:0.45rem 0.7rem; cursor:pointer; font-size:0.85rem; color:var(--sd-text); }
+.gcal-color-trigger:hover { border-color: var(--sd-accent); }
+.gcal-color-swatch { width:16px; height:16px; border-radius:50%; flex-shrink:0; border:1px solid rgba(255,255,255,0.25); }
+.gcal-color-name { flex:1; }
+.gcal-color-popover { display:none; position:absolute; top:calc(100% + 4px); left:0; background:var(--sd-surface);
+  border:1px solid var(--sd-border); border-radius:8px; box-shadow:0 6px 20px rgba(0,0,0,0.4);
+  z-index:50; width:200px; max-height:280px; overflow-y:auto; padding:0.3rem; }
+.gcal-color-popover.open { display:block; }
+.gcal-color-option { display:flex; align-items:center; gap:0.6rem; padding:0.4rem 0.6rem; border-radius:6px; cursor:pointer; font-size:0.85rem; }
+.gcal-color-option:hover { background: rgba(255,255,255,0.06); }
+</style>
+{% endblock %}
+
+{% set gcal_colors = [
+  ('Lavender',  '#7986cb'), ('Sage',      '#33b679'), ('Grape',     '#8e24aa'),
+  ('Flamingo',  '#e67c73'), ('Banana',    '#f6bf26'), ('Tangerine', '#f4511e'),
+  ('Peacock',   '#039be5'), ('Graphite',  '#616161'), ('Blueberry', '#3f51b5'),
+  ('Basil',     '#0b8043'), ('Tomato',    '#d50000'),
+] %}
+
+{% macro color_picker(field, current) %}
+  {% set cur = (current or '')|lower %}
+  {% set ns = namespace(name='Default') %}
+  {% for cname, chex in gcal_colors %}{% if chex == cur %}{% set ns.name = cname %}{% endif %}{% endfor %}
+  <div style="position:relative;">
+    <input type="hidden" name="{{ field }}" id="ci-{{ field }}" value="{{ cur }}">
+    <div class="gcal-color-trigger" onclick="toggleColorPopover('{{ field }}', event)">
+      <span class="gcal-color-swatch" id="cs-{{ field }}" style="background:{{ cur or '#94a3b8' }};"></span>
+      <span class="gcal-color-name" id="cn-{{ field }}">{{ ns.name }}</span>
+      <i class="bi bi-chevron-down" style="font-size:0.7rem; color:var(--sd-muted);"></i>
+    </div>
+    <div class="gcal-color-popover" id="cp-{{ field }}">
+      {% for cname, chex in gcal_colors %}
+      <div class="gcal-color-option" onclick="selectColor('{{ field }}', '{{ chex }}', '{{ cname }}')">
+        <span class="gcal-color-swatch" style="background:{{ chex }};"></span><span>{{ cname }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+{% endmacro %}
+
+{% block content %}
+<div class="sd-card" style="max-width:960px; margin:1.5rem auto;">
+  <div class="sd-card-header">
+    <span><i class="bi bi-palette" style="color:var(--sd-accent);"></i> Job Statuses</span>
+    <span style="font-size:0.78rem; color:var(--sd-muted);">
+      {% if customised %}Custom statuses active{% else %}Using built-in statuses{% endif %}
+    </span>
+  </div>
+  <div style="padding:1.25rem 1.5rem;">
+
+    {% with msgs = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in msgs %}
+        <div class="alert alert-{{ cat }}" style="margin-bottom:1rem;">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <p style="font-size:0.82rem; color:var(--sd-muted); margin-bottom:1rem;">
+      Rename, recolour, reorder and limit statuses to particular job types. The
+      <strong>code</strong> is what's stored on each job and can't be changed.
+      Colours use Google Calendar's palette so calendar events match.
+      {% if not customised %}
+      <br>You're on the built-in list. Saving this page (or adding a status) switches to
+      your own copy of it; <em>Revert</em> at the bottom switches back.
+      {% endif %}
+    </p>
+
+    {% if orphans %}
+    <div class="alert alert-warning" style="font-size:0.82rem;">
+      Some jobs carry status codes not in this list:
+      {% for code, n in orphans.items() %}<code>{{ code }}</code> ×{{ n }}{% if not loop.last %}, {% endif %}{% endfor %}.
+      They still display (grey badge) — add a status with the same code to label and colour them.
+    </div>
+    {% endif %}
+
+    <form method="post" id="statuses-form">
+      <input type="hidden" name="action" value="save">
+      {% for s in statuses %}
+      {% set c = s.code %}
+      <div class="js-row {% if not s.active %}inactive{% endif %}">
+        <div class="js-top">
+          <div>
+            <label class="sd-label">Code</label>
+            <span class="badge-status status-{{ c }}" style="display:block; text-align:center;">{{ c }}</span>
+          </div>
+          <div>
+            <label class="sd-label">Label</label>
+            <input type="text" name="label_{{ c }}" class="sd-input" value="{{ s.label }}" required>
+          </div>
+          <div>
+            <label class="sd-label">Order</label>
+            <input type="number" name="sort_{{ c }}" class="sd-input" value="{{ s.sort_order }}">
+          </div>
+          <div>
+            <label class="sd-label">Colour</label>
+            {{ color_picker('color_' ~ c, s.badge_color) }}
+          </div>
+          <div style="padding-bottom:0.5rem;">
+            {% if c in system_written %}
+              <input type="hidden" name="active_{{ c }}" value="1">
+              <span class="js-pill" title="Set automatically by the app — can't be switched off">system</span>
+            {% else %}
+              <label style="display:flex; align-items:center; gap:0.35rem; font-size:0.8rem; cursor:pointer;">
+                <input type="checkbox" name="active_{{ c }}" value="1" {% if s.active %}checked{% endif %}
+                       style="accent-color:var(--sd-accent);"> Active
+              </label>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="js-meta">
+          <span class="js-jt">
+            <span style="margin-right:0.4rem;">Job types:</span>
+            {% for jt_key, jt in job_types.items() %}
+            <label><input type="checkbox" name="job_types_{{ c }}" value="{{ jt_key }}"
+                   {% if not s.job_types or jt_key in s.job_types %}checked{% endif %}
+                   style="accent-color:var(--sd-accent);">{{ jt.label }}</label>
+            {% endfor %}
+          </span>
+        </div>
+        <div class="js-meta">
+          {% if s.builtin %}
+            {% if s.special_meaning %}
+              <span class="js-pill meaning" title="{{ meaning_labels[s.special_meaning] }}">
+                built-in · {{ s.special_meaning }}</span>
+            {% else %}
+              <span class="js-pill">built-in</span>
+            {% endif %}
+          {% else %}
+            <span>Treat as:</span>
+            <select name="meaning_{{ c }}" class="sd-input" style="width:auto; padding:0.25rem 0.5rem; font-size:0.78rem;">
+              <option value="">— nothing special —</option>
+              {% for m in meanings %}
+              <option value="{{ m }}" {% if s.special_meaning == m %}selected{% endif %}>{{ meaning_labels[m] }}</option>
+              {% endfor %}
+            </select>
+          {% endif %}
+          <span style="margin-left:auto;">{{ counts.get(c, 0) }} job{{ '' if counts.get(c, 0) == 1 else 's' }}</span>
+        </div>
+      </div>
+      {% endfor %}
+
+      <div style="display:flex; justify-content:flex-end; margin-top:1rem;">
+        <button type="submit" class="btn-accent"><i class="bi bi-check-lg"></i> Save Statuses</button>
+      </div>
+    </form>
+
+    <hr style="border-color:var(--sd-border); margin:1.5rem 0;">
+    <h3 style="font-size:0.78rem; text-transform:uppercase; letter-spacing:0.1em; color:var(--sd-muted); margin-bottom:1rem;">
+      Add Status</h3>
+    <form method="post" class="js-row" style="border-color:var(--sd-accent);">
+      <input type="hidden" name="action" value="add">
+      <div class="js-top" style="grid-template-columns:160px 1fr 200px;">
+        <div>
+          <label class="sd-label">Code</label>
+          <input type="text" name="code" class="sd-input" required pattern="[a-z][a-z0-9_]{0,30}"
+                 title="Lowercase letters, numbers and underscores; start with a letter"
+                 placeholder="e.g. awaiting_parts">
+        </div>
+        <div>
+          <label class="sd-label">Label</label>
+          <input type="text" name="label" class="sd-input" required placeholder="e.g. Awaiting Parts">
+        </div>
+        <div>
+          <label class="sd-label">Colour</label>
+          {{ color_picker('badge_color', '#616161') }}
+        </div>
+      </div>
+      <div class="js-meta">
+        <span class="js-jt">
+          <span style="margin-right:0.4rem;">Job types:</span>
+          {% for jt_key, jt in job_types.items() %}
+          <label><input type="checkbox" name="job_types" value="{{ jt_key }}" style="accent-color:var(--sd-accent);">{{ jt.label }}</label>
+          {% endfor %}
+          <span>(none ticked = all)</span>
+        </span>
+      </div>
+      <div class="js-meta">
+        <span>Treat as:</span>
+        <select name="special_meaning" class="sd-input" style="width:auto; padding:0.25rem 0.5rem; font-size:0.78rem;">
+          <option value="">— nothing special —</option>
+          {% for m in meanings %}<option value="{{ m }}">{{ meaning_labels[m] }}</option>{% endfor %}
+        </select>
+        <button type="submit" class="btn-accent" style="margin-left:auto;"><i class="bi bi-plus-lg"></i> Add Status</button>
+      </div>
+    </form>
+
+    <div style="margin-top:1rem; padding:1rem; background:var(--sd-surface2); border:1px solid var(--sd-border);
+                border-radius:8px; font-size:0.8rem; color:var(--sd-muted);">
+      <strong style="color:var(--sd-text);">"Treat as"</strong> lets a custom status behave like a built-in one.
+      For example <em>No Show</em> treated as <em>Lost</em> is hidden from the job list and calendar;
+      <em>Paid – Deposit</em> treated as <em>Paid</em> counts in the sales report and EFTPOS reconciliation.
+      Several statuses can share a meaning. Statuses are never deleted — untick <em>Active</em> to remove one
+      from the pickers; jobs that already have it keep displaying it.
+    </div>
+
+    {% if customised %}
+    <form method="post" style="margin-top:1rem; text-align:right;"
+          onsubmit="return confirm('Discard your changes and go back to the built-in statuses?');">
+      <input type="hidden" name="action" value="reset">
+      <button type="submit" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-counterclockwise"></i> Revert to built-in statuses</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleColorPopover(field, e) {
+  e.stopPropagation();
+  var pop = document.getElementById('cp-' + field);
+  var isOpen = pop.classList.contains('open');
+  document.querySelectorAll('.gcal-color-popover.open').forEach(function (p) { p.classList.remove('open'); });
+  if (!isOpen) pop.classList.add('open');
+}
+function selectColor(field, hex, name) {
+  document.getElementById('ci-' + field).value = hex;
+  document.getElementById('cs-' + field).style.background = hex;
+  document.getElementById('cn-' + field).textContent = name;
+  document.getElementById('cp-' + field).classList.remove('open');
+}
+document.addEventListener('click', function () {
+  document.querySelectorAll('.gcal-color-popover.open').forEach(function (p) { p.classList.remove('open'); });
+});
+</script>
+{% endblock %}

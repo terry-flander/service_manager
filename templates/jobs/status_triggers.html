@@ -31,7 +31,7 @@
             <td style="font-size:0.85rem;">{{ t['job_type']|title }}</td>
             <td>
               <span class="badge-status status-{{ t['trigger_status'] }}">
-                {{ t['trigger_status']|replace('_',' ') }}
+                {{ t['trigger_status']|status_label }}
               </span>
             </td>
             <td style="font-size:0.85rem;">{{ t['template_name'] or '— none —' }}</td>
@@ -91,7 +91,7 @@
             <select name="trigger_status" class="sd-input" required>
               <option value="">—</option>
               {% for s in statuses %}
-              <option value="{{ s }}">{{ s|replace('_',' ')|title }}</option>
+              <option value="{{ s }}">{{ s|status_label }}</option>
               {% endfor %}
             </select>
           </div>

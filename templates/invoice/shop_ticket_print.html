@@ -275,7 +275,7 @@
   </table>
 
   <div class="status-band">
-    {{ job['status']|upper|replace('_', ' ') }}
+    {{ (job['status']|status_label)|upper }}
   </div>
 
   <!-- JS fills remaining page height with blank rows before print -->

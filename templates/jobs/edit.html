@@ -155,7 +155,7 @@
               </select>
             </div>
 
-            {% set sched_locked = job['status'] in ('complete', 'invoiced') %}
+            {% set sched_locked = status_is(job['status'], 'complete', 'invoiced') %}
             <div class="col-md-3" id="date-col"
                  {% if job['job_type'] in ('workshop', 'rental', 'sale_bike') %}style="display:none;"{% endif %}>
               <label class="sd-label">
@@ -265,10 +265,10 @@
             <div class="col-md-4">
               <label class="sd-label">Status</label>
               <select name="status" class="sd-input">
-                {% for s in ['pending','scheduled','in_progress','complete','invoiced','paid','void'] %}
-                <option value="{{ s }}"
-                  {% if job['status'] == s %}selected{% endif %}>
-                  {{ s|replace('_',' ')|title }}
+                {% for s in statuses_for_job_type(job['job_type'], job['status']) %}
+                <option value="{{ s.code }}"
+                  {% if job['status'] == s.code %}selected{% endif %}>
+                  {{ s.label }}
                 </option>
                 {% endfor %}
               </select>

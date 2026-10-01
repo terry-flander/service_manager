@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
-from models import get_db
+from models import get_db, status_sql_list
 import csv, io
 
 regions_bp = Blueprint('regions', __name__)
@@ -714,7 +714,7 @@ def suburb_map_jobs():
         date_from = date_to = _d.today().isoformat()
 
     with get_db() as conn:
-        rows = conn.execute("""
+        rows = conn.execute(f"""
             SELECT j.id, j.reference, j.customer_name, j.customer_phone,
                    j.suburb, j.address, j.scheduled_date, j.scheduled_time,
                    j.end_time, j.status, j.service_types, j.job_type,
@@ -723,7 +723,7 @@ def suburb_map_jobs():
             LEFT JOIN regions r ON r.id = j.region_id
             WHERE j.scheduled_date >= ?
               AND j.scheduled_date <= ?
-              AND j.status NOT IN ('lost')
+              AND j.status NOT IN ({status_sql_list('lost', conn=conn)})
               AND j.job_type = 'booking'
             ORDER BY j.scheduled_date, j.scheduled_time, j.suburb
         """, (date_from, date_to)).fetchall()

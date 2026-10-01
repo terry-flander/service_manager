@@ -491,11 +491,12 @@ def _find_job_for_thread(conn, in_reply_to, references, from_email):
 
     # Fall back: customer email match — most recent non-lost job
     if from_email and 'import.local' not in from_email:
-        row = conn.execute("""
+        from models import status_sql_list
+        row = conn.execute(f"""
             SELECT j.id FROM jobs j
             JOIN customers c ON c.id = j.customer_id
             WHERE LOWER(c.email) = LOWER(?)
-              AND j.status NOT IN ('lost')
+              AND j.status NOT IN ({status_sql_list('lost', conn=conn)})
               AND j.job_type = 'booking'
             ORDER BY j.id DESC LIMIT 1
         """, (from_email,)).fetchone()
@@ -503,12 +504,12 @@ def _find_job_for_thread(conn, in_reply_to, references, from_email):
             return row['id']
 
         # Also check customer_contacts
-        row = conn.execute("""
+        row = conn.execute(f"""
             SELECT j.id FROM jobs j
             JOIN customers c ON c.id = j.customer_id
             JOIN customer_contacts cc ON cc.customer_id = c.id
             WHERE LOWER(cc.email) = LOWER(?)
-              AND j.status NOT IN ('lost')
+              AND j.status NOT IN ({status_sql_list('lost', conn=conn)})
               AND j.job_type = 'booking'
             ORDER BY j.id DESC LIMIT 1
         """, (from_email,)).fetchone()

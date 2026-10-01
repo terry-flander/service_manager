@@ -9,7 +9,7 @@ import logging
 from datetime import date, timedelta
 from flask import (Blueprint, render_template, request, jsonify,
                    redirect, url_for, session)
-from models import get_db
+from models import get_db, status_sql_list
 
 mechanic_bp = Blueprint('mechanic', __name__)
 log = logging.getLogger('app')
@@ -48,7 +48,7 @@ def _get_schedule_entries(anchor_date, direction='forward', cursor_date=None,
             WHERE j.scheduled_date IS NOT NULL
               AND {date_filter}
               AND j.job_type IN ('booking', 'rental')
-              AND j.status != 'lost'
+              AND j.status NOT IN ({status_sql_list('lost', conn=conn)})
             ORDER BY j.scheduled_date {'ASC' if direction == 'forward' else 'DESC'},
                      j.scheduled_time ASC,
                      j.id ASC

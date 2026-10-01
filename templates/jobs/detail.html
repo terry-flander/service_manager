@@ -211,7 +211,7 @@ function silentSave(callback) {
         <a href="{{ url_for('invoice.xero_csv', job_id=job['id']) }}" class="detail-menu-item" onclick="closeDetailMenu()">
           <i class="bi bi-download"></i> Xero CSV
         </a>
-        {% if job['customer_email'] and job['status'] in ('invoiced', 'paid', 'complete') %}
+        {% if job['customer_email'] and status_is(job['status'], 'invoiced', 'paid', 'complete') %}
         <button type="button" class="detail-menu-item"
                 onclick="closeDetailMenu(); pushToXero({{ job['id'] }})">
           <i class="bi bi-send-check"></i>
@@ -647,12 +647,12 @@ function silentSave(callback) {
       </div>
       <div style="padding:1rem 1.25rem; display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
         <span class="badge-status status-{{ job['status'] }}" style="flex-shrink:0;">
-          {{ job['status']|replace('_',' ') }}
+          {{ job['status']|status_label }}
         </span>
         <select name="status" class="sd-input" style="flex:1; min-width:120px;">
-          {% for s in ['pending','scheduled','in_progress','quote','complete','invoiced','paid','lost'] %}
-          <option value="{{ s }}" {% if job['status'] == s %}selected{% endif %}>
-            {{ s|replace('_',' ')|title }}
+          {% for s in statuses_for_job_type(job['job_type'], job['status']) %}
+          <option value="{{ s.code }}" {% if job['status'] == s.code %}selected{% endif %}>
+            {{ s.label }}
           </option>
           {% endfor %}
         </select>
@@ -1022,7 +1022,7 @@ function silentSave(callback) {
     </div>
     <p style="font-size:0.85rem; color:var(--sd-muted); margin-bottom:1rem; line-height:1.5;">
       The status changed to
-      <strong style="color:var(--sd-text);">{{ pending_trigger.trigger_status|replace('_',' ')|title }}</strong>.
+      <strong style="color:var(--sd-text);">{{ pending_trigger.trigger_status|status_label }}</strong>.
       Send <strong style="color:var(--sd-text);">{{ pending_trigger.template_name }}</strong>
       to <strong style="color:var(--sd-text);">{{ pending_trigger.customer_name }}</strong>
       at <code style="font-size:0.8rem;">{{ pending_trigger.to_email }}</code>?
@@ -1221,6 +1221,7 @@ function bookingModeChanged(mode) {
   const JOB_TYPE      = {{ job['job_type']|tojson }};
   const JOB_ID         = {{ job['id']|tojson }};
   const ORIGINAL_STATUS = {{ job['status']|tojson }};
+  const PAID_CODES = {{ paid_status_codes|tojson }};
   const HAS_REFERRAL    = {{ (job['referral_source'] or '')|tojson }} !== '';
   const CUSTOMER_EMAIL  = {{ (job['customer_email'] or '')|tojson }};
   const IS_REPEAT_CUSTOMER = {{ is_repeat_customer|tojson }};
@@ -1234,8 +1235,8 @@ function bookingModeChanged(mode) {
 
   function isBookingGoingToPaid() {
     return JOB_TYPE === 'booking' &&
-           statusSel.value === 'paid' &&
-           ORIGINAL_STATUS !== 'paid' &&
+           PAID_CODES.indexOf(statusSel.value) !== -1 &&
+           PAID_CODES.indexOf(ORIGINAL_STATUS) === -1 &&
            !HAS_REFERRAL;
   }
 

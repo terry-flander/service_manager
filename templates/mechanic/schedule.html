@@ -211,6 +211,7 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
+  {{ status_css }}
 </head>
 <body>
 
@@ -297,17 +298,12 @@
     {% elif entry.type == 'job' %}
     {% set job = entry.data %}
     {% set dest = ((job.address or '') ~ (', ' ~ job.suburb if job.suburb else '')) | urlencode %}
-    {% set status_colors = {
-      'pending': '#fbbf24', 'scheduled': '#60a5fa', 'in_progress': '#a78bfa',
-      'complete': '#34d399', 'invoiced': '#9ca3af', 'paid': '#6ee7b7',
-      'quote': '#38bdf8'
-    } %}
     <a href="{{ url_for('mechanic.job_view', job_id=job.id) }}"
        class="job-card status-{{ job.status }}" data-job-id="{{ job.id }}" data-date="{{ job.scheduled_date }}"
        style="display:block; text-decoration:none; color:inherit;">
       <div style="display:flex; align-items:center; gap:0.5rem; margin-bottom:0.3rem;">
         <span style="display:inline-block; width:10px; height:10px; border-radius:50%;
-                     background:{{ status_colors.get(job.status, '#94a3b8') }};
+                     background:{{ status_color(job.status) }};
                      flex-shrink:0;"></span>
         {% if job.scheduled_time %}
         <span class="job-time" style="margin-bottom:0;">
@@ -315,8 +311,8 @@
         </span>
         {% endif %}
         <span style="font-size:0.7rem; text-transform:uppercase; letter-spacing:0.06em;
-                     color:{{ status_colors.get(job.status, '#94a3b8') }}; font-weight:600;">
-          {{ job.status|replace('_',' ') }}
+                     color:{{ status_color(job.status) }}; font-weight:600;">
+          {{ job.status|status_label }}
         </span>
       </div>
       <div class="job-name">{{ job.customer_name }}</div>

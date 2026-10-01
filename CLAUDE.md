@@ -64,6 +64,36 @@ echo 'VERSION = "1.5.0"' > version.py
 
 ---
 
+## Job Statuses — never test status literals
+
+Statuses are configurable (Settings → Job Statuses, table `job_statuses`).
+An **empty table = built-in defaults** (`_JOB_STATUS_DEFAULTS` in models.py).
+Custom statuses can carry a `special_meaning` (`complete`, `invoiced`,
+`paid`, `lost`) and must behave like that built-in everywhere.
+
+```python
+# WRONG
+if job['status'] == 'paid': ...
+"WHERE j.status != 'lost'"
+
+# CORRECT (Python)
+from models import status_has_meaning, status_sql_list
+if status_has_meaning(job['status'], 'paid'): ...
+f"WHERE j.status NOT IN ({status_sql_list('lost', conn=conn)})"   # f-string!
+```
+```jinja
+{# CORRECT (templates) #}
+{{ job['status']|status_label }}
+{% if status_is(job['status'], 'paid', 'invoiced') %}
+{% for s in statuses_for_job_type(job['job_type'], job['status']) %}
+```
+Writing a literal built-in code (`status='paid'`, `'invoiced'`) is fine —
+built-ins always exist and the system-set ones can't be deactivated.
+Badge CSS for custom codes comes from `{{ status_css }}` (already in base.html;
+standalone templates must include it in `<head>`).
+
+---
+
 ## DB Patterns
 
 ```python

@@ -347,6 +347,7 @@
     .ap-btn-add { flex: 1; background: var(--accent); color: #fff; border: none; border-radius: 6px; padding: 0.75rem; font-size: 0.9rem; font-weight: 600; cursor: pointer; }
     .ap-btn-cancel { background: rgba(255,255,255,0.07); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 0.75rem 1.25rem; font-size: 0.9rem; cursor: pointer; }
   </style>
+  {{ status_css }}
 </head>
 <body>
 
@@ -400,7 +401,7 @@
 <!-- Status + total -->
 <div class="status-bar">
   <span id="status-badge" class="status-badge status-{{ job['status'] }}">
-    {{ job['status']|replace('_',' ') }}
+    {{ job['status']|status_label }}
   </span>
   <span class="total-price" id="total-display">${{ '%.2f'|format(job['total'] or 0) }}</span>
 </div>
@@ -470,7 +471,7 @@
 
 <!-- Complete / Close row -->
 <div class="action-row">
-  {% set done = job['status'] in ('complete', 'paid', 'invoiced') %}
+  {% set done = status_is(job['status'], 'complete', 'paid', 'invoiced') %}
   {% if done %}
   <button class="m-btn m-btn-reopen" id="action-btn" onclick="doReopen()">
     <i class="bi bi-arrow-counterclockwise"></i> Reopen
@@ -793,10 +794,11 @@ function doReopen() {
     });
 }
 
+var STATUS_LABELS = {{ job_status_labels|tojson }};
 function updateStatusBadge(status) {
   var badge = document.getElementById('status-badge');
   badge.className = 'status-badge status-' + status;
-  badge.textContent = status.replace('_', ' ');
+  badge.textContent = (STATUS_LABELS[status] || status.replace(/_/g, ' '));
 }
 </script>
 

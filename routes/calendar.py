@@ -3,25 +3,9 @@ from models import get_db
 
 calendar_bp = Blueprint('calendar', __name__)
 
-STATUS_COLOR_DEFAULTS = {
-    'pending':     '#f59e0b',
-    'scheduled':   '#3b82f6',
-    'in_progress': '#8b5cf6',
-    'complete':    '#10b981',
-    'invoiced':    '#6b7280',
-    'paid':        '#10b981',
-    'lost':        '#ef4444',
-}
-
 def _get_status_colors(conn):
-    colors = dict(STATUS_COLOR_DEFAULTS)
-    for s in colors:
-        row = conn.execute(
-            "SELECT value FROM settings WHERE key=?",
-            (f'status_color_{s}',)).fetchone()
-        if row:
-            colors[s] = row['value']
-    return colors
+    from models import status_colors_map
+    return status_colors_map(conn)
 
 
 @calendar_bp.route('/calendar')
@@ -87,13 +71,14 @@ def events():
         """, (today,))
         conn.commit()
 
-        jobs = conn.execute("""
+        from models import status_sql_list
+        jobs = conn.execute(f"""
             SELECT j.id, j.reference, j.customer_name, j.customer_phone,
                    j.customer_email,
                    j.scheduled_date, j.scheduled_time, j.end_time, j.end_date,
                    j.job_type, j.status, j.address, j.suburb, r.name as region_name
             FROM jobs j JOIN regions r ON j.region_id = r.id
-            WHERE j.status != 'lost'
+            WHERE j.status NOT IN ({status_sql_list('lost', conn=conn)})
             AND (
                 (j.job_type = 'booking' AND j.scheduled_date IS NOT NULL)
                 OR

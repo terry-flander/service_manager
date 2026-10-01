@@ -786,3 +786,26 @@ try:
     print("Workshop booking ack template seeded.")
 except Exception:
     pass
+
+# ── job_statuses table (configurable statuses) ────────────────────────────────
+# Created EMPTY on purpose: an empty table means the app uses the hard-coded
+# defaults and behaves exactly as before. Settings → Job Statuses seeds it
+# (copying any colours saved on the old Status Colours page) on first save.
+try:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS job_statuses (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            code            TEXT NOT NULL UNIQUE,
+            label           TEXT NOT NULL,
+            job_types       TEXT,
+            sort_order      INTEGER NOT NULL DEFAULT 0,
+            badge_color     TEXT,
+            special_meaning TEXT,
+            builtin         INTEGER NOT NULL DEFAULT 0,
+            active          INTEGER NOT NULL DEFAULT 1
+        )
+    """)
+    conn.commit()
+    print("job_statuses table ready.")
+except Exception as e:
+    print(f"job_statuses: {e}")

@@ -182,6 +182,7 @@
       border-top: 1px solid #e2e8f0;
     }
   </style>
+  {{ status_css }}
 </head>
 <body>
 
@@ -212,7 +213,7 @@
     <div class="status-icon">{{ status_icons.get(st, '📋') }}</div>
     <div>
       <div class="status-label">Job status</div>
-      <div class="status-value">{{ status_labels.get(st, st|replace('_',' ')) }}</div>
+      <div class="status-value">{{ status_labels.get(st) or (st|status_label) }}</div>
     </div>
   </div>
 
@@ -305,7 +306,7 @@
   {% endif %}
 
   <!-- Invoice download (paid/invoiced jobs only) -->
-  {% if job['status'] in ('paid', 'invoiced') %}
+  {% if status_is(job['status'], 'paid', 'invoiced') %}
   <div class="card">
     <div class="card-header">Invoice</div>
     <div class="card-body">

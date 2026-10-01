@@ -1,4 +1,6 @@
 import os
+import re
+from markupsafe import Markup
 from datetime import date as _date, timedelta
 from flask import Flask, session, g, redirect, url_for, request
 from models import init_db
@@ -142,28 +144,57 @@ def create_app():
     app.jinja_env.filters['fmt_datetime'] = _fmt_datetime_local
     app.jinja_env.filters['fmt_phone']    = _fmt_phone
 
+    # ── Job status helpers (see models.get_job_statuses) ─────────────────────
+    # {{ job['status']|status_label }}           -> "In Progress" / custom label
+    # {% if status_is(job['status'], 'paid', 'invoiced') %}  -> meaning check
+    # {{ status_color(code) }}                   -> hex
+    # statuses_for_job_type(job_type, current)   -> list for <select> options
+    from models import (status_label as _status_label,
+                        status_has_meaning as _status_has_meaning,
+                        status_colors_map as _status_colors_map,
+                        statuses_for_job_type as _statuses_for_job_type,
+                        STATUS_FALLBACK_COLOR as _SFC)
+
+    def _status_is(code, *meanings):
+        return any(_status_has_meaning(code, m) for m in meanings)
+
+    app.jinja_env.filters['status_label'] = lambda c: _status_label(c)
+    app.jinja_env.globals['status_is'] = _status_is
+    app.jinja_env.globals['status_color'] = lambda c: _status_colors_map().get(c, _SFC)
+    app.jinja_env.globals['statuses_for_job_type'] = \
+        lambda jt, current=None: _statuses_for_job_type(jt, current)
+
     @app.context_processor
     def inject_globals():
         # Load status colours from settings
-        status_colors = {}
-        _defaults = {
-            'pending':'#f59e0b','scheduled':'#3b82f6','in_progress':'#8b5cf6',
-            'complete':'#10b981','invoiced':'#6b7280','paid':'#10b981','void':'#ef4444',
-        }
+        from models import (get_db, get_job_statuses, status_colors_map,
+                            BUILTIN_STATUS_CODES, STATUS_CODE_RE)
         try:
-            from models import get_db
             with get_db() as _conn:
-                for _s, _d in _defaults.items():
-                    _row = _conn.execute(
-                        "SELECT value FROM settings WHERE key=?",
-                        (f'status_color_{_s}',)).fetchone()
-                    status_colors[_s] = _row['value'] if _row else _d
+                status_colors = status_colors_map(_conn)
+                job_statuses_all = get_job_statuses(_conn, include_inactive=True)
+                job_statuses_active = get_job_statuses(_conn)
                 unread_email_count = _conn.execute(
                     "SELECT COUNT(*) FROM email_imports WHERE read=1 OR read IS NULL"
                 ).fetchone()[0]
         except Exception:
-            status_colors = dict(_defaults)
+            status_colors = {}
+            job_statuses_all = job_statuses_active = []
             unread_email_count = 0
+        # Badge CSS for custom (non built-in) status codes. Built-ins are
+        # styled in base.html via the --sc-<code> variables above.
+        _css = []
+        for _s in job_statuses_all:
+            _c, _hex = _s['code'], _s['badge_color']
+            if _c in BUILTIN_STATUS_CODES or not STATUS_CODE_RE.match(_c):
+                continue
+            if not re.match(r'^#[0-9a-fA-F]{6}$', _hex or ''):
+                continue
+            _css.append(
+                f".status-{_c}{{background:{_hex}26;color:{_hex};}}"
+                f".job-card.status-{_c}{{border-left-color:{_hex};border-color:{_hex}4d;}}"
+                f".status-{_c} .status-icon,.status-{_c} .status-value{{color:{_hex};}}")
+        status_css = Markup('<style>' + ''.join(_css) + '</style>') if _css else ''
         from models import get_settings as _get_settings, get_job_types as _get_job_types
         try:
             biz_settings = _get_settings()
@@ -178,6 +209,11 @@ def create_app():
             'current_user': g.get('user'),
             'theme': session.get('theme', 'dark'),
             'status_colors': status_colors,
+            'status_css': status_css,
+            # [[code, label], ...] for the shared query builder checkboxes
+            'job_status_choices': [[s['code'], s['label']] for s in job_statuses_active],
+            'paid_status_codes': [s['code'] for s in job_statuses_all if s['code'] == 'paid' or s['special_meaning'] == 'paid'] or ['paid'],
+            'job_status_labels': {s['code']: s['label'] for s in job_statuses_all},
             'unread_email_count': unread_email_count,
             'app_version': __import__('version').VERSION,
             'settings': biz_settings,

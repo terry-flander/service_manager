@@ -4,6 +4,7 @@ No external dependencies required beyond Flask.
 """
 import sqlite3
 import os
+import re
 
 # In Docker the /data volume is mounted for persistence.
 # Locally it falls back to the project directory.
@@ -438,6 +439,22 @@ def init_db():
                 sent_by     INTEGER REFERENCES users(id)
             );
 
+            -- Configurable job statuses. Starts EMPTY: an empty table means the
+            -- app uses the hard-coded defaults in _JOB_STATUS_DEFAULTS and
+            -- behaves exactly as before. The Job Statuses settings page seeds
+            -- it on first save. See get_job_statuses().
+            CREATE TABLE IF NOT EXISTS job_statuses (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                code            TEXT NOT NULL UNIQUE,
+                label           TEXT NOT NULL,
+                job_types       TEXT,              -- NULL/'' = all; else comma-separated keys
+                sort_order      INTEGER NOT NULL DEFAULT 0,
+                badge_color     TEXT,              -- hex; NULL = default colour
+                special_meaning TEXT,              -- NULL or one of STATUS_MEANINGS
+                builtin         INTEGER NOT NULL DEFAULT 0,
+                active          INTEGER NOT NULL DEFAULT 1
+            );
+
             CREATE TABLE IF NOT EXISTS job_type_config (
                 key                   TEXT PRIMARY KEY,
                 label                 TEXT NOT NULL,
@@ -574,6 +591,242 @@ def get_job_types(conn=None):
         return _defaults()
 
 
+# ── Job statuses ──────────────────────────────────────────────────────────────
+# Special meanings are a controlled vocabulary: code paths that need to know
+# "is this job paid / invoiced / lost / done?" ask status_has_meaning() or
+# status_codes_for() rather than testing a literal string. A custom status
+# with special_meaning='lost' (e.g. 'no_show') is then hidden from the job
+# list and calendar exactly like 'lost'. The literal built-in code always
+# carries its own meaning, so these helpers never return LESS than the old
+# hard-coded checks did.
+STATUS_MEANINGS = ('complete', 'invoiced', 'paid', 'lost')
+STATUS_MEANING_LABELS = {
+    'complete': 'Complete — work done (enables Send to Xero, locks schedule)',
+    'invoiced': 'Invoiced — invoice issued (portal invoice link, sales report)',
+    'paid':     'Paid — money received (sales report, EFTPOS reconciliation)',
+    'lost':     'Lost — cancelled (hidden from job list, calendar, schedule)',
+}
+STATUS_CODE_RE = re.compile(r'^[a-z][a-z0-9_]{0,30}$')
+STATUS_FALLBACK_COLOR = '#94a3b8'
+
+_JOB_STATUS_DEFAULTS = [
+    # code,         label,         default colour, special_meaning, sort
+    ('pending',     'Pending',     '#f59e0b', None,       1),
+    ('scheduled',   'Scheduled',   '#3b82f6', None,       2),
+    ('in_progress', 'In Progress', '#8b5cf6', None,       3),
+    ('quote',       'Quote',       '#0ea5e9', None,       4),
+    ('complete',    'Complete',    '#10b981', 'complete', 5),
+    ('invoiced',    'Invoiced',    '#6b7280', 'invoiced', 6),
+    ('paid',        'Paid',        '#10b981', 'paid',     7),
+    ('lost',        'Lost',        '#ef4444', 'lost',     8),
+]
+BUILTIN_STATUS_CODES = tuple(r[0] for r in _JOB_STATUS_DEFAULTS)
+_DEFAULT_STATUS_COLORS = {r[0]: r[2] for r in _JOB_STATUS_DEFAULTS}
+
+
+def _legacy_status_color(c, code):
+    """Colour saved by the old Status Colours page (settings table), if any."""
+    keys = [f'status_color_{code}']
+    if code == 'lost':
+        keys.append('status_color_void')  # pre-'lost' rename
+    for k in keys:
+        row = c.execute("SELECT value FROM settings WHERE key=?", (k,)).fetchone()
+        if row and (row['value'] or '').strip():
+            return row['value'].strip()
+    return None
+
+
+def default_job_statuses(conn=None):
+    """The hard-coded statuses as dicts, with any colours saved in settings
+    by the old Status Colours page applied. Used both as the fallback when
+    job_statuses is empty and as the seed rows."""
+    def _build(c):
+        out = []
+        for code, label, color, meaning, sort in _JOB_STATUS_DEFAULTS:
+            saved = None
+            if c is not None:
+                try:
+                    saved = _legacy_status_color(c, code)
+                except Exception:
+                    saved = None
+            out.append({
+                'code': code, 'label': label, 'job_types': [],
+                'sort_order': sort, 'badge_color': saved or color,
+                'special_meaning': meaning, 'builtin': 1, 'active': 1,
+            })
+        return out
+    try:
+        if conn is not None:
+            return _build(conn)
+        with get_db() as c:
+            return _build(c)
+    except Exception:
+        return _build(None)
+
+
+def _row_to_status(r):
+    d = dict(r)
+    d['job_types'] = [j.strip() for j in (d.get('job_types') or '').split(',') if j.strip()]
+    d['badge_color'] = d.get('badge_color') or _DEFAULT_STATUS_COLORS.get(d['code'], STATUS_FALLBACK_COLOR)
+    d['special_meaning'] = d.get('special_meaning') or None
+    return d
+
+
+def get_job_statuses(conn=None, include_inactive=False):
+    """Return the job status list (dicts, sorted).
+
+    If the job_statuses table is missing or empty, returns the hard-coded
+    defaults — callers can't tell which path ran. Results are cached for the
+    duration of a Flask request.
+
+    Each dict: code, label, job_types (list; empty = all types), sort_order,
+    badge_color (resolved hex), special_meaning, builtin, active.
+    """
+    cache_key = '_job_statuses_all' if include_inactive else '_job_statuses_active'
+    try:
+        from flask import g, has_app_context
+        use_cache = has_app_context()
+    except Exception:
+        use_cache = False
+    if use_cache and cache_key in g:
+        return g.get(cache_key)
+
+    def _load(c):
+        try:
+            rows = c.execute(
+                "SELECT * FROM job_statuses ORDER BY sort_order, id").fetchall()
+        except sqlite3.OperationalError:
+            rows = []
+        if not rows:
+            return default_job_statuses(c)
+        result = [_row_to_status(r) for r in rows]
+        if not include_inactive:
+            result = [s for s in result if s['active']]
+        return result
+
+    try:
+        if conn is not None:
+            result = _load(conn)
+        else:
+            with get_db() as c:
+                result = _load(c)
+    except Exception:
+        result = default_job_statuses(None)
+
+    if use_cache:
+        setattr(g, cache_key, result)
+    return result
+
+
+def job_statuses_customised(conn=None):
+    """True if the job_statuses table has rows (i.e. dynamic mode)."""
+    def _q(c):
+        try:
+            return c.execute("SELECT COUNT(*) FROM job_statuses").fetchone()[0] > 0
+        except sqlite3.OperationalError:
+            return False
+    if conn is not None:
+        return _q(conn)
+    with get_db() as c:
+        return _q(c)
+
+
+def status_codes_for(meaning, conn=None):
+    """All status codes carrying a special meaning — always includes the
+    built-in literal (e.g. 'lost'), plus any custom codes, active or not
+    (an inactive custom status still describes historical jobs)."""
+    codes = [meaning] if meaning in STATUS_MEANINGS else []
+    for s in get_job_statuses(conn, include_inactive=True):
+        if s['special_meaning'] == meaning and s['code'] not in codes:
+            codes.append(s['code'])
+    return codes
+
+
+def status_has_meaning(code, meaning, conn=None):
+    """True if `code` is the built-in literal for `meaning` or a custom
+    status mapped to it."""
+    if not code:
+        return False
+    if code == meaning:
+        return True
+    return code in status_codes_for(meaning, conn)
+
+
+def status_sql_list(*meanings, conn=None):
+    """SQL literal list for use in `status IN (...)` / `NOT IN (...)`,
+    e.g. "'lost','no_show'". Codes are validated against STATUS_CODE_RE
+    on save and re-checked here, so inlining them is safe."""
+    codes = []
+    for m in meanings:
+        for c in status_codes_for(m, conn):
+            if STATUS_CODE_RE.match(c) and c not in codes:
+                codes.append(c)
+    return ','.join(f"'{c}'" for c in codes) or "''"
+
+
+def status_colors_map(conn=None):
+    """{code: hex} for every status (including inactive)."""
+    return {s['code']: s['badge_color']
+            for s in get_job_statuses(conn, include_inactive=True)}
+
+
+def status_labels_map(conn=None):
+    return {s['code']: s['label']
+            for s in get_job_statuses(conn, include_inactive=True)}
+
+
+def status_label(code, conn=None):
+    """Display label for a status code; falls back to 'In Progress' style
+    for unknown/historical codes."""
+    if not code:
+        return ''
+    return status_labels_map(conn).get(code) or str(code).replace('_', ' ').title()
+
+
+def statuses_for_job_type(job_type, current=None, conn=None):
+    """Active statuses applicable to a job type, for status pickers.
+    The job's current status is always included (even if inactive or
+    restricted to another type) so saving the form can't silently change it."""
+    result = [s for s in get_job_statuses(conn)
+              if not s['job_types'] or (job_type and job_type in s['job_types'])]
+    if current and current not in [s['code'] for s in result]:
+        known = {s['code']: s for s in get_job_statuses(conn, include_inactive=True)}
+        result.append(known.get(current) or {
+            'code': current, 'label': status_label(current, conn),
+            'badge_color': STATUS_FALLBACK_COLOR, 'special_meaning': None,
+            'job_types': [], 'active': 0, 'builtin': 0, 'sort_order': 999})
+    return result
+
+
+def clear_job_status_cache():
+    """Drop the per-request cache after editing job_statuses."""
+    try:
+        from flask import g, has_app_context
+        if has_app_context():
+            g.pop('_job_statuses_all', None)
+            g.pop('_job_statuses_active', None)
+    except Exception:
+        pass
+
+
+def seed_job_statuses(conn):
+    """Copy the effective defaults into job_statuses if it's empty.
+    Returns True if rows were inserted."""
+    if job_statuses_customised(conn):
+        return False
+    for s in default_job_statuses(conn):
+        conn.execute("""
+            INSERT OR IGNORE INTO job_statuses
+                (code, label, job_types, sort_order, badge_color,
+                 special_meaning, builtin, active)
+            VALUES (?,?,NULL,?,?,?,1,1)
+        """, (s['code'], s['label'], s['sort_order'], s['badge_color'],
+              s['special_meaning']))
+    conn.commit()
+    clear_job_status_cache()
+    return True
+
+
 def get_workshop_capacity(date_str, conn=None):
     """
     Return dict {is_open, max_bookings, booked, remaining} for a given ISO date.
@@ -595,11 +848,11 @@ def get_workshop_capacity(date_str, conn=None):
         else:
             is_open, max_bookings = _dow_default(c, date_str)
 
-        booked = c.execute("""
+        booked = c.execute(f"""
             SELECT COUNT(*) FROM jobs
             WHERE job_type IN ('workshop', 'workshop_booking')
             AND scheduled_date = ?
-            AND status != 'lost'
+            AND status NOT IN ({status_sql_list('lost', conn=c)})
         """, (date_str,)).fetchone()[0]
 
         return {

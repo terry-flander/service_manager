@@ -16,7 +16,7 @@ from datetime import date, datetime, timedelta
 from flask import (Blueprint, request, jsonify, render_template,
                    session, abort, send_file)
 
-from models import get_db
+from models import get_db, status_sql_list
 
 bikes_bp = Blueprint('bikes', __name__)
 log      = logging.getLogger('app')
@@ -299,14 +299,14 @@ def public_bikes():
         sold_days = int(days_row['value']) if days_row else 30
         cutoff    = (date.today() - timedelta(days=sold_days)).isoformat()
 
-        rows = conn.execute("""
+        rows = conn.execute(f"""
             SELECT b.id, b.short_desc, b.description_html,
                    b.year_est, b.asking_price, b.status, b.updated_at,
                    b.condition_grade, b.frame_size, b.colour,
                    j.status as job_status, j.bike_description
             FROM bikes_for_sale b
             JOIN jobs j ON j.id = b.job_id
-            WHERE j.status = 'complete'
+            WHERE j.status IN ({status_sql_list('complete', conn=conn)})
                OR (b.status = 'sold' AND b.updated_at >= ?)
             ORDER BY b.updated_at DESC
         """, (cutoff,)).fetchall()

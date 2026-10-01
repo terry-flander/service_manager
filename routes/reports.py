@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, make_response, send_file
-from models import get_db
+from models import get_db, status_sql_list
 from routes.invoice import calc_totals
 from datetime import date
 import csv
@@ -90,7 +90,7 @@ def _get_report_data(date_from, date_to, job_types, show_cash=False, sort_by='pa
         extra_clause += f" AND j.status IN ({ph})"
         params.extend(statuses)
     else:
-        extra_clause += " AND j.status IN ('invoiced', 'paid')"
+        extra_clause += f" AND j.status IN ({status_sql_list('invoiced', 'paid')})"
 
     if saved_query and saved_query.get('payment_types'):
         pts = saved_query['payment_types']
@@ -738,7 +738,7 @@ def unreconciled_eftpos():
             date_from, date_to = '', ''
 
     with get_db() as conn:
-        where  = ["j.status = 'paid'",
+        where  = [f"j.status IN ({status_sql_list('paid', conn=conn)})",
                   "j.payment_type IN ('EFTPOS','VISA','MASTERCARD','AMEX')",
                   "j.reconciled_eftpos IS NULL"]
         params = []

@@ -101,7 +101,7 @@
         </td>
         {% elif col_key == 'paid' %}
         <td class="mono{{ hide_classes }}" style="font-size:0.82rem; white-space:nowrap;">
-          {{ job['paid_date']|fmt_date('dmy') if job['status'] == 'paid' and job['paid_date'] else '—' }}
+          {{ job['paid_date']|fmt_date('dmy') if job['paid_date'] and status_is(job['status'], 'paid') else '—' }}
         </td>
         {% elif col_key == 'ref' %}
         <td class="{{ hide_classes }}">
@@ -164,14 +164,14 @@
         <td class="{{ hide_classes }}" style="text-align:center;">
           {% if is_reconciled %}
           <i class="bi bi-check-circle-fill" style="color:#34d399; font-size:1rem;"></i>
-          {% elif job['status'] == 'paid' %}
+          {% elif status_is(job['status'], 'paid') %}
           <i class="bi bi-circle" style="color:var(--sd-muted); font-size:0.9rem;"></i>
           {% endif %}
         </td>
         {% elif col_key == 'status' %}
         <td class="{{ hide_classes }}">
           <span class="badge-status status-{{ job['status'] }}">
-            {{ job['status']|replace('_',' ') }}
+            {{ job['status']|status_label }}
           </span>
         </td>
         {% elif col_key == 'end_date' %}

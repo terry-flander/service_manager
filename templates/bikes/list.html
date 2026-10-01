@@ -49,7 +49,7 @@
            onclick="event.stopPropagation();"
            style="color:var(--sd-accent);">{{ b.reference }}</a>
       </td>
-      <td><span class="badge-status status-{{ b.job_status }}">{{ b.job_status|replace('_',' ') }}</span></td>
+      <td><span class="badge-status status-{{ b.job_status }}">{{ b.job_status|status_label }}</span></td>
       <td>
         {% set colours = {'preparing':'#f59e0b','available':'#10b981','sold':'#6b7280','n/a':'#ef4444'} %}
         {% set sc = colours.get(b.status, '#6b7280') %}
@@ -60,7 +60,7 @@
         </span>
       </td>
       <td onclick="event.stopPropagation();" style="text-align:right;">
-        {% if b.job_status not in ('invoiced','paid') %}
+        {% if not status_is(b.job_status, 'invoiced', 'paid') %}
         <button class="btn-ghost" style="font-size:0.75rem; padding:0.2rem 0.5rem;"
                 onclick="openTransferModal({{ b.id }}, '{{ b.short_desc or b.bike_description }}')">
           <i class="bi bi-person-check"></i> Sell
