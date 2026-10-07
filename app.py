@@ -73,7 +73,12 @@ def create_app():
     PUBLIC_ENDPOINTS = {'auth.login', 'auth.totp_verify', 'static',
                         'portal.job_portal', 'portal.not_found',
                         'api.create_booking', 'booking.submit',
-                        'bikes.public_bikes', 'bikes.bike_image'}
+                        'bikes.public_bikes', 'bikes.bike_image',
+                        # Public workshop booking calendar (website form)
+                        'workshop_booking.workshop_preflight',
+                        'workshop_booking.workshop_available_dates',
+                        'workshop_booking.workshop_date_info',
+                        'workshop_booking.workshop_request'}
 
     @app.before_request
     def require_login():

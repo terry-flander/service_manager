@@ -102,7 +102,11 @@ def workshop_date_info():
 
 
 # ── Submit booking request ────────────────────────────────────────────────────
-@workshop_booking_bp.route('/workshop/request', methods=['POST'])
+# provide_automatic_options=False: let the browser's CORS preflight (OPTIONS)
+# fall through to workshop_preflight() above, which adds the CORS headers.
+# Flask's automatic OPTIONS reply has none, so the POST would be blocked.
+@workshop_booking_bp.route('/workshop/request', methods=['POST'],
+                           provide_automatic_options=False)
 def workshop_request():
     from models import get_db, get_workshop_capacity, get_settings
     from email_sender import send_reply, is_sendable_email
