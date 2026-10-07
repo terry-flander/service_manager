@@ -184,7 +184,12 @@ def submit():
 
     except Exception as e:
         log.error(f"Booking form job creation failed: {e}")
-        return error('An error occurred. Please call 0403 225 135.', 500)
+        try:
+            _phone = __import__('models').get_settings().get('business_phone', '').strip()
+        except Exception:
+            _phone = ''
+        return error('An error occurred. Please call us on ' + _phone + '.' if _phone
+                     else 'An error occurred. Please try again shortly.', 500)
 
     # Job is created directly — send notification to info@ so it appears
     # in Gmail Open Bookings label for visibility. The poller skips
